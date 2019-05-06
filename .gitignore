@@ -1,0 +1,20 @@
+# Pycharm/Python build files
+venv
+*.egg-info
+__pycache__
+*.pyc
+.idea
+.idea/inspectionProfiles
+.idea/inspectionProfiles/*
+.idea/*
+_build
+
+# Binary files
+videos
+videos/*
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+*.pdf
