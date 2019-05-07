@@ -1,7 +1,7 @@
 import swiftwatcher.process_video as pv
 import os
 
-reuse = True
+reuse = False
 video_folder = "videos/gdrive_swiftvideos/"
 filename = "ch04_20170531210856.mp4"
 video_filepath = video_folder + filename

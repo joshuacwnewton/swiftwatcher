@@ -6,7 +6,7 @@ class FrameStack:
     """Class object for storing, describing, and manipulating a stack of frames.
 
     Attributes: stack, indices, timestamps, src_filepath, src_fps, src_framecount
-    Methods: read_frames, save_frames, save_frames_info, load_frames
+    Methods: read_frames, save_frames, save_frames_info, load_frames, load_frames_info
     """
     def __init__(self, video_filepath):
         if not os.path.isfile(video_filepath):
@@ -23,7 +23,7 @@ class FrameStack:
         self.src_framecount = None
 
     def read_frames(self, start_frame=0, end_frame='eof', sequence_type='reg',
-                    desired_fps='inpt', verbose=True, debug=True):
+                    desired_fps='inpt', verbose=True, debug=False):
         """Returns a set of frames from a provided input video.
 
         Input arguments:
@@ -42,34 +42,35 @@ class FrameStack:
         stream = cv2.VideoCapture(self.src_filepath)
         if not stream.isOpened():
             raise Exception("Video file could not be opened to read frames.")
-        else:
-            success = True
 
         # Get attributes of video file
         self.src_fps = stream.get(cv2.CAP_PROP_FPS)
-        self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT) # May not be valid due to night vision
+        self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT)
 
+        frame_count = 0
         n = round(self.src_fps/desired_fps)  # Capture only every nth frame
 
-        while success:
+        while True:
             # Capture only every nth frame (as determined by FPS calculation)
-            success = stream.grab()
-            current_frame_index = int(stream.get(cv2.CAP_PROP_POS_FRAMES)) - 1
-            if current_frame_index % n == 0:
+            current_frame_index = frame_count * n
+            stream.set(cv2.CAP_PROP_POS_FRAMES, current_frame_index)
 
-                # Fetch frame
-                success, frame = stream.retrieve()
+            # Fetch frame
+            success, frame = stream.read()
+            if not success:
+                print("[*] No frame left to be read.")
+                break
 
-                # Get attributes of frame
-                # TODO: Format timestamps to be more informative/easier to parse
-                self.stack.append(frame)
-                self.indices.append(current_frame_index)
-                self.timestamps.append(stream.get(cv2.CAP_PROP_POS_MSEC))  # May not be valid due to night vision
+            # Get attributes of frame
+            # TODO: Format timestamps to be more informative/easier to parse
+            self.stack.append(frame)
+            self.indices.append(current_frame_index)
+            self.timestamps.append(stream.get(cv2.CAP_PROP_POS_MSEC))
 
             # Status updates for long files
             if verbose:
-                if current_frame_index % 1000 == 0:
-                    print("[-] {} frames processed.".format(int(stream.get(cv2.CAP_PROP_POS_FRAMES)) - 1))
+                if frame_count % 50 == 0:
+                    print("[-] {} frames processed.".format(frame_count))
 
             if debug:
                 # Capping at 10s of video to prevent processing of 1hr files during debug
@@ -77,6 +78,8 @@ class FrameStack:
                     print("[*] 10s of frames extracted. Exiting read_frames().")
                     stream.release()
                     break
+
+            frame_count += 1
 
         print("[*] Entire video processed. Exiting read_frames().")
 
