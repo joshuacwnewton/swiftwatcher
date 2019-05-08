@@ -45,25 +45,27 @@ def timestamp_to_frameindex(timestamp, fps):
 class FrameStack:
     """Class for storing, describing, and manipulating a stack of frames from a video file.
 
-    Attributes: stack, indices, timestamps, src_filename, src_directory, src_fps, src_framecount
+    Attributes: ssrc_filename, src_directory, src_fps, src_framecount
     Methods: read_frames, save_frames, save_frames_info, load_frames, load_frames_info
     """
     def __init__(self, video_directory, filename):
+        # Check validity of filepath
         video_filepath = video_directory + filename
         if not os.path.isfile(video_filepath):
             raise Exception("[!] Filepath does not point to valid video file.")
 
-        # Attributes of source file that is associated with FrameStack.
+        # Get attributes from source file that is associated with FrameStack.
         self.src_filename = filename
         self.src_directory = video_directory
         stream = cv2.VideoCapture("{}/{}".format(self.src_directory, self.src_filename))
         if not stream.isOpened():
             raise Exception("[!] Video file could not be opened to read frames. Check file path.")
-        self.src_fps = stream.get(cv2.CAP_PROP_FPS)
-        self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT)
+        else:
+            self.src_fps = stream.get(cv2.CAP_PROP_FPS)
+            self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT)
         stream.release()
 
-        # Attributes of FrameStack
+        # Initialize attributes of FrameStack
         self.stack = []
         self.indices = []
         self.timestamps = []
@@ -71,22 +73,27 @@ class FrameStack:
         self.end_index = None
 
     def batch_config(self, start_timestamp, end_timestamp, batch_size):
-        """Divides requested duration into batches, returns list of timestamp tuples."""
-        # Convert provided timestamps into frame indices, calculate total frames in duration
+        """Divides requested duration into batches, returns list of timestamp tuples.
+        Input arguments:
+            -start_timestamp: starting point for video duration to be extracted.
+            -end_timestamp: ending point for video duration to be extracted.
+            -batch_size: divides full duration into small batches of this size."""
+
+        # Convert provided timestamps into frame indices
         start_index = timestamp_to_frameindex(start_timestamp, self.src_fps)
         end_index = timestamp_to_frameindex(end_timestamp, self.src_fps)
-        frame_count = int(end_index - start_index)
 
         batch_timestamps = []
         while int(end_index - start_index) > batch_size:
-            # Calculate batch timestamps
+            # Calculate and store batch timestamps
             batch_start_timestamp = frameindex_to_timestamp(start_index, self.src_fps)
             batch_end_timestamp = frameindex_to_timestamp(start_index+batch_size-1, self.src_fps)
             batch_timestamps.append((batch_start_timestamp, batch_end_timestamp))
             
             # Update timestamp pointer
             start_index += batch_size
-        # Append last small batch
+
+        # Append remaining small batch (total_frames % batch_size, remainder is the small batch)
         batch_start_timestamp = frameindex_to_timestamp(start_index, self.src_fps)
         batch_end_timestamp = frameindex_to_timestamp(end_index, self.src_fps)
         batch_timestamps.append((batch_start_timestamp, batch_end_timestamp))
@@ -94,15 +101,27 @@ class FrameStack:
         return batch_timestamps
 
     def read_frames(self, start_timestamp='<Start of File>', end_timestamp='<End of File>',
-                    desired_fps='def', verbose=False):
-        """Returns a set of frames from a provided input video."""
+                    desired_fps='<Source FPS>', verbose=False):
+        """Saves a set of frames into the stack attribute of the class object.
+
+        Input arguments:
+            -start_timestamp: starting point for video duration to be extracted.
+            -end_timestamp: ending point for video duration to be extracted.
+            -desired_fps: allows for subsampling at rates lower than the source FPS.
+            -verbose: controls status updates to the console.
+
+        Updated attributes:
+            -self.stack: list of RGB frames from specified video duration.
+            -self.indices: list of absolute indices corresponding to the original video.
+            -self.timestamps: timestamps formatted as 'HH:MM:SS:MSS'."""
+
         # Attempt to open video capture object
         stream = cv2.VideoCapture("{}/{}".format(self.src_directory, self.src_filename))
         if not stream.isOpened():
             raise Exception("[!] Video file could not be opened to read frames. Check file path.")
         
         # Set start index using either provided value or end-of-file.
-        if start_timestamp is 'def':
+        if start_timestamp is '<Start of File>':
             self.start_index = 0
         else:
             self.start_index = timestamp_to_frameindex(start_timestamp, self.src_fps)
@@ -110,7 +129,7 @@ class FrameStack:
                 raise Exception("[!] Invalid start timestamp. Outside range of acceptable times.")
 
         # Set end index using either provided value or end-of-file.
-        if end_timestamp is 'def':
+        if end_timestamp is '<End of File>':
             self.end_index = self.src_framecount-1
         else:
             self.end_index = timestamp_to_frameindex(end_timestamp, self.src_fps)
@@ -118,7 +137,7 @@ class FrameStack:
                 raise Exception("[!] Invalid end timestamp. Outside range of acceptable times.")
 
         # Set desired fps if not provided.
-        if desired_fps is 'def':
+        if desired_fps is '<Source FPS>':
             desired_fps = self.src_fps
 
         # Flush any previously read frame information
@@ -197,33 +216,8 @@ class FrameStack:
 
         print("[-] {} frames successfully saved.".format(count))
 
-    def save_frames_info(self, save_directory):
-        # TODO: Rename filenames to accurately reflect the read config
-        # Save corresponding indices to specified directory
-        with open(save_directory + '/indices.txt', 'w') as filehandle:
-            filehandle.writelines("%s\n" % index for index in self.indices)
-
-        # Save corresponding timestamps to specified directory
-        with open(save_directory + '/timestamps.txt', 'w') as filehandle:
-            filehandle.writelines("%s\n" % timestamp for timestamp in self.timestamps)
-
-        print("[-] File information successfully saved.")
-
-    def load_frames(self, save_directory):
-        # TODO: Write a proper docstring for the load_frames() method.
-        for filename in os.listdir(save_directory):
-            frame = cv2.imread(save_directory + '/' + filename)
-            self.stack.append(frame)
-
-    def load_frames_info(self, save_directory):
-        # TODO: Write a proper docstring for the load_frames() method.
-        with open(save_directory + '/indices.txt', 'r') as filehandle:
-            self.indices = [int(current_index.rstrip()) for current_index in filehandle.readlines()]
-
-        with open(save_directory + '/timestamps.txt', 'r') as filehandle:
-            self.timestamps = [float(current_timestamp.rstrip()) for current_timestamp in filehandle.readlines()]
-
     def convert_grayscale(self):
+        # TODO: Write a proper docstring for the convert_grayscale() method.
         print("[*] Converting frames to grayscale...")
         try:
             self.stack = np.array([cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
@@ -233,6 +227,7 @@ class FrameStack:
             print("[!] Frame conversion failed due to: {0}".format(str(e)))
 
     def crop_frames_rect(self, corners):
+        # TODO: Write a proper docstring for the crop_frames_rect() method.
         height = corners[1][1] - corners[0][1]
         width = corners[1][0] - corners [0][0]
         print("[*] Cropping frames to size {}x{}...".format(height, width))
@@ -242,9 +237,3 @@ class FrameStack:
             print("[-] Frame cropping successfully completed.")
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
-
-
-
-
-
-
