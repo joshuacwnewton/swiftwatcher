@@ -1,24 +1,45 @@
-import sys, os
+import os
 import cv2
 import numpy as np
 
 
-def ms_to_timestamp(ms):
-    milliseconds = int(ms % 1000)  # 000 formatting
-    seconds = int((ms / 1000) % 60)
-    minutes = int((ms / (1000 * 60)) % 60)
-    hours = int((ms / (1000 * 60 * 60)) % 24)
-    return milliseconds, seconds, minutes, hours
+def ms_to_timestamp(total_ms):
+    """Helper function to convert millisecond value into formatted timestamp."""
+    # cv2's VideoCapture class provides the position of the video in milliseconds
+    # (cv2.CAP_PROP_POS_MSEC). However, as it is easier to think of video in terms of
+    # hours, minutes, and seconds, it's helpful to convert to a formatted timestamp.
+    ms = int(total_ms % 1000)
+    s = int((total_ms / 1000) % 60)
+    m = int((total_ms / (1000 * 60)) % 60)
+    h = int((total_ms / (1000 * 60 * 60)) % 24)
+    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
+
+    return timestamp
 
 
-def timestamp_to_framenumber(timestamp, fps):
+def frameindex_to_timestamp(frame_amount, fps):
+    """Helper function to convert an amount of frames into a formatted timestamp."""
+    # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
+    # but not a duration property. However, as it is easier to think of video in terms of
+    # duration/timestamps, it's helpful to convert back and forth.
+    milliseconds = (frame_amount / fps)*1000
+    timestamp = ms_to_timestamp(milliseconds)
+
+    return timestamp
+
+
+def timestamp_to_frameindex(timestamp, fps):
+    """Helper function to convert formatted timestamp into an amount of frames."""
+    # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
+    # but not a duration property. However, as it is easier to think of video in terms of
+    # duration/timestamps, it's helpful to convert back and forth.
     time = timestamp.split(":")
     seconds = (int(time[0])*60*60 +
                int(time[1])*60 +
                int(time[2]) +
                int(time[3])/1000)
-    frame_number = int(seconds * fps)
-    return frame_number
+    frame_amount = int(seconds * fps)
+    return frame_amount
 
 
 class FrameStack:
@@ -32,19 +53,46 @@ class FrameStack:
         if not os.path.isfile(video_filepath):
             raise Exception("[!] Filepath does not point to valid video file.")
 
-        # FrameStack attributes (to be set).
+        # Attributes of source file that is associated with FrameStack.
+        self.src_filename = filename
+        self.src_directory = video_directory
+        stream = cv2.VideoCapture("{}/{}".format(self.src_directory, self.src_filename))
+        if not stream.isOpened():
+            raise Exception("[!] Video file could not be opened to read frames. Check file path.")
+        self.src_fps = stream.get(cv2.CAP_PROP_FPS)
+        self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT)
+        stream.release()
+
+        # Attributes of FrameStack
         self.stack = []
         self.indices = []
         self.timestamps = []
         self.start_index = None
-        self.size = None
         self.end_index = None
+        self.size = None
 
-        # Source file attributes (to be retrieved).
-        self.src_filename = filename
-        self.src_directory = video_directory
-        self.src_fps = None
-        self.src_framecount = None
+    def batch_config(self, start_timestamp, end_timestamp, batch_size):
+        """Divides requested duration into batches, returns list of timestamp tuples."""
+        # Convert provided timestamps into frame indices, calculate total frames in duration
+        start_index = timestamp_to_frameindex(start_timestamp, self.src_fps)
+        end_index = timestamp_to_frameindex(end_timestamp, self.src_fps)
+        frame_count = int(end_index - start_index)
+
+        batch_timestamps = []
+        while int(end_index - start_index) > batch_size:
+            # Calculate batch timestamps
+            batch_start_timestamp = frameindex_to_timestamp(start_index, self.src_fps)
+            batch_end_timestamp = frameindex_to_timestamp(start_index+batch_size-1, self.src_fps)
+            batch_timestamps.append((batch_start_timestamp, batch_end_timestamp))
+            
+            # Update timestamp pointer
+            start_index += batch_size
+        # Append last small batch
+        batch_start_timestamp = frameindex_to_timestamp(start_index, self.src_fps)
+        batch_end_timestamp = frameindex_to_timestamp(end_index, self.src_fps)
+        batch_timestamps.append((batch_start_timestamp, batch_end_timestamp))
+
+        return batch_timestamps
 
     def read_frames(self, start_timestamp='def', end_timestamp='def', desired_fps='def'):
         """Returns a set of frames from a provided input video."""
@@ -52,16 +100,12 @@ class FrameStack:
         stream = cv2.VideoCapture("{}/{}".format(self.src_directory, self.src_filename))
         if not stream.isOpened():
             raise Exception("[!] Video file could not be opened to read frames. Check file path.")
-
-        # Get attributes of video file.
-        self.src_fps = stream.get(cv2.CAP_PROP_FPS)
-        self.src_framecount = stream.get(cv2.CAP_PROP_FRAME_COUNT)
         
         # Set start index using either provided value or end-of-file.
         if start_timestamp is 'def':
             self.start_index = 0
         else:
-            self.start_index = timestamp_to_framenumber(start_timestamp, self.src_fps)
+            self.start_index = timestamp_to_frameindex(start_timestamp, self.src_fps)
             if not 0 < self.start_index < self.src_framecount:
                 raise Exception("[!] Invalid start timestamp. Outside range of acceptable times.")
 
@@ -69,7 +113,7 @@ class FrameStack:
         if end_timestamp is 'def':
             self.end_index = self.src_framecount-1
         else:
-            self.end_index = timestamp_to_framenumber(end_timestamp, self.src_fps)
+            self.end_index = timestamp_to_frameindex(end_timestamp, self.src_fps)
             if not self.start_index < self.end_index < self.src_framecount:
                 raise Exception("[!] Invalid end timestamp. Outside range of acceptable times.")
 
@@ -95,8 +139,7 @@ class FrameStack:
             # Get attributes of frame.
             self.stack.append(frame)
             self.indices.append(frame_index)
-            ms, s, m, h = ms_to_timestamp(stream.get(cv2.CAP_PROP_POS_MSEC))
-            self.timestamps.append("{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms))
+            self.timestamps.append(ms_to_timestamp(stream.get(cv2.CAP_PROP_POS_MSEC)))
 
             # Increment frame counter and update frame index.
             frame_count += 1
@@ -113,7 +156,7 @@ class FrameStack:
                 print("[-] Progress update: {} frames processed.".format(frame_count))
 
             # Check end condition
-            if stream.get(cv2.CAP_PROP_POS_FRAMES) > timestamp_to_framenumber(end_timestamp, self.src_fps):
+            if stream.get(cv2.CAP_PROP_POS_FRAMES) > timestamp_to_frameindex(end_timestamp, self.src_fps):
                 print("[-] Specified ending time reached. Exiting read_frames().")
                 stream.release()
                 break
