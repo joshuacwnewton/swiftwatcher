@@ -69,7 +69,6 @@ class FrameStack:
         self.timestamps = []
         self.start_index = None
         self.end_index = None
-        self.size = None
 
     def batch_config(self, start_timestamp, end_timestamp, batch_size):
         """Divides requested duration into batches, returns list of timestamp tuples."""
@@ -94,7 +93,8 @@ class FrameStack:
 
         return batch_timestamps
 
-    def read_frames(self, start_timestamp='def', end_timestamp='def', desired_fps='def'):
+    def read_frames(self, start_timestamp='<Start of File>', end_timestamp='<End of File>',
+                    desired_fps='def', verbose=False):
         """Returns a set of frames from a provided input video."""
         # Attempt to open video capture object
         stream = cv2.VideoCapture("{}/{}".format(self.src_directory, self.src_filename))
@@ -121,12 +121,18 @@ class FrameStack:
         if desired_fps is 'def':
             desired_fps = self.src_fps
 
+        # Flush any previously read frame information
+        self.stack = []
+        self.indices = []
+        self.timestamps = []
+
         # Initialize frame counter and frame index.
         frame_index = self.start_index
         stream.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         frame_count = 0
 
-        print("[*] Extracting frames from video file...")
+        print("[========================================================]")
+        print("[*] Extracting frames from {} to {}.".format(start_timestamp, end_timestamp))
         while stream.isOpened():
             # Fetch frame
             success, frame = stream.read()
@@ -152,7 +158,7 @@ class FrameStack:
                 raise Exception("[!] Invalid FPS. Must be positive and not greater than source file FPS.")
             
             # Provide status updates
-            if frame_count % 100 == 0:
+            if verbose and frame_count % 100 == 0:
                 print("[-] Progress update: {} frames processed.".format(frame_count))
 
             # Check end condition
@@ -161,7 +167,7 @@ class FrameStack:
                 stream.release()
                 break
 
-        print("[-] Frame extraction completed. {} frames extracted in total.".format(frame_count))
+        print("[-] Frame extraction completed. {} frames extracted.".format(frame_count))
 
     def save_frames(self, save_directory):
         # TODO: Write a proper docstring for the save_frames() method.
