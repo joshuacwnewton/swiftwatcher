@@ -243,4 +243,9 @@ class FrameStack:
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
 
-
+    def resize_frames(self, scale_percent):
+        s = scale_percent/100
+        self.stack = np.array([cv2.resize(frame,
+                                          (round(frame.shape[1]*s), round(frame.shape[0]*s)),
+                                          interpolation=cv2.INTER_AREA)
+                               for frame in self.stack])
