@@ -8,12 +8,16 @@ def ms_to_timestamp(total_ms):
     # cv2's VideoCapture class provides the position of the video in milliseconds
     # (cv2.CAP_PROP_POS_MSEC). However, as it is easier to think of video in terms of
     # hours, minutes, and seconds, it's helpful to convert to a formatted timestamp.
-    ms = int(total_ms % 1000)
-    s = int((total_ms / 1000) % 60)
-    m = int((total_ms / (1000 * 60)) % 60)
-    h = int((total_ms / (1000 * 60 * 60)) % 24)
-    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
+    total_s = int(total_ms/1000)
+    total_m = int(total_s/60)
+    total_h = int(total_m/60)
 
+    ms = round(total_ms % 1000)
+    s = round(total_s % 60)
+    m = round(total_m % 60)
+    h = round(total_h % 24)
+
+    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
     return timestamp
 
 
@@ -34,11 +38,11 @@ def timestamp_to_frameindex(timestamp, fps):
     # but not a duration property. However, as it is easier to think of video in terms of
     # duration/timestamps, it's helpful to convert back and forth.
     time = timestamp.split(":")
-    seconds = (int(time[0])*60*60 +
-               int(time[1])*60 +
-               int(time[2]) +
-               int(time[3])/1000)
-    frame_amount = int(seconds * fps)
+    seconds = (float(time[0])*60*60 +
+               float(time[1])*60 +
+               float(time[2]) +
+               float(time[3])/1000)
+    frame_amount = int(round(seconds * fps))
     return frame_amount
 
 
@@ -94,6 +98,7 @@ class FrameStack:
             start_index += batch_size
 
         # Append remaining small batch (total_frames % batch_size, remainder is the small batch)
+        # (Also, returns input timestamps if duration is less than one batch.)
         batch_start_timestamp = frameindex_to_timestamp(start_index, self.src_fps)
         batch_end_timestamp = frameindex_to_timestamp(end_index, self.src_fps)
         batch_timestamps.append((batch_start_timestamp, batch_end_timestamp))
@@ -121,15 +126,15 @@ class FrameStack:
             raise Exception("[!] Video file could not be opened to read frames. Check file path.")
         
         # Set start index using either provided value or end-of-file.
-        if start_timestamp is '<Start of File>':
+        if start_timestamp == '<Start of File>':
             self.start_index = 0
         else:
             self.start_index = timestamp_to_frameindex(start_timestamp, self.src_fps)
-            if not 0 < self.start_index < self.src_framecount:
+            if not 0 <= self.start_index < self.src_framecount:
                 raise Exception("[!] Invalid start timestamp. Outside range of acceptable times.")
 
         # Set end index using either provided value or end-of-file.
-        if end_timestamp is '<End of File>':
+        if end_timestamp == '<End of File>':
             self.end_index = self.src_framecount-1
         else:
             self.end_index = timestamp_to_frameindex(end_timestamp, self.src_fps)
@@ -137,7 +142,7 @@ class FrameStack:
                 raise Exception("[!] Invalid end timestamp. Outside range of acceptable times.")
 
         # Set desired fps if not provided.
-        if desired_fps is '<Source FPS>':
+        if desired_fps == '<Source FPS>':
             desired_fps = self.src_fps
 
         # Flush any previously read frame information
@@ -206,7 +211,7 @@ class FrameStack:
         count = 0
         for index in range(len(self.stack)):
             try:
-                cv2.imwrite("{0}/frame{1}_{2}.png".format(save_directory,
+                cv2.imwrite("{0}/frame{1}_{2}.jpg".format(save_directory,
                                                           self.indices[index],
                                                           self.timestamps[index]),
                             self.stack[index])
@@ -229,7 +234,7 @@ class FrameStack:
     def crop_frames_rect(self, corners):
         # TODO: Write a proper docstring for the crop_frames_rect() method.
         height = corners[1][1] - corners[0][1]
-        width = corners[1][0] - corners [0][0]
+        width = corners[1][0] - corners[0][0]
         print("[*] Cropping frames to size {}x{}...".format(height, width))
         try:
             self.stack = np.array([image[corners[0][1]:corners[1][1], corners[0][0]:corners[1][0]]
@@ -237,3 +242,5 @@ class FrameStack:
             print("[-] Frame cropping successfully completed.")
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
+
+
