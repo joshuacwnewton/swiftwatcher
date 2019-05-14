@@ -1,4 +1,5 @@
 import os
+import glob
 import cv2
 import numpy as np
 from time import sleep
@@ -22,18 +23,18 @@ def ms_to_timestamp(total_ms):
     return timestamp
 
 
-def frameindex_to_timestamp(frame_amount, fps):
+def index_to_timestamp(index, fps):
     """Helper function to convert an amount of frames into a formatted timestamp."""
     # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
     # but not a duration property. However, as it is easier to think of video in terms of
     # duration/timestamps, it's helpful to convert back and forth.
-    milliseconds = (frame_amount / fps)*1000
+    milliseconds = (index / fps)*1000
     timestamp = ms_to_timestamp(milliseconds)
 
     return timestamp
 
 
-def timestamp_to_frameindex(timestamp, fps):
+def timestamp_to_index(timestamp, fps):
     """Helper function to convert formatted timestamp into an amount of frames."""
     # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
     # but not a duration property. However, as it is easier to think of video in terms of
@@ -43,8 +44,8 @@ def timestamp_to_frameindex(timestamp, fps):
                float(time[1])*60 +
                float(time[2]) +
                float(time[3])/1000)
-    frame_amount = int(round(seconds * fps))
-    return frame_amount
+    index = int(round(seconds * fps))
+    return index
 
 
 class FrameStack:
@@ -84,7 +85,7 @@ class FrameStack:
         else:
             self.fps = desired_fps
 
-    def read_frame(self, delay=0):
+    def read_frame(self, store_index=0, delay=0):
         """Stores a new frame into index 0 of frame stack."""
         if not self.stream.isOpened():
             raise Exception("[!] Video stream is not open. Cannot read new frames.")
@@ -95,10 +96,10 @@ class FrameStack:
         np.roll(self.timestamps, 1, axis=0)
 
         # Fetch new frame and update its attributes
-        self.indices[0] = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-        self.timestamps[0] = (ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC)))
+        self.indices[store_index] = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
+        self.timestamps[store_index] = (ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC)))
         success, frame = self.stream.read()
-        self.stack[0] = np.array(frame)
+        self.stack[store_index] = np.array(frame)
         if success:
             self.frames_read += 1
 
@@ -108,14 +109,14 @@ class FrameStack:
 
         return success
 
-    def save_frame(self, base_save_directory, minute_flag=True, index=0):
+    def save_frame(self, base_save_directory, folder_name=None, index=0):
         # TODO: Write a proper docstring for the save_frames() method.
         """Saves a set of frames to a """
-        if minute_flag:
+        if not folder_name:
             time = self.timestamps[index].split(":")
             save_directory = base_save_directory+"/"+time[0]+":"+time[1]
         else:
-            save_directory = base_save_directory+"/bulk-extraction"
+            save_directory = base_save_directory+"/"+folder_name
 
         if not os.path.isdir(save_directory):
             try:
@@ -131,6 +132,36 @@ class FrameStack:
                         self.stack[index])
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
+
+    def load_frame(self, base_save_directory, load_index, store_index=0, folder_name=None):
+        # Update frame attributes
+        self.indices[store_index] = load_index
+        self.timestamps[store_index] = index_to_timestamp(load_index, self.fps)
+
+        # Set appropriate directory
+        if not folder_name:
+            time = self.timestamps[store_index].split(":")
+            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
+        else:
+            save_directory = base_save_directory+"/"+folder_name
+
+        # Shift frames in frame stack
+        np.roll(self.stack, 1, axis=0)
+        np.roll(self.indices, 1, axis=0)
+        np.roll(self.timestamps, 1, axis=0)
+
+        # Load frame from file
+        file_paths = glob.glob("{}/frame{}*".format(save_directory, load_index))
+        frame = cv2.imread(file_paths[0])
+        self.stack[store_index] = np.array(frame)
+
+        if not frame.size == 0:
+            success = True
+            self.frames_read += 1
+        else:
+            success = False
+
+        return success
 
     def convert_grayscale(self, index=0):
         # TODO: Write a proper docstring for the convert_grayscale() method.
