@@ -49,11 +49,15 @@ def timestamp_to_index(timestamp, fps):
 
 
 class FrameStack:
-    """Class for storing, describing, and manipulating a stack of frames from a video file.
+    """Class for storing, describing, and manipulating frames from video file using a FIFO stack.
 
-    Attributes: src_filename, src_directory, src_fps, src_framecount, src_height, src_width
-                stack, indices, timestamps
-    Methods: read_frames, save_frames, save_frames_info, load_frames, load_frames_info
+    Attributes (source video): src_filename, src_directory, src_fps, src_framecount, src_height, src_width
+    Attributes (frame stack): stack, indices, timestamps
+
+    Methods (File I/O): read_frame, save_frame, load_frame
+    Methods (Frame processing): convert_grayscale, segment_frame, crop_frame, resize_frame
+
+    Methods will operate on position 0 of the stack by default.
     """
     def __init__(self, video_directory, filename, stack_size, desired_fps=False):
         # Check validity of filepath
@@ -85,7 +89,7 @@ class FrameStack:
         else:
             self.fps = desired_fps
 
-    def read_frame(self, store_index=0, delay=0):
+    def read_frame_from_video(self, store_index=0, delay=0):
         """Stores a new frame into index 0 of frame stack."""
         if not self.stream.isOpened():
             raise Exception("[!] Video stream is not open. Cannot read new frames.")
@@ -109,7 +113,7 @@ class FrameStack:
 
         return success
 
-    def save_frame(self, base_save_directory, folder_name=None, index=0):
+    def save_frame_to_file(self, base_save_directory, folder_name=None, index=0):
         # TODO: Write a proper docstring for the save_frames() method.
         """Saves a set of frames to a """
         if not folder_name:
@@ -133,7 +137,7 @@ class FrameStack:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def load_frame(self, base_save_directory, load_index, store_index=0, folder_name=None):
+    def load_frame_from_file(self, base_save_directory, load_index, store_index=0, folder_name=None):
         # Update frame attributes
         self.indices[store_index] = load_index
         self.timestamps[store_index] = index_to_timestamp(load_index, self.fps)
@@ -169,6 +173,10 @@ class FrameStack:
             self.stack[index] = cv2.cvtColor(self.stack[index], cv2.COLOR_BGR2GRAY)
         except Exception as e:
             print("[!] Frame conversion failed due to: {0}".format(str(e)))
+
+    def segment_frame(self):
+        test = None
+        # TODO: Blah blah
 
     def crop_frame(self, corners, index=0):
         # TODO: Write a proper docstring for the crop_frames_rect() method.
