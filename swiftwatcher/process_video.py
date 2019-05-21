@@ -1,5 +1,6 @@
 import os
 import glob
+import collections
 import cv2
 import numpy as np
 from time import sleep
@@ -50,16 +51,17 @@ def timestamp_to_index(timestamp, fps):
 
 class FrameStack:
     """Class for storing, describing, and manipulating frames from video file using a FIFO stack.
+    Essentially a deque with additional attributes and methods specific to video analysis.
+    Stack is size 1 by default. Increase stack size for analysis requiring multiple sequential frames.
 
-    Attributes (source video): src_filename, src_directory, src_fps, src_framecount, src_height, src_width
-    Attributes (frame stack): stack, indices, timestamps
+    Attributes (source video): src_filename, src_directory, src_fps, src_framecount,
+                              src_height, src_width, src_codec
+    Attributes (frame stack): stack, indices, timestamps, fps, delay
 
-    Methods (File I/O): read_frame, save_frame, load_frame
+    Methods (File I/O): read_frame_from_video, save_frame_to_file, load_frame_from_file
     Methods (Frame processing): convert_grayscale, segment_frame, crop_frame, resize_frame
-
-    Methods will operate on position 0 of the stack by default.
     """
-    def __init__(self, video_directory, filename, stack_size, desired_fps=False):
+    def __init__(self, video_directory, filename, stack_size=1, desired_fps=False):
         # Check validity of filepath
         video_filepath = video_directory + filename
         if not os.path.isfile(video_filepath):
@@ -80,48 +82,49 @@ class FrameStack:
             self.src_codec = self.stream.get(cv2.CAP_PROP_FOURCC)
 
         # Initialize attributes of FrameStack
-        self.stack = [None]*stack_size
-        self.indices = [None]*stack_size
-        self.timestamps = [' ']*stack_size
+        self.stack = collections.deque([], stack_size)
+        self.indices = collections.deque([], stack_size)
+        self.timestamps = collections.deque([], stack_size)
         self.frames_read = 0
         if not desired_fps:
             self.fps = self.src_fps
         else:
             self.fps = desired_fps
+        # Delay between frames, needed to subsample video at lower framerate
+        self.delay = round(self.src_fps / self.fps) - 1
 
-    def read_frame_from_video(self, store_index=0, delay=0):
+    def read_frame_from_video(self):
         """Stores a new frame into index 0 of frame stack."""
         if not self.stream.isOpened():
             raise Exception("[!] Video stream is not open. Cannot read new frames.")
 
-        # Shift frames in frame stack
-        np.roll(self.stack, 1, axis=0)
-        np.roll(self.indices, 1, axis=0)
-        np.roll(self.timestamps, 1, axis=0)
-
         # Fetch new frame and update its attributes
-        self.indices[store_index] = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-        self.timestamps[store_index] = (ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC)))
+        self.indices.appendleft(int(self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
+        self.timestamps.appendleft((ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC))))
         success, frame = self.stream.read()
-        self.stack[store_index] = np.array(frame)
         if success:
+            self.stack.appendleft(np.array(frame))
             self.frames_read += 1
 
         # Increments position for next read frame (for skipping frames)
-        for i in range(delay):
+        for i in range(self.delay):
             self.stream.grab()
 
         return success
 
     def save_frame_to_file(self, base_save_directory, folder_name=None, index=0):
         # TODO: Write a proper docstring for the save_frames() method.
-        """Saves a set of frames to a """
+        """Save an individual frame to an image file."""
+
+        # By default, frames will be saved in a subfolder corresponding to HH:MM.
+        # If specified, however, a custom subfolder can be chosen instead.
         if not folder_name:
             time = self.timestamps[index].split(":")
             save_directory = base_save_directory+"/"+time[0]+":"+time[1]
         else:
             save_directory = base_save_directory+"/"+folder_name
 
+        # Create save directory if it does not already exist
         if not os.path.isdir(save_directory):
             try:
                 os.makedirs(save_directory)
@@ -129,6 +132,7 @@ class FrameStack:
             except OSError:
                 print("[!] Creation of the directory %s failed." % save_directory)
 
+        # Write frame to image file within save_directory
         try:
             cv2.imwrite("{0}/frame{1}_{2}.jpg".format(save_directory,
                                                       self.indices[index],
@@ -137,27 +141,22 @@ class FrameStack:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def load_frame_from_file(self, base_save_directory, load_index, store_index=0, folder_name=None):
+    def load_frame_from_file(self, base_save_directory, load_index, folder_name=None):
         # Update frame attributes
-        self.indices[store_index] = load_index
-        self.timestamps[store_index] = index_to_timestamp(load_index, self.fps)
+        self.indices.appendleft(load_index)
+        self.timestamps.appendleft(index_to_timestamp(load_index, self.fps))
 
         # Set appropriate directory
         if not folder_name:
-            time = self.timestamps[store_index].split(":")
+            time = self.timestamps[0].split(":")
             save_directory = base_save_directory+"/"+time[0]+":"+time[1]
         else:
             save_directory = base_save_directory+"/"+folder_name
 
-        # Shift frames in frame stack
-        np.roll(self.stack, 1, axis=0)
-        np.roll(self.indices, 1, axis=0)
-        np.roll(self.timestamps, 1, axis=0)
-
         # Load frame from file
         file_paths = glob.glob("{}/frame{}*".format(save_directory, load_index))
         frame = cv2.imread(file_paths[0])
-        self.stack[store_index] = np.array(frame)
+        self.stack.appendleft(np.array(frame))
 
         if not frame.size == 0:
             success = True
@@ -190,3 +189,34 @@ class FrameStack:
         self.stack[index] = cv2.resize(self.stack[index],
                                        (round(self.stack[index].shape[1]*s), round(self.stack[index].shape[0]*s)),
                                        interpolation=cv2.INTER_AREA)
+
+
+def extract_frames(video_directory, filename, stack_size=1, save_directory=None):
+    """Extract frames from video file and save them to image files."""
+
+    # Default save directory chosen to be identical to filename
+    if not save_directory:
+        save_directory = video_directory + os.path.splitext(filename)[0]
+
+    print("[========================================================]")
+    print("[*] Reading frames... (This may take a while!)")
+
+    frame_stack = FrameStack(video_directory, filename, stack_size)
+    while frame_stack.frames_read < frame_stack.src_framecount:
+        # Attempt to read frame from video into stack object
+        success = frame_stack.read_frame_from_video()
+
+        # Save frame to file if read correctly
+        if success:
+            frame_stack.save_frame_to_file(save_directory)
+        else:
+            raise Exception("read_frame() failed before expected end of file.")
+
+        # Status updates
+        if frame_stack.frames_read % 1000 == 0:
+            print("[-] {}/{} frames successfully processed.".format(frame_stack.frames_read,
+                                                                    frame_stack.src_framecount))
+    frame_stack.stream.release()
+
+    print("[========================================================]")
+    print("[-] Extraction complete. {} total frames extracted.".format(frame_stack.frames_read))
