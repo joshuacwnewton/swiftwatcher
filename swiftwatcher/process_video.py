@@ -3,8 +3,7 @@ import glob
 import collections
 import cv2
 import numpy as np
-from time import sleep
-
+from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 
 def ms_to_timestamp(total_ms):
     """Helper function to convert millisecond value into formatted timestamp."""
@@ -24,18 +23,18 @@ def ms_to_timestamp(total_ms):
     return timestamp
 
 
-def index_to_timestamp(index, fps):
+def framenumber_to_timestamp(frame_number, fps):
     """Helper function to convert an amount of frames into a formatted timestamp."""
     # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
     # but not a duration property. However, as it is easier to think of video in terms of
     # duration/timestamps, it's helpful to convert back and forth.
-    milliseconds = (index / fps)*1000
+    milliseconds = (frame_number / fps)*1000
     timestamp = ms_to_timestamp(milliseconds)
 
     return timestamp
 
 
-def timestamp_to_index(timestamp, fps):
+def timestamp_to_framenumber(timestamp, fps):
     """Helper function to convert formatted timestamp into an amount of frames."""
     # cv2's VideoCapture class provides a frame count property (cv2.CAP_PROP_FRAME_COUNT)
     # but not a duration property. However, as it is easier to think of video in terms of
@@ -45,8 +44,8 @@ def timestamp_to_index(timestamp, fps):
                float(time[1])*60 +
                float(time[2]) +
                float(time[3])/1000)
-    index = int(round(seconds * fps))
-    return index
+    frame_number = int(round(seconds * fps))
+    return frame_number
 
 
 class FrameStack:
@@ -56,7 +55,7 @@ class FrameStack:
 
     Attributes (source video): src_filename, src_directory, src_fps, src_framecount,
                               src_height, src_width, src_codec
-    Attributes (frame stack): stack, indices, timestamps, fps, delay
+    Attributes (frame stack): stack, framenumbers, timestamps, fps, delay
 
     Methods (File I/O): read_frame_from_video, save_frame_to_file, load_frame_from_file
     Methods (Frame processing): convert_grayscale, segment_frame, crop_frame, resize_frame
@@ -83,7 +82,7 @@ class FrameStack:
 
         # Initialize attributes of FrameStack
         self.stack = collections.deque([], stack_size)
-        self.indices = collections.deque([], stack_size)
+        self.framenumbers = collections.deque([], stack_size)
         self.timestamps = collections.deque([], stack_size)
         self.frames_read = 0
         if not desired_fps:
@@ -93,13 +92,13 @@ class FrameStack:
         # Delay between frames, needed to subsample video at lower framerate
         self.delay = round(self.src_fps / self.fps) - 1
 
-    def read_frame_from_video(self):
-        """Stores a new frame into index 0 of frame stack."""
+    def load_frame_from_video(self):
+        """Insert next frame from video stream into left side (index 0) of frame stack."""
         if not self.stream.isOpened():
             raise Exception("[!] Video stream is not open. Cannot read new frames.")
 
         # Fetch new frame and update its attributes
-        self.indices.appendleft(int(self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
+        self.framenumbers.appendleft(int(self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
         self.timestamps.appendleft((ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC))))
         success, frame = self.stream.read()
         if success:
@@ -112,8 +111,33 @@ class FrameStack:
 
         return success
 
-    def save_frame_to_file(self, base_save_directory, folder_name=None, index=0):
-        # TODO: Write a proper docstring for the save_frames() method.
+    def load_frame_from_file(self, base_save_directory, frame_number, folder_name=None):
+        """Insert specified frame from file into left side (index 0) of frame stack."""
+        # Update frame attributes
+        self.framenumbers.appendleft(frame_number)
+        self.timestamps.appendleft(framenumber_to_timestamp(frame_number, self.fps))
+
+        # Set appropriate directory
+        if not folder_name:
+            time = self.timestamps[0].split(":")
+            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
+        else:
+            save_directory = base_save_directory+"/"+folder_name
+
+        # Load frame from file
+        file_paths = glob.glob("{}/frame{}*".format(save_directory, frame_number))
+        frame = cv2.imread(file_paths[0])
+        self.stack.appendleft(np.array(frame))
+
+        if not frame.size == 0:
+            success = True
+            self.frames_read += 1
+        else:
+            success = False
+
+        return success
+
+    def save_frame_to_file(self, base_save_directory, index=0, folder_name=None):
         """Save an individual frame to an image file."""
 
         # By default, frames will be saved in a subfolder corresponding to HH:MM.
@@ -135,47 +159,17 @@ class FrameStack:
         # Write frame to image file within save_directory
         try:
             cv2.imwrite("{0}/frame{1}_{2}.jpg".format(save_directory,
-                                                      self.indices[index],
+                                                      self.framenumbers[index],
                                                       self.timestamps[index]),
                         self.stack[index])
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def load_frame_from_file(self, base_save_directory, load_index, folder_name=None):
-        # Update frame attributes
-        self.indices.appendleft(load_index)
-        self.timestamps.appendleft(index_to_timestamp(load_index, self.fps))
-
-        # Set appropriate directory
-        if not folder_name:
-            time = self.timestamps[0].split(":")
-            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
-        else:
-            save_directory = base_save_directory+"/"+folder_name
-
-        # Load frame from file
-        file_paths = glob.glob("{}/frame{}*".format(save_directory, load_index))
-        frame = cv2.imread(file_paths[0])
-        self.stack.appendleft(np.array(frame))
-
-        if not frame.size == 0:
-            success = True
-            self.frames_read += 1
-        else:
-            success = False
-
-        return success
-
     def convert_grayscale(self, index=0):
-        # TODO: Write a proper docstring for the convert_grayscale() method.
         try:
             self.stack[index] = cv2.cvtColor(self.stack[index], cv2.COLOR_BGR2GRAY)
         except Exception as e:
             print("[!] Frame conversion failed due to: {0}".format(str(e)))
-
-    def segment_frame(self):
-        test = None
-        # TODO: Blah blah
 
     def crop_frame(self, corners, index=0):
         # TODO: Write a proper docstring for the crop_frames_rect() method.
@@ -183,6 +177,18 @@ class FrameStack:
             self.stack[index] = self.stack[index][corners[0][1]:corners[1][1], corners[0][0]:corners[1][0]]
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
+
+    def frame_to_column(self, index=0):
+        """Reshape image matrix to single column vector."""
+        self.stack[index] = np.reshape(self.stack[index], (-1, 1))
+
+    def concatenate_stack(self):
+        """Returns matrix comprised of all stack entries concatenated together"""
+        return np.concatenate(self.stack, axis=1)
+
+    def rpca_decomposition(self, matrix):
+        low_rank, sparse = inexact_augmented_lagrange_multiplier(matrix)
+        return low_rank, sparse
 
     def resize_frame(self, scale_percent, index=0):
         s = scale_percent/100
@@ -192,7 +198,8 @@ class FrameStack:
 
 
 def extract_frames(video_directory, filename, stack_size=1, save_directory=None):
-    """Extract frames from video file and save them to image files."""
+    """Helper function to extract individual frames one at a time 
+       from video file and save them to image files."""
 
     # Default save directory chosen to be identical to filename
     if not save_directory:
@@ -204,7 +211,7 @@ def extract_frames(video_directory, filename, stack_size=1, save_directory=None)
     frame_stack = FrameStack(video_directory, filename, stack_size)
     while frame_stack.frames_read < frame_stack.src_framecount:
         # Attempt to read frame from video into stack object
-        success = frame_stack.read_frame_from_video()
+        success = frame_stack.load_frame_from_video()
 
         # Save frame to file if read correctly
         if success:
