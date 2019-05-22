@@ -1,6 +1,7 @@
 import os
 import glob
 import collections
+from time import sleep
 import cv2
 import numpy as np
 from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
@@ -137,7 +138,7 @@ class FrameStack:
 
         return success
 
-    def save_frame_to_file(self, base_save_directory, index=0, folder_name=None):
+    def save_frame_to_file(self, base_save_directory, index=0, folder_name=None, scale=100):
         """Save an individual frame to an image file."""
 
         # By default, frames will be saved in a subfolder corresponding to HH:MM.
@@ -156,12 +157,17 @@ class FrameStack:
             except OSError:
                 print("[!] Creation of the directory %s failed." % save_directory)
 
+        # Resize frame for viewing convenience
+        s = scale/100
+        resized_frame = cv2.resize(self.stack[index],
+                                   (round(self.stack[index].shape[1]*s), round(self.stack[index].shape[0]*s)),
+                                   interpolation=cv2.INTER_AREA)
         # Write frame to image file within save_directory
         try:
             cv2.imwrite("{0}/frame{1}_{2}.jpg".format(save_directory,
                                                       self.framenumbers[index],
                                                       self.timestamps[index]),
-                        self.stack[index])
+                        resized_frame)
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
@@ -186,9 +192,14 @@ class FrameStack:
         """Returns matrix comprised of all stack entries concatenated together"""
         return np.concatenate(self.stack, axis=1)
 
-    def rpca_decomposition(self, matrix):
-        low_rank, sparse = inexact_augmented_lagrange_multiplier(matrix)
-        return low_rank, sparse
+    def rpca_decomposition(self, index):
+        # Convert stack from I images of size NxM to matrix of size (NxM)xI
+        # This formatting is necessary for Robust PCA.
+        matrix = np.empty([self.stack[index].size, len(self.stack)])
+        for i in range(len(self.stack)):
+            matrix[:, i, None] = np.reshape(self.stack[i], (-1, 1))
+        low_rank, sparse = inexact_augmented_lagrange_multiplier(matrix, verbose=False)
+        self.stack[index] = np.absolute(np.reshape(sparse[:, index], self.stack[index].shape))
 
     def resize_frame(self, scale_percent, index=0):
         s = scale_percent/100

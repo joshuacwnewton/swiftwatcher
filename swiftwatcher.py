@@ -15,57 +15,36 @@ def main(args):
         # Initialize parameters necessary to load previously extracted frames
         load_directory = (args.video_dir +  # Assumed convention from pv.extract_frames()
                           os.path.splitext(args.filename)[0])
+        if not args.custom_dir:
+            args.custom_dir = "Emergency Test Folder"
         load_index = args.reuse[0]          # Index of frame to load next
         total_frames = args.reuse[1]        # Total number of frames to load and process
 
         # Create frameStack object
-        stack_size = 20
+        stack_size = 30
+        stack_center = int((stack_size-1)/2)
         frame_stack = pv.FrameStack(args.video_dir, args.filename, stack_size=stack_size)
         frame_stack.stream.release()  # VideoCapture not needed if frames are being reused
 
-        counter = 0
-        while frame_stack.frames_read < total_frames:
+        while frame_stack.frames_read < 51:
             # Load frame with specified index
             success = frame_stack.load_frame_from_file(load_directory, load_index)
 
             if success:
                 # Preprocessing
                 frame_stack.convert_grayscale()
-                frame_stack.crop_frame(corners=[(745, 617), (920, 692)])  # top-left [w,h], bottom-right [w,h]
+                frame_stack.crop_frame(corners=[(700, 500), (1000, 692)])  # top-left [w,h], bottom-right [w,h]
 
-                # Robust PCA background subtraction
-                s = 10
-                resized = cv2.resize(frame_stack.stack[0],
-                                     (round(frame_stack.stack[0].shape[1]*s), round(frame_stack.stack[0].shape[0]*s)),
-                                     interpolation=cv2.INTER_AREA)
-                cv2.imwrite("{0}/RPCA/{1}a_original.jpg".format(load_directory, counter), resized)
-                counter += 1
-                frame_stack.frame_to_column()
-                input_data = frame_stack.concatenate_stack()
-                if frame_stack.frames_read >= stack_size:
-                    low_rank, sparse = frame_stack.rpca_decomposition(input_data)
-                    for i in range(stack_size):
-                        reshaped_s = (np.reshape(sparse[:, i], (75, 175)))
-                        abs_s = np.absolute(reshaped_s)
-                        # inted_s = abs_s.astype(int)
-                        resized_s = cv2.resize(abs_s,
-                                              (round(abs_s.shape[1] * s), round(abs_s.shape[0] * s)),
-                                              interpolation=cv2.INTER_AREA)
+                # Robust PCA using adjacent frames from forward and backwards in time
+                if frame_stack.frames_read > stack_center:
+                    # frame_stack.rpca_decomposition(index=stack_center)
+                    frame_stack.save_frame_to_file(load_directory, index=stack_center,
+                                                   folder_name=args.custom_dir, scale=1000)
 
-                        reshaped_lr = (np.reshape(low_rank[:, i], (75, 175)))
-                        # inted_lr = reshaped_lr.astype(int)
-                        resized_lr = cv2.resize(reshaped_lr,
-                                                (round(reshaped_lr.shape[1] * s), round(reshaped_lr.shape[0] * s)),
-                                                interpolation=cv2.INTER_AREA)
-
-                        i = (stack_size-1) - i
-                        cv2.imwrite("{0}/RPCA/{1}b_sparse.jpg".format(load_directory, i), resized_s)
-                        cv2.imwrite("{0}/RPCA/{1}c_low_rank.jpg".format(load_directory, i), resized_lr)
-                    test=None
-
-                # Save files a custom folder within the load directory
-                # frame_stack.save_frame_to_file(load_directory, folder_name=args.custom_dir)
                 load_index += (1 + frame_stack.delay)
+
+            if frame_stack.frames_read % 50 == 0:
+                print("{0}/{1} frames processed.".format(frame_stack.frames_read, total_frames))
 
     # Code to process frames as they are being read
     else:
