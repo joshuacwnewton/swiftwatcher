@@ -46,13 +46,14 @@ class FrameQueue:
             self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
 
         # Initialize mutable frame/video attributes
-        self.delay = round(self.src_fps/self.fps) - 1  # Needed to subsample video
         self.height = self.src_height  # Separate because cropping may change dimensions
         self.width = self.src_width    # Separate because cropping may change dimensions
         if not desired_fps:
             self.fps = self.src_fps
+            self.delay = round(self.src_fps / self.fps) - 1  # Needed to subsample video
         else:
             self.fps = desired_fps
+            self.delay = 0
 
     def load_frame_from_video(self):
         """Insert next frame from video stream into left side (index 0) of frame queue."""
