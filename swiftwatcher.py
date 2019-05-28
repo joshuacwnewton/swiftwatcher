@@ -6,8 +6,6 @@ import cv2
 import numpy as np
 from scipy import ndimage as img
 
-# TODO: Rewrite to comply with line length
-
 
 def main(args):
     # Code to extract all frames from video and save them to files
@@ -64,10 +62,10 @@ def main(args):
                     # sparse_eroded = img.grey_erosion(sparse_opened,
                     #                                  size=(1, 1))
 
-                    ret, sparse_thr = cv2.threshold(sparse_filtered,
-                                                    thresh=35,
-                                                    maxval=255,
-                                                    type=cv2.THRESH_TOZERO)
+                    _, sparse_thr = cv2.threshold(sparse_filtered,
+                                                  thresh=35,
+                                                  maxval=255,
+                                                  type=cv2.THRESH_TOZERO)
                     element = np.ones((2, 2))
                     sparse_opened = \
                         img.binary_opening(sparse_thr, structure=element) \
@@ -83,11 +81,10 @@ def main(args):
                     # mask[mask == 255] = 1
                     # sparse_thresh = np.multiply(sparse_uint8, mask)
 
-                    # TODO: Clarify "ret" and "retval" names
-                    retval, sparse_cc = cv2.connectedComponents(sparse_opened,
-                                                                connectivity=4)
-                    if retval:
-                        sparse_cc = sparse_cc*(255/retval)
+                    num_components, sparse_cc = \
+                        cv2.connectedComponents(sparse_opened, connectivity=4)
+                    if num_components > 0:
+                        sparse_cc = sparse_cc*(255/num_components)
 
                     # Reshape column vector form of image into normal frame
                     frame = np.reshape(frame_queue.queue[queue_center],
