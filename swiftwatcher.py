@@ -39,15 +39,11 @@ def main(args):
 
                 if frame_queue.frames_read > queue_center:
                     # Robust PCA using adjacent frames from forward and backwards in time
-                    lowrank, sparse = frame_queue.rpca_decomposition(index=queue_center)
-
-                    # Bring pixels that are darker than the background into [0, 255] range
-                    sparse = -1 * sparse  # Darker = negative -> mirror into positive
-                    np.clip(sparse, 0, 255, sparse)
-                    sparse_uint8 = sparse.astype(dtype=np.uint8)
+                    lowrank, sparse = frame_queue.rpca_decomposition(index=queue_center,
+                                                                     darker_only=True)
 
                     # Apply bilateral filter to remove noise, retain birds
-                    sparse_filtered = sparse_uint8
+                    sparse_filtered = sparse
                     for i in range(2):
                         sparse_filtered = cv2.bilateralFilter(sparse_filtered, 7, 15, 1)
 

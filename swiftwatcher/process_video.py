@@ -177,7 +177,7 @@ class FrameQueue:
         self.queue[index] = np.squeeze(np.reshape(self.queue[index],
                                                   (self.width*self.height, 1)))
 
-    def rpca_decomposition(self, index):
+    def rpca_decomposition(self, index, darker_only=False):
         """Decompose set of images into corresponding low-rank and sparse images.
         Method expects images to have been reshaped to matrix of column vectors.
 
@@ -197,7 +197,12 @@ class FrameQueue:
         lr_image = np.reshape(lr_columns[:, index], (self.height, self.width))
         s_image = np.reshape(s_columns[:, index], (self.height, self.width))
 
-        return lr_image, s_image
+        # Bring pixels that are darker than the background into [0, 255] range
+        if darker_only:
+            s_image = -1 * s_image  # Darker = negative -> mirror into positive
+            np.clip(s_image, 0, 255, s_image)
+
+        return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
 
 def ms_to_timestamp(total_ms):
