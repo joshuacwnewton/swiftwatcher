@@ -61,8 +61,8 @@ def main(args):
                     # sparse_thresh = np.multiply(sparse_uint8, mask)
 
                     retval, sparse_cc = cv2.connectedComponents(sparse_opened, connectivity=4)
-                    if sparse_cc.max() is not 0:
-                        sparse_cc = sparse_cc*(255/sparse_cc.max())
+                    if retval:
+                        sparse_cc = sparse_cc*(255/retval)
 
                     # Print 3 stages of filtering to compare
                     frame = np.reshape(frame_queue.queue[queue_center], (frame_queue.height, frame_queue.width))
