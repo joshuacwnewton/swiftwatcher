@@ -34,7 +34,7 @@ def main(args):
             if success:
                 # Preprocessing
                 frame_queue.convert_grayscale()
-                frame_queue.crop_frame(corners=[(745, 620), (920, 690)])  # top-left [w,h], bottom-right [w,h]
+                frame_queue.crop_frame(corners=args.crop)
                 frame_queue.frame_to_column()
 
                 if frame_queue.frames_read > queue_center:
@@ -115,7 +115,12 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for extracted frame image files",
-                        default="Unspecified Test Folder"
+                        default="Argument testing"
+                        )
+    parser.add_argument("-p",
+                        "--crop",
+                        help="Corner coordinates for cropping.",
+                        default=[(760, 650), (921, 686)]
                         )
     arguments = parser.parse_args()
 
