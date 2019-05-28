@@ -1,8 +1,10 @@
 import swiftwatcher.process_video as pv
 import os
 import argparse as ap
-import numpy as np
+import utils.cm as cm
 import cv2
+import numpy as np
+from scipy import ndimage as img
 
 
 def main(args):
@@ -15,57 +17,81 @@ def main(args):
         # Initialize parameters necessary to load previously extracted frames
         load_directory = (args.video_dir +  # Assumed convention from pv.extract_frames()
                           os.path.splitext(args.filename)[0])
-        if not args.custom_dir:
-            args.custom_dir = "Emergency Test Folder"
         load_index = args.reuse[0]          # Index of frame to load next
         total_frames = args.reuse[1]        # Total number of frames to load and process
 
-        # Create frameStack object
-        stack_size = 30
-        stack_center = int((stack_size-1)/2)
-        frame_stack = pv.FrameStack(args.video_dir, args.filename, stack_size=stack_size)
-        frame_stack.stream.release()  # VideoCapture not needed if frames are being reused
+        # Create FrameQueue object
+        queue_size = 20
+        queue_center = int((queue_size-1)/2)
+        frame_queue = pv.FrameQueue(args.video_dir, args.filename, queue_size=queue_size)
+        frame_queue.stream.release()  # VideoCapture not needed if frames are being reused
 
-        while frame_stack.frames_read < 51:
-            # Load frame with specified index
-            success = frame_stack.load_frame_from_file(load_directory, load_index)
+        while frame_queue.frames_read < total_frames:
+            # Load frame with specified index into FrameQueue object
+            success = frame_queue.load_frame_from_file(load_directory, load_index)
 
+            # Process frame (grayscale, segmentation, etc.)
             if success:
                 # Preprocessing
-                frame_stack.convert_grayscale()
-                frame_stack.crop_frame(corners=[(700, 500), (1000, 692)])  # top-left [w,h], bottom-right [w,h]
+                frame_queue.convert_grayscale()
+                frame_queue.crop_frame(corners=[(745, 620), (920, 690)])  # top-left [w,h], bottom-right [w,h]
+                frame_queue.frame_to_column()
 
-                # Robust PCA using adjacent frames from forward and backwards in time
-                if frame_stack.frames_read > stack_center:
-                    # frame_stack.rpca_decomposition(index=stack_center)
-                    frame_stack.save_frame_to_file(load_directory, index=stack_center,
-                                                   folder_name=args.custom_dir, scale=1000)
+                if frame_queue.frames_read > queue_center:
+                    # Robust PCA using adjacent frames from forward and backwards in time
+                    lowrank, sparse = frame_queue.rpca_decomposition(index=queue_center)
 
-                load_index += (1 + frame_stack.delay)
+                    # Bring pixels that are darker than the background into [0, 255] range
+                    sparse = -1 * sparse  # Darker = negative -> mirror into positive
+                    np.clip(sparse, 0, 255, sparse)
+                    sparse_uint8 = sparse.astype(dtype=np.uint8)
 
-            if frame_stack.frames_read % 50 == 0:
-                print("{0}/{1} frames processed.".format(frame_stack.frames_read, total_frames))
+                    # Apply bilateral filter to remove noise, retain birds
+                    sparse_filtered = sparse_uint8
+                    for i in range(2):
+                        sparse_filtered = cv2.bilateralFilter(sparse_filtered, 7, 15, 1)
 
-    # Code to process frames as they are being read
-    else:
-        # TODO: Real-time analysis code here
-        todo = None
+                    # Apply grayscale opening
+                    #for i in range(5):
+                    #     sparse_opened = img.grey_opening(sparse_filtered, size=(2, 2))
+                    # sparse_eroded = img.grey_erosion(sparse_opened, size=(1, 1))
+
+                    ret, sparse_thresh = cv2.threshold(sparse_filtered, 35, 255, cv2.THRESH_TOZERO)
+                    sparse_opened = img.binary_opening(sparse_thresh,
+                                                       structure=np.ones((2, 2))).astype(sparse_thresh.dtype)
+                    # Threshold result of bilateral filter, backproject onto motion estimated image
+                    # _, mask = cv2.threshold(sparse_filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    # mask[mask == 255] = 1
+                    # sparse_thresh = np.multiply(sparse_uint8, mask)
+
+                    retval, sparse_cc = cv2.connectedComponents(sparse_opened, connectivity=4)
+                    if sparse_cc.max() is not 0:
+                        sparse_cc = sparse_cc*(255/sparse_cc.max())
+
+                    # Print 3 stages of filtering to compare
+                    frame = np.reshape(frame_queue.queue[queue_center], (frame_queue.height, frame_queue.width))
+                    sparse_frames = np.vstack((frame, sparse_thresh, sparse_cc))
+                    frame_queue.save_frame_to_file(load_directory, frame=sparse_frames,
+                                                   index=queue_center,
+                                                   folder_name=args.custom_dir,
+                                                   scale=400)
+                    # Unused elements of RPCA
+                    # frame_queue.save_frame_to_file(load_directory, frame=lowrank,
+                    #                                index=queue_center,
+                    #                                folder_name=args.custom_dir,
+                    #                                file_suffix="b_RPCAlowrank", scale=400)
+                    # sparse_cm = cm.apply_custom_colormap(sparse_abs, cmap="viridis")
+                    # frame_queue.save_frame_to_file(load_directory, frame=sparse_cm,
+                    #                                index=queue_center,
+                    #                                folder_name=args.custom_dir,
+                    #                                file_suffix="c_RPCAsparsecm", scale=400)
+
+            load_index += (1 + frame_queue.delay)
+            if frame_queue.frames_read % 50 == 0:
+                print("{0}/{1} frames processed.".format(frame_queue.frames_read, total_frames))
 
 
 if __name__ == "__main__":
-    # This file uses default configs which refer to the current best dataset available:
-    # videos/ch04_20170518205849.mp4 with no custom subfolder (i.e. HH:MM subfolders)
-
-    # Example 1: python3 swiftwatcher.py -e
-    #                                    -d "videos/additional_videos/gdrive_swiftvideos/"
-    #                                    -f "ch02_20160513200533.mp4"
-    # Extracts frames from non-default video file.
-
-    # Example 2: python3 swiftwatcher.py -r 16200 1800
-    #                                    -c "Cropped-files_00:09-00:10"
-    # Processes 1800 frames (previously extracted from default video file) starting at
-    # frame 16200 (00:09) and saves them in custom subfolder called "Cropped-files_00:09-00:10".
-
     parser = ap.ArgumentParser()
     parser.add_argument("-e",
                         "--extract",
@@ -78,7 +104,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_FRAME', 'TOTAL_FRAMES'),
-                        default=([16200, 1800])
+                        default=([16200, 200])
                         )
     parser.add_argument("-d",
                         "--video_dir",
@@ -93,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for extracted frame image files",
-                        default=None
+                        default="Unspecified Test Folder"
                         )
     arguments = parser.parse_args()
 
