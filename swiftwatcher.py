@@ -1,12 +1,14 @@
 import swiftwatcher.process_video as pv
 import os
 import argparse as ap
+import math
 import cv2
 import numpy as np
-
 import utils.cm as cm
 from scipy import ndimage as img
-
+from scipy.spatial import distance
+from scipy.optimize import linear_sum_assignment
+from skimage import measure
 
 def main(args):
     # Code to extract all frames from video and save them to files
@@ -31,6 +33,9 @@ def main(args):
 
         # Initialize data structures for bird counting stats
         bird_count = np.array([])
+        properties_old = None
+        sparse_frames_old = None
+        sparse_cc_old = None
         ground_truth = np.genfromtxt('videos/groundtruth.csv',
                                      delimiter=',').astype(dtype=int)
 
@@ -47,6 +52,8 @@ def main(args):
                 frame_queue.frame_to_column()
 
                 if frame_queue.frames_read > queue_center:
+                    # --------------- FRAME PROCESSING BEGINS --------------- #
+
                     # Choosing index such that RPCA will use adjacent frames
                     # (forward and backwards) to "queue_center" frame
                     lowrank, sparse = \
@@ -67,63 +74,158 @@ def main(args):
                                                   maxval=255,
                                                   type=cv2.THRESH_TOZERO)
 
+                    sparse_opened = \
+                        img.grey_opening(sparse_thr, size=(2, 2)) \
+                        .astype(sparse_thr.dtype)
+
                     # Segment using connected component labeling
                     retval, sparse_cc = \
-                        cv2.connectedComponents(sparse_thr, connectivity=4)
+                        cv2.connectedComponents(sparse_opened, connectivity=4)
                     # Scale CC image for visual clarity
-                    if retval > 0:
-                        sparse_cc = sparse_cc*(255/retval)
 
-                    # Exclude background, count only foreground segments
-                    num_components = retval - 1
-                    if 16199 < (load_index - queue_center) < 16391:
-                        bird_count = np.append(bird_count, num_components)
+                    # ------ PROCESSING ENDS, STATS MEASUREMENT BEGINS ------ #
 
-                    # Display different stages of processing in single image
-                    separator = 255 * np.ones(shape=(1, frame_queue.width),
-                                              dtype=np.uint8)
+                    properties_new = measure.regionprops(sparse_cc)
+                    if properties_old is None:
+                        properties_old = properties_new
+
+                    count_old = len(properties_old)
+                    count_new = len(properties_new)
+                    cost_matrix = np.zeros((count_new + count_old,
+                                            count_new + count_old))
+
+                    # Filling in cost matrix for object pairs
+                    for seg_old in properties_old:
+                        for seg_new in properties_new:
+                            index_v = (seg_old.label-1)
+                            index_h = (count_old+seg_new.label-1)
+
+                            # Initial cost function as inversely proportional
+                            # to the distance between object pairs
+                            cost_matrix[index_v, index_h] = \
+                                1/(0.0001 +
+                                   distance.euclidean(seg_old.centroid,
+                                                      seg_new.centroid))*100
+
+                    # Filling in cost matrix for "appear"/"disappear"
+                    for i in range(count_new + count_old):
+                        if i < count_old:
+                            coord = properties_old[i].centroid
+                        if count_old <= i < (count_new + count_old):
+                            coord = properties_new[i-count_old].centroid
+
+                        edge_proximity = min([coord[0],
+                                              coord[1],
+                                              frame_queue.height-coord[0],
+                                              frame_queue.width-coord[1]])
+
+                        # Exponential function returns 1 when edge proximity
+                        # is near zero, but drops off when edge proximity is
+                        # large.
+                        cost_matrix[i, i] = math.exp(-edge_proximity/10)
+
+                    if count_new and count_old:
+                        # Turn maximization problem into minimization
+                        cost_matrix_min = -1 * cost_matrix
+                        cost_matrix_min -= cost_matrix_min.min()
+                        _, assignments = \
+                            linear_sum_assignment(cost_matrix_min)
+
+                        # Convert bird pairs into coordinate pairs
+                        assignment_coords = \
+                            np.zeros((len(assignments), 4)).astype(np.int)
+                        for i in range(len(assignments)):
+                            # 'i' is label of entry in likelihood matrix
+                            # 'j' is label of corresponding assignment
+                            j = assignments[i]
+                            if i < count_old:
+                                assignment_coords[i, 0:2] = \
+                                    properties_old[i].centroid
+                                if i < j:
+                                    assignment_coords[i, None, 2:4] = \
+                                        properties_new[j-count_old].centroid
+                            if i >= count_old:
+                                if i == j:
+                                    assignment_coords[i, None, 2:4] = \
+                                        properties_new[j-count_old].centroid
+
+                        # Total count for foreground segments only
+                        bird_count = np.append(bird_count, count_new)
+
+                    properties_old = properties_new
+
+                    # ----- STATS MEASUREMENT ENDS, SAVE TO FILE BEGINS ----- #
+
+                    # Modify frame stages for visual clarity only
                     frame = np.reshape(frame_queue.queue[queue_center],
                                        (frame_queue.height, frame_queue.width))
-                    sparse_frames = np.vstack((frame, separator,
-                                               sparse, separator,
-                                               sparse_filtered, separator,
-                                               sparse_thr, separator,
-                                               sparse_cc))
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    cv2.putText(frame, '{}'.format(save_index), (0, 12),
+                                fontFace=font, fontScale=0.5,
+                                color=(255, 255, 255))
+
+                    if retval > 0:
+                        sparse_cc_new = sparse_cc*(255/retval)
+                    else:
+                        sparse_cc_new = sparse_cc
+
+                    # Compare different processing stages for single frame
+                    separator_v = 64*np.ones(shape=(1, frame_queue.width),
+                                             dtype=np.uint8)
+                    sparse_frames_new = np.vstack((frame, separator_v,
+                                                   sparse, separator_v,
+                                                   sparse_filtered, separator_v,
+                                                   sparse_thr, separator_v,
+                                                   sparse_opened, separator_v,
+                                                   sparse_cc_new))
+
+                    # Compare processing stages for two frames side-by-side
+                    if sparse_frames_old is None:
+                        sparse_frames_old = np.zeros(sparse_frames_new.shape)
+                    separator_h = 255*np.ones(shape=
+                                              (sparse_frames_new.shape[0], 1),
+                                              dtype=np.uint8)
+                    fr_comparison = np.hstack((sparse_frames_old, separator_h,
+                                               sparse_frames_new))
+                    sparse_frames_old = sparse_frames_new
+
+                    # Compare segmented images
+                    if sparse_cc_old is None:
+                        sparse_cc_old = np.zeros(sparse_cc_new.shape)
+                    seg_comparison = np.vstack((sparse_cc_old, separator_v,
+                                                sparse_cc_new))
+
+                    for i in range(count_old):
+                        p1o = (assignment_coords[i, 1],
+                               assignment_coords[i, 0])
+                        p2o = (assignment_coords[i, 3],
+                               assignment_coords[i, 2]+frame_queue.height+1)
+                        color = (255, 255, 255)
+                        test1 = np.count_nonzero(p1o)
+                        test2 = np.count_nonzero(p2o)
+                        if (np.count_nonzero(p1o)+np.count_nonzero(p2o)) == 4:
+                            cv2.line(seg_comparison, p1o, p2o,
+                                     color, thickness=1)
+
+                    # TODO: Draw lines between coords
                     frame_queue.save_frame_to_file(load_directory,
-                                                   frame=sparse_frames,
+                                                   frame=seg_comparison,
                                                    index=queue_center,
                                                    folder_name=args.custom_dir,
                                                    scale=400)
+                    sparse_cc_old = sparse_cc_new
 
-                    # TODO: Finish pipeline before tweaking stages further.
-                    # Below are unused, but potentially viable processing
-                    # stages. Don't touch these until you have the structure in
-                    # place to properly evaluate the tweaks you're making!!!!
+                    # Save comparison to file for viewing convenience
+                    # frame_queue.save_frame_to_file(load_directory,
+                    #                                frame=fr_comparison,
+                    #                                index=queue_center,
+                    #                                folder_name=args.custom_dir,
+                    #                                scale=400)
 
-                    # BACKPROJECTION OR SOMETHING OR OTHER
-                    # _, mask = cv2.threshold(sparse_filtered,
-                    #                         thresh=0,
-                    #                         maxval=255,
-                    #                         type=(cv2.THRESH_BINARY+
-                    #                               cv2.THRESH_OTSU))
-                    # mask[mask == 255] = 1
-                    # sparse_thresh = np.multiply(sparse_uint8, mask)
-
-                    # GRAYSCALE MORPHOLOGICAL OPERATIONS
-                    # for i in range(5):
-                    #     sparse_opened = img.grey_opening(sparse_filtered,
-                    #                                      size=(2, 2))
-                    # sparse_eroded = img.grey_erosion(sparse_opened,
-                    #                                  size=(1, 1))
-                    #
-                    # sparse_opened = \
-                    #     img.grey_opening(sparse_thr, size=(2, 2)) \
-                    #     .astype(sparse_thr.dtype)
-                    # sparse_closed = \
-                    #    img.grey_closing(sparse_opened, size=(2, 2)) \
-                    #     .astype(sparse_thr.dtype)
+                    # ------------------ SAVE TO FILE ENDS -------------------#
 
             load_index += (1 + frame_queue.delay)
+            save_index = load_index - queue_center
             if frame_queue.frames_read % 50 == 0:
                 print("{0}/{1} frames processed."
                       .format(frame_queue.frames_read, total_frames))
