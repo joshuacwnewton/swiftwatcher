@@ -306,7 +306,7 @@ class FrameQueue:
         count_total = count + count_prev
 
         # Initialize coordinates as empty (fail case for no matches)
-        coords = np.zeros((count_total, 4)).astype(np.int)
+        coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
 
         # Proceed only if there are segments in both frames
         if count and count_prev:
@@ -325,7 +325,7 @@ class FrameQueue:
                                               seg.centroid)
                     # Map distance values using a Gaussian curve
                     likeilihood_matrix[index_v, index_h] = \
-                        math.exp(-1 * (((dist - 5) ** 2) / 40))
+                        math.exp(-1 * (((dist - 10) ** 2) / 40))
 
             # Matrix values: likelihood of segments appearing/disappearing
             for i in range(count_total-1):
@@ -352,19 +352,29 @@ class FrameQueue:
             # Convert matches (pairs of indices) into pairs of coordinates
             for i in range(count_total-1):
                 j = matches[i]
+
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
-                    coords[i, 0:2] = properties_prev[i].centroid
-                    coords[i, None, 2:4] = properties[j - count_prev].centroid
+                    # Note: cv2.line requires int, .centroid returns float
+                    float_coord1 = coords[i][0] = properties_prev[i].centroid
+                    float_coord2 = properties[j - count_prev].centroid
+                    coords[i][0] = tuple([int(val) for val in float_coord1])
+                    coords[i][1] = tuple([int(val) for val in float_coord2])
                 # Index condition for when a previous segment has disappeared
                 if (i == j) and (i < count_prev):
-                    coords[i, 0:2] = properties_prev[i].centroid
+                    float_coord1 = coords[i][0] = properties_prev[i].centroid
+                    coords[i][0] = tuple([int(val) for val in float_coord1])
                 # Index condition for when a new segment has appeared
                 if (i == j) and (i >= count_prev):
-                    coords[i, None, 2:4] = properties[j - count_prev].centroid
+                    float_coord2 = properties[j - count_prev].centroid
+                    coords[i][1] = tuple([int(val) for val in float_coord2])
 
             # TODO: Write logic to convert pair coordinates into stats
             # e.g. "Appeared near chimney", "disappeared out of frame"
+
+        # Proceed only if there are segments in either frame
+        if count_total > 0:
+            test = None
 
         if visual:
             # Scale labeled images to be visible with uint8 grayscale
@@ -374,19 +384,16 @@ class FrameQueue:
                 frame_prev = frame_prev*int(255/count_prev)
 
             # Combine both frames into single image
-            separator_v = 64 * np.ones(shape=(1, self.width),
+            separator_h = 64 * np.ones(shape=(self.height, 1),
                                        dtype=np.uint8)
-            match_comparison = np.vstack((frame_prev, separator_v,frame))
+            match_comparison = np.hstack((frame_prev, separator_h, frame))
 
-            # Consider only coordinates that could be matches
-            for i in range(count_prev):
-                # Convert absolute points to relative points in combined image
-                p1o = (coords[i, 1], coords[i, 0])
-                p2o = (coords[i, 3], coords[i, 2] + self.height + 1)
-
-                # Draw line on image only if both points are nonzero (a match)
-                if (np.count_nonzero(p1o) + np.count_nonzero(p2o)) == 4:
-                    cv2.line(match_comparison, p1o, p2o,
+            for coord_pair in coords:
+                if np.count_nonzero(coord_pair) == 4:
+                    # Note: cv2's point formatting is reversed to skimage's
+                    cv2.line(match_comparison,
+                             (coord_pair[0][1], coord_pair[0][0]),
+                             (coord_pair[1][1] + self.width, coord_pair[1][0]),
                              color=(255, 255, 255), thickness=1)
         else:
             match_comparison = None
