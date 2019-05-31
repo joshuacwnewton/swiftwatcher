@@ -1,10 +1,23 @@
+# Stdlib imports
 import os
 import glob
 import collections
 from time import sleep
+
+# Imports used in numerous stages
 import cv2
 import numpy as np
+import utils.cm as cm  # Used for colormapping, not entirely necessary
+
+# Necessary imports for segmentation stage
+from scipy import ndimage as img
 from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
+
+# Necessary imports for matching stage
+import math
+from scipy.spatial import distance
+from scipy.optimize import linear_sum_assignment
+from skimage import measure
 
 
 class FrameQueue:
@@ -24,8 +37,8 @@ class FrameQueue:
                         save_frame_to_file,
     Methods (Frame processing): convert_grayscale, segment_frame, crop_frame,
                                 resize_frame, frame_to_column,
-                                rpca_decomposition
-    """
+                                rpca, segment_frame, match_segments"""
+
     def __init__(self, video_directory, filename, queue_size=1,
                  desired_fps=False):
         # Initialize queue attributes
@@ -162,7 +175,7 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, index=0):
+    def convert_grayscale(self, index):
         """Convert to grayscale a frame at specified index of FrameQueue"""
         try:
             self.queue[index] = cv2.cvtColor(self.queue[index],
@@ -170,7 +183,7 @@ class FrameQueue:
         except Exception as e:
             print("[!] Frame conversion failed due to: {0}".format(str(e)))
 
-    def crop_frame(self, corners, index=0):
+    def crop_frame(self, corners, index):
         """Crop frame at specified index of FrameQueue."""
         try:
             self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
@@ -193,21 +206,18 @@ class FrameQueue:
                                         round(self.queue[index].shape[0]*s)),
                                        interpolation=cv2.INTER_AREA)
 
-    def frame_to_column(self, index=0):
+    def frame_to_column(self, index):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
         self.queue[index] = np.squeeze(np.reshape(self.queue[index],
                                                   (self.width*self.height, 1)))
 
-    def rpca_decomposition(self, index, darker_only=False):
+    def rpca(self, index, darker_only=False):
         """Decompose set of images into corresponding low-rank and sparse
         images. Method expects images to have been reshaped to matrix of
         column vectors.
 
-        NOTE: Currently this code inputs a batch of frames (the entire queue)
-        and outputs the decomposition only for a specific frame. This ensures
-        the best accuracy (uses context from before and after specified frame)
-        but is inefficient. This could be tweaked in the future to improve
-        efficiency."""
+        The size of the queue will determine the tradeoff between efficiency
+        and accuracy."""
 
         # np.array alone would give an e.g. 20x12500x1 matrix. Adding transpose
         # and squeeze yields 12500x20. (i.e. a matrix of column vectors)
@@ -227,6 +237,161 @@ class FrameQueue:
             np.clip(s_image, 0, 255, s_image)
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
+
+    def segment_frame(self, index, visual=False):
+        """Segment birds from one frame ("index") using information from other
+        frames in the FrameQueue object."""
+        # Apply Robust PCA method to isolate regions of motion
+        # lowrank = "background" image
+        # sparse  = "foreground" errors which corrupts the "background" image
+        # frame = lowrank + sparse
+        lowrank, sparse = self.rpca(index, darker_only=True)
+
+        # Apply bilateral filter to smooth over low-contrast regions
+        sparse_filtered = sparse
+        for i in range(2):
+            sparse_filtered = cv2.bilateralFilter(sparse_filtered,
+                                                  d=7,
+                                                  sigmaColor=15,
+                                                  sigmaSpace=1)
+
+        # Apply thresholding to retain strongest areas and discard the rest
+        _, sparse_thr = cv2.threshold(sparse_filtered,
+                                      thresh=35,
+                                      maxval=255,
+                                      type=cv2.THRESH_TOZERO)
+
+        # Discard areas where 2x2 structuring element will not fit
+        sparse_opened = \
+            img.grey_opening(sparse_thr, size=(2, 2)).astype(sparse_thr.dtype)
+
+        # Segment using connected component labeling
+        num_components, sparse_cc = \
+            cv2.connectedComponents(sparse_opened, connectivity=4)
+        sparse_cc = sparse_cc.astype(np.uint8)
+
+        # Create visualization of processing stages if requested
+        if visual:
+            # Fetch unprocessed frame, reshape into image from column vector
+            frame = np.reshape(self.queue[index], (self.height, self.width))
+
+            # Scale labeled image to be visible with uint8 grayscale
+            if num_components > 0:
+                sparse_cc_scaled = sparse_cc*int(255/num_components)
+
+            # Combine each stage into one image, separated for visual clarity
+            separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
+            processing_stages = np.vstack((frame, separator,
+                                           sparse, separator,
+                                           sparse_filtered, separator,
+                                           sparse_thr, separator,
+                                           sparse_opened, separator,
+                                           sparse_cc_scaled)).astype(np.uint8)
+        else:
+            processing_stages = None
+        return num_components, sparse_cc, processing_stages
+
+    def match_segments(self, frame, frame_prev, visual=False):
+        """Analyze a pair of segmented frames and return conclusions about
+        which segments match between frames."""
+        # Only for first pass, when there is no other frame to compare to yet
+        if frame_prev is None:
+            frame_prev = np.zeros(frame.shape).astype(np.uint8)
+
+        # Measure segment properties to use for likelihood matrix
+        properties = measure.regionprops(frame)
+        properties_prev = measure.regionprops(frame_prev)
+        count = len(properties)
+        count_prev = len(properties_prev)
+        count_total = count + count_prev
+
+        # Initialize coordinates as empty (fail case for no matches)
+        coords = np.zeros((count_total, 4)).astype(np.int)
+
+        # Proceed only if there are segments in both frames
+        if count and count_prev:
+            # Initialize likelihood matrix
+            likeilihood_matrix = np.zeros((count_total, count_total))
+
+            # Matrix values: likelihood of segments being a match
+            for seg_prev in properties_prev:
+                for seg in properties:
+                    # Convert segment labels to likelihood matrix indices
+                    index_v = (seg_prev.label - 1)
+                    index_h = (count_prev + seg.label - 1)
+
+                    # Likeilihoods as a function of distance between segments
+                    dist = distance.euclidean(seg_prev.centroid,
+                                              seg.centroid)
+                    # Map distance values using a Gaussian curve
+                    likeilihood_matrix[index_v, index_h] = \
+                        math.exp(-1 * (((dist - 5) ** 2) / 40))
+
+            # Matrix values: likelihood of segments appearing/disappearing
+            for i in range(count_total-1):
+                # Compute closest distance from segment to edge of frame
+                if i < count_prev:
+                    point = properties_prev[i].centroid
+                if count_prev <= i < (count + count_prev):
+                    point = properties[i - count_prev].centroid
+                edge_distance = min([point[0], point[1],
+                                     self.height - point[0],
+                                     self.width - point[1]])
+
+                # Map distance values using an Exponential curve
+                likeilihood_matrix[i, i] = (1 / 2) * math.exp(
+                    -edge_distance / 10)
+
+            # Convert likelihood matrix into cost matrix
+            cost_matrix = -1*likeilihood_matrix
+            cost_matrix -= cost_matrix.min()
+
+            # Apply Hungarian/Munkres algorithm to find optimal matches
+            _, matches = linear_sum_assignment(cost_matrix)
+
+            # Convert matches (pairs of indices) into pairs of coordinates
+            for i in range(count_total-1):
+                j = matches[i]
+                # Index condition if two segments are matching
+                if (i < j) and (i < count_prev):
+                    coords[i, 0:2] = properties_prev[i].centroid
+                    coords[i, None, 2:4] = properties[j - count_prev].centroid
+                # Index condition for when a previous segment has disappeared
+                if (i == j) and (i < count_prev):
+                    coords[i, 0:2] = properties_prev[i].centroid
+                # Index condition for when a new segment has appeared
+                if (i == j) and (i >= count_prev):
+                    coords[i, None, 2:4] = properties[j - count_prev].centroid
+
+            # TODO: Write logic to convert pair coordinates into stats
+            # e.g. "Appeared near chimney", "disappeared out of frame"
+
+        if visual:
+            # Scale labeled images to be visible with uint8 grayscale
+            if count > 0:
+                frame = frame*int(255/count)
+            if count_prev > 0:
+                frame_prev = frame_prev*int(255/count_prev)
+
+            # Combine both frames into single image
+            separator_v = 64 * np.ones(shape=(1, self.width),
+                                       dtype=np.uint8)
+            match_comparison = np.vstack((frame_prev, separator_v,frame))
+
+            # Consider only coordinates that could be matches
+            for i in range(count_prev):
+                # Convert absolute points to relative points in combined image
+                p1o = (coords[i, 1], coords[i, 0])
+                p2o = (coords[i, 3], coords[i, 2] + self.height + 1)
+
+                # Draw line on image only if both points are nonzero (a match)
+                if (np.count_nonzero(p1o) + np.count_nonzero(p2o)) == 4:
+                    cv2.line(match_comparison, p1o, p2o,
+                             color=(255, 255, 255), thickness=1)
+        else:
+            match_comparison = None
+
+        return coords, match_comparison
 
 
 def ms_to_timestamp(total_ms):
