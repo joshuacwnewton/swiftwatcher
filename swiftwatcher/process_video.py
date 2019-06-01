@@ -308,8 +308,18 @@ class FrameQueue:
         # Initialize coordinates as empty (fail case for no matches)
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
 
-        # Proceed only if there are segments in both frames
-        if count and count_prev:
+        # Initialize behavior counts as empty (fail case for no matches)
+        stats = {
+            "total_matches": 0,
+            "appeared_from_edge": 0,
+            "appeared_from_chimney": 0,
+            "disappeared_to_edge": 0,
+            "disappeared_to_chimney": 0,
+            "anomalies": 0
+        }
+
+        # Compute and analyze match pairs only if bird segments exist
+        if count_total > 0:
             # Initialize likelihood matrix
             likeilihood_matrix = np.zeros((count_total, count_total))
 
@@ -328,7 +338,7 @@ class FrameQueue:
                         math.exp(-1 * (((dist - 10) ** 2) / 40))
 
             # Matrix values: likelihood of segments appearing/disappearing
-            for i in range(count_total-1):
+            for i in range(count_total):
                 # Compute closest distance from segment to edge of frame
                 if i < count_prev:
                     point = properties_prev[i].centroid
@@ -350,7 +360,7 @@ class FrameQueue:
             _, matches = linear_sum_assignment(cost_matrix)
 
             # Convert matches (pairs of indices) into pairs of coordinates
-            for i in range(count_total-1):
+            for i in range(count_total):
                 j = matches[i]
 
                 # Index condition if two segments are matching
@@ -369,12 +379,38 @@ class FrameQueue:
                     float_coord2 = properties[j - count_prev].centroid
                     coords[i][1] = tuple([int(val) for val in float_coord2])
 
-            # TODO: Write logic to convert pair coordinates into stats
-            # e.g. "Appeared near chimney", "disappeared out of frame"
+            # For each pair of coordinates, classify as certain behaviors
+            for coord_pair in coords:
+                # If this condition is met, pair means a segment appeared
+                if coord_pair[0] == (0, 0) and coord_pair[1] == (0, 0):
+                    pass
+                elif coord_pair[0] == (0, 0):
+                    edge_distance = min(coord_pair[1][0], coord_pair[1][1],
+                                        self.width - coord_pair[1][1])
+                    chimney_distance = self.height - coord_pair[1][0]
 
-        # Proceed only if there are segments in either frame
-        if count_total > 0:
-            test = None
+                    if edge_distance <= 10:
+                        stats["appeared_from_edge"] += 1
+                    elif chimney_distance <= 10:
+                        stats["appeared_from_chimney"] += 1
+                    else:
+                        stats["anomalies"] += 1
+                # If this condition is met, pair means a segment disappeared
+                elif coord_pair[1] == (0, 0):
+                    edge_distance = min(coord_pair[0][0], coord_pair[0][1],
+                                        self.width - coord_pair[0][1])
+                    chimney_distance = self.height - coord_pair[0][0]
+
+                    if edge_distance <= 10:
+                        stats["disappeared_to_edge"] += 1
+                    elif chimney_distance <= 10:
+                        stats["disappeared_to_chimney"] += 1
+                    else:
+                        stats["anomalies"] += 1
+                # Otherwise, a match was made
+                else:
+                    stats["total_matches"] += 1
+                test = None
 
         if visual:
             # Scale labeled images to be visible with uint8 grayscale
@@ -398,7 +434,7 @@ class FrameQueue:
         else:
             match_comparison = None
 
-        return coords, match_comparison
+        return coords, stats, match_comparison
 
 
 def ms_to_timestamp(total_ms):

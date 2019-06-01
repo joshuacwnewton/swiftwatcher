@@ -31,10 +31,10 @@ def main(args):
         frame_queue.stream.release()  # Videocapture not needed for frame reuse
 
         # Initialize data structures for bird counting stats
-        bird_count = np.array([])
         frame_cc_prev = None
         ground_truth = np.genfromtxt('videos/groundtruth.csv',
                                      delimiter=',').astype(dtype=int)
+        stats_array = np.array([]).reshape(0, 6)
 
         while frame_queue.frames_read < num_frames_to_read:
             # Load frame into index 0 and apply preprocessing
@@ -51,7 +51,7 @@ def main(args):
                                               visual=True)
 
                 # Match bird segments from two sequential frames
-                match_coords, match_comparison = \
+                match_coords, match_stats, match_comparison = \
                     frame_queue.match_segments(frame=frame_cc,
                                                frame_prev=frame_cc_prev,
                                                visual=True)
@@ -63,7 +63,7 @@ def main(args):
                                                    frame=processing_stages,
                                                    index=queue_center,
                                                    folder_name=args.custom_dir,
-                                                   file_suffix="segmentation",
+                                                   file_prefix="seg_",
                                                    scale=400)
                 if match_comparison is not None:
                     frame_queue.save_frame_to_file(load_directory,
@@ -72,18 +72,31 @@ def main(args):
                                                    folder_name=args.custom_dir,
                                                    scale=400)
 
+                # Store relevant match stats in ground_truth data structure
+                if 16200 <= (frame_to_load - queue_center) <= 16390:
+                    total_birds = (match_stats["total_matches"] +
+                                   match_stats["appeared_from_edge"] +
+                                   match_stats["appeared_from_chimney"])
+                    stats_list = [frame_to_load - queue_center,
+                                  total_birds,
+                                  match_stats["appeared_from_chimney"],
+                                  match_stats["appeared_from_edge"],
+                                  match_stats["disappeared_to_chimney"],
+                                  match_stats["disappeared_to_edge"]]
+                    stats_array = np.vstack((stats_array,
+                                             stats_list)).astype(int)
+                    test = None
+
             frame_to_load += (1 + frame_queue.delay)
             if frame_queue.frames_read % 50 == 0:
                 print("{0}/{1} frames processed."
                       .format(frame_queue.frames_read, num_frames_to_read))
 
-        # TODO: Properly measure and save statistics about bird matching
-        # Calculate performance metrics from bird matching
-        ground_truth = np.c_[ground_truth,
-                             bird_count.reshape(-1, 1).astype(np.int)]
-        error = ground_truth[:, 1] - ground_truth[:, 6]
-        error_less = sum(error[error > 0])
-        error_more = -1* sum(error[error < 0])
+        error = ground_truth - stats_array
+        true_sums = np.sum(ground_truth[:, 1:6], axis=0)
+        guessed_sums = np.sum(stats_array[:, 1:6], axis=0)
+        ground_truth = np.hstack((ground_truth[:, 1:6], stats_array[:, 1:6]))
+        test = None
 
 
 if __name__ == "__main__":
@@ -115,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for extracted frame files",
-                        default="Segmentation Test Folder"
+                        default="Match Stats Test"
                         )
     parser.add_argument("-p",
                         "--crop",
