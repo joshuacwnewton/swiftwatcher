@@ -22,31 +22,22 @@ from skimage import measure
 
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from video file
-    using a FIFO queue. Essentially a deque with additional attributes and
+    using FIFO queues. Essentially deques with additional attributes and
     methods specific to video analysis.
 
-    Queue is size 1 by default. Increase queue size for analysis requiring
-    multiple sequential frames.
+    Example FrameQueue object of size 7:
 
-    Attributes (frame queue):  queue, framenumbers, timestamps, frames_read
-    Attributes (source video): src_filename, src_directory, src_fps,
-                               src_framecount, src_height, src_width, src_codec
-    Attributes (frames): height, width, delay, fps
+    framenumbers: [571][570][569][568][567][566][565]
+    queue:        [i_0][i_1][i_2][i_3][i_4][i_5][i_6] (primary)
+    seg_queue:                   [i_0][i_1][i_2][i_3] (secondary)
 
-    Methods (File I/O): load_frame_from_video, load_frame_from_file,
-                        save_frame_to_file,
-    Methods (Frame processing): convert_grayscale, segment_frame, crop_frame,
-                                resize_frame, frame_to_column,
-                                rpca, segment_frame, match_segments"""
-
+    The primary queue ("queue") stores original frames, and the secondary queue
+    ("seg_queue") stores segmented versions of the frames. As segmentation
+    requires contextual information from past/future frames, the center index
+    of the primary queue (index 3) will correspond to the 0th index in the
+    secondary queue."""
     def __init__(self, video_directory, filename, queue_size=1,
                  desired_fps=False):
-        # Initialize queue attributes
-        self.queue = collections.deque([], queue_size)
-        self.framenumbers = collections.deque([], queue_size)
-        self.timestamps = collections.deque([], queue_size)
-        self.frames_read = 0
-
         # Check validity of filepath
         video_filepath = video_directory + filename
         if not os.path.isfile(video_filepath):
@@ -76,6 +67,17 @@ class FrameQueue:
         else:
             self.fps = desired_fps
             self.delay = 0  # Delay parameter needed to subsample video
+
+        # Initialize primary queue for unaltered frames
+        self.queue = collections.deque([], queue_size)
+        self.framenumbers = collections.deque([], queue_size)
+        self.timestamps = collections.deque([], queue_size)
+        self.frames_read = 0
+
+        # Initialize secondary queue for segmented frames
+        self.queue_center = int((queue_size - 1) / 2)
+        self.seg_queue = collections.deque([], self.queue_center)
+        self.seg_properties = collections.deque([], self.queue_center)
 
     def load_frame_from_video(self):
         """Insert next frame from stream into left side (index 0) of queue."""
@@ -175,15 +177,13 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, index):
+    def convert_grayscale(self, index=0, algorithm="cv2 built-in"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
-        try:
+        if algorithm == "cv2 built-in":
             self.queue[index] = cv2.cvtColor(self.queue[index],
                                              cv2.COLOR_BGR2GRAY)
-        except Exception as e:
-            print("[!] Frame conversion failed due to: {0}".format(str(e)))
 
-    def crop_frame(self, corners, index):
+    def crop_frame(self, corners, index=0):
         """Crop frame at specified index of FrameQueue."""
         try:
             self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
@@ -206,12 +206,12 @@ class FrameQueue:
                                         round(self.queue[index].shape[0]*s)),
                                        interpolation=cv2.INTER_AREA)
 
-    def frame_to_column(self, index):
+    def frame_to_column(self, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
         self.queue[index] = np.squeeze(np.reshape(self.queue[index],
                                                   (self.width*self.height, 1)))
 
-    def rpca(self, index, darker_only=False):
+    def rpca(self, index=0, darker_only=False):
         """Decompose set of images into corresponding low-rank and sparse
         images. Method expects images to have been reshaped to matrix of
         column vectors.
@@ -240,7 +240,8 @@ class FrameQueue:
 
     def segment_frame(self, index, visual=False):
         """Segment birds from one frame ("index") using information from other
-        frames in the FrameQueue object."""
+        frames in the FrameQueue object. Store segmented frame in secondary
+        queue."""
         # Apply Robust PCA method to isolate regions of motion
         # lowrank = "background" image
         # sparse  = "foreground" errors which corrupts the "background" image
@@ -268,7 +269,16 @@ class FrameQueue:
         # Segment using connected component labeling
         num_components, sparse_cc = \
             cv2.connectedComponents(sparse_opened, connectivity=4)
-        sparse_cc = sparse_cc.astype(np.uint8)
+
+        # Append empty values first if queue is empty
+        if self.seg_queue.__len__() is 0:
+            self.seg_queue.appendleft(np.zeros((self.height, self.width))
+                                      .astype(np.uint8))
+            self.seg_properties.appendleft([])
+
+        # Append segmented frame (and information about frame) to queue
+        self.seg_queue.appendleft(sparse_cc.astype(np.uint8))
+        self.seg_properties.appendleft(measure.regionprops(sparse_cc))
 
         # Create visualization of processing stages if requested
         if visual:
@@ -289,26 +299,18 @@ class FrameQueue:
                                            sparse_cc_scaled)).astype(np.uint8)
         else:
             processing_stages = None
-        return num_components, sparse_cc, processing_stages
+        return processing_stages
 
-    def match_segments(self, frame, frame_prev, visual=False):
+    def match_segments(self, index=0, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames."""
-        # Only for first pass, when there is no other frame to compare to yet
-        if frame_prev is None:
-            frame_prev = np.zeros(frame.shape).astype(np.uint8)
-
-        # Measure segment properties to use for likelihood matrix
-        properties = measure.regionprops(frame)
-        properties_prev = measure.regionprops(frame_prev)
-        count = len(properties)
-        count_prev = len(properties_prev)
+        # Assign name to commonly used properties
+        count = len(self.seg_properties[index])
+        count_prev = len(self.seg_properties[index+1])
         count_total = count + count_prev
 
-        # Initialize coordinates as empty (fail case for no matches)
+        # Initialize coordinates and stats as empty
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
-
-        # Initialize behavior counts as empty (fail case for no matches)
         stats = {
             "total_matches": 0,
             "appeared_from_edge": 0,
@@ -324,8 +326,8 @@ class FrameQueue:
             likeilihood_matrix = np.zeros((count_total, count_total))
 
             # Matrix values: likelihood of segments being a match
-            for seg_prev in properties_prev:
-                for seg in properties:
+            for seg_prev in self.seg_properties[index+1]:
+                for seg in self.seg_properties[index]:
                     # Convert segment labels to likelihood matrix indices
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
@@ -341,9 +343,9 @@ class FrameQueue:
             for i in range(count_total):
                 # Compute closest distance from segment to edge of frame
                 if i < count_prev:
-                    point = properties_prev[i].centroid
+                    point = self.seg_properties[index+1][i].centroid
                 if count_prev <= i < (count + count_prev):
-                    point = properties[i - count_prev].centroid
+                    point = self.seg_properties[index][i - count_prev].centroid
                 edge_distance = min([point[0], point[1],
                                      self.height - point[0],
                                      self.width - point[1]])
@@ -362,21 +364,26 @@ class FrameQueue:
             # Convert matches (pairs of indices) into pairs of coordinates
             for i in range(count_total):
                 j = matches[i]
+                # Note: cv2.line requires int, .centroid returns float
+                # Conversion must happen, hence intermediate "float_coord"
 
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
-                    # Note: cv2.line requires int, .centroid returns float
-                    float_coord1 = coords[i][0] = properties_prev[i].centroid
-                    float_coord2 = properties[j - count_prev].centroid
+                    float_coord1 = \
+                        self.seg_properties[index+1][i].centroid
+                    float_coord2 = \
+                        self.seg_properties[index][j - count_prev].centroid
                     coords[i][0] = tuple([int(val) for val in float_coord1])
                     coords[i][1] = tuple([int(val) for val in float_coord2])
                 # Index condition for when a previous segment has disappeared
                 if (i == j) and (i < count_prev):
-                    float_coord1 = coords[i][0] = properties_prev[i].centroid
+                    float_coord1 = \
+                        self.seg_properties[index+1][i].centroid
                     coords[i][0] = tuple([int(val) for val in float_coord1])
                 # Index condition for when a new segment has appeared
                 if (i == j) and (i >= count_prev):
-                    float_coord2 = properties[j - count_prev].centroid
+                    float_coord2 = \
+                        self.seg_properties[index][j - count_prev].centroid
                     coords[i][1] = tuple([int(val) for val in float_coord2])
 
             # For each pair of coordinates, classify as certain behaviors
@@ -412,12 +419,18 @@ class FrameQueue:
                     stats["total_matches"] += 1
                 test = None
 
+        # Create visualization of segment matches if requested
         if visual:
             # Scale labeled images to be visible with uint8 grayscale
             if count > 0:
-                frame = frame*int(255/count)
+                frame = self.seg_queue[index]*int(255/count)
+            else:
+                frame = self.seg_queue[index]
+
             if count_prev > 0:
-                frame_prev = frame_prev*int(255/count_prev)
+                frame_prev = self.seg_queue[index+1]*int(255/count_prev)
+            else:
+                frame_prev = self.seg_queue[index + 1]
 
             # Combine both frames into single image
             separator_h = 64 * np.ones(shape=(self.height, 1),

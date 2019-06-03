@@ -9,75 +9,78 @@ import numpy as np
 # Written this way to save time when testing with specific timestamps
 
 
-def main(args):
+def main(args, params):
+    """Count swift behavior (entering/exiting chimney) from video frames.
+
+    - args: command-line arguments, used for file I/O, set by
+        if __name__ == "__main__": block of code.
+    - params: algorithm parameters, used to tweak processing stages, set by
+        set_parameters() function."""
+
     # Code to extract all frames from video and save them to image files
     if args.extract:
         pv.extract_frames(args.video_dir, args.filename)
 
     # Code to process previously extracted frames
     if args.load:
-        # Initialize parameters necessary to load previously extracted frames
+        # --------------------- INITIALIZATION STARTS ----------------------- #
+
+        # File I/O
+        load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
         frame_to_load = args.load[0]
         num_frames_to_read = args.load[1] - args.load[0]
-        # Directory follows assumed convention from pv.extract_frames()
-        load_directory = (args.video_dir +
-                          os.path.splitext(args.filename)[0])
 
-        # Initialize FrameQueue object
-        queue_size = 21  # Determines number of frames kept in memory at once
-        queue_center = int((queue_size - 1) / 2)
+        # FrameQueue object (class for caching frames, processing frames)
         frame_queue = pv.FrameQueue(args.video_dir, args.filename,
-                                    queue_size=queue_size)
+                                    queue_size=params["queue_size"])
         frame_queue.stream.release()  # Videocapture not needed for frame reuse
 
-        # Initialize data structures for bird counting stats
-        frame_cc_prev = None
+        # Ground truth and measured stats
         ground_truth = np.genfromtxt('videos/groundtruth.csv',
                                      delimiter=',').astype(dtype=int)
         stats_array = np.array([]).reshape(0, 6)
 
+        # ----- INITIALIZATION ENDS, FRAME PROCESSING ALGORITHM BEGINS ------ #
+
         while frame_queue.frames_read < num_frames_to_read:
             # Load frame into index 0 and apply preprocessing
             frame_queue.load_frame_from_file(load_directory, frame_to_load)
-            frame_queue.convert_grayscale(index=0)
-            frame_queue.crop_frame(index=0, corners=args.crop)
-            frame_queue.frame_to_column(index=0)
+            frame_queue.convert_grayscale(algorithm="cv2 built-in")
+            frame_queue.crop_frame(corners=params["corners"])
+            frame_queue.frame_to_column()
 
             # Proceed only when enough frames are stored for motion estimation
-            if frame_queue.frames_read > queue_center:
+            if frame_queue.frames_read > params["queue_center"]:
                 # Segment frame using context from adjacent frames in queue
-                num_cc, frame_cc, processing_stages = \
-                    frame_queue.segment_frame(index=queue_center,
+                processing_stages = \
+                    frame_queue.segment_frame(index=params["queue_center"],
                                               visual=True)
 
                 # Match bird segments from two sequential frames
                 match_coords, match_stats, match_comparison = \
-                    frame_queue.match_segments(frame=frame_cc,
-                                               frame_prev=frame_cc_prev,
-                                               visual=True)
-                frame_cc_prev = frame_cc  # Store frame for future matching
+                    frame_queue.match_segments(visual=True)
 
                 # Save results to image files for visual inspection
                 if processing_stages is not None:
                     frame_queue.save_frame_to_file(load_directory,
                                                    frame=processing_stages,
-                                                   index=queue_center,
+                                                   index=params["queue_center"],
                                                    folder_name=args.custom_dir,
                                                    file_prefix="seg_",
                                                    scale=400)
                 if match_comparison is not None:
                     frame_queue.save_frame_to_file(load_directory,
                                                    frame=match_comparison,
-                                                   index=queue_center,
+                                                   index=params["queue_center"],
                                                    folder_name=args.custom_dir,
                                                    scale=400)
 
                 # Store relevant match stats in ground_truth data structure
-                if 16200 <= (frame_to_load - queue_center) <= 16390:
+                if 16200 <= (frame_to_load - params["queue_center"]) <= 16390:
                     total_birds = (match_stats["total_matches"] +
                                    match_stats["appeared_from_edge"] +
                                    match_stats["appeared_from_chimney"])
-                    stats_list = [frame_to_load - queue_center,
+                    stats_list = [frame_to_load - params["queue_center"],
                                   total_birds,
                                   match_stats["appeared_from_chimney"],
                                   match_stats["appeared_from_edge"],
@@ -99,8 +102,29 @@ def main(args):
         test = None
 
 
+def set_parameters():
+    """Set parameters for each processing stage of algorithm.
+
+    Distinct from command line arguments. For this program, arguments are saved
+    for file I/O, directory selection, etc. These parameters, by comparison,
+    affect the image processing and analysis aspects of the algorithm. """
+    params = {
+        # Relevant parameters for frame cropping
+        "corners": [(760, 650), (921, 686)],
+
+        # Relevant parameters for RPCA/motion estimation
+        "queue_size": 21,
+    }
+
+    # Precalculating commonly used values
+    params["queue_center"] = int((params["queue_size"] - 1) / 2)
+
+    return params
+
+
 if __name__ == "__main__":
-    # Default values currently used for testing to save time
+    # Command line arguments used for specifying file I/O.
+    # (NOT algorithm parameters. See set_parameters() for parameter choices.)
     parser = ap.ArgumentParser()
     parser.add_argument("-e",
                         "--extract",
@@ -130,11 +154,7 @@ if __name__ == "__main__":
                         help="Custom directory for extracted frame files",
                         default="Match Stats Test"
                         )
-    parser.add_argument("-p",
-                        "--crop",
-                        help="Corner coordinates for cropping.",
-                        default=[(760, 650), (921, 686)]
-                        )
     arguments = parser.parse_args()
 
-    main(arguments)
+    parameters = set_parameters()
+    main(arguments, parameters)
