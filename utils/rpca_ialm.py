@@ -2,8 +2,8 @@ import numpy as np
 from numpy.linalg import norm, svd
 
 
-def inexact_augmented_lagrange_multiplier(X, lmbda=.01, tol=1e-3,
-                                          maxiter=100, verbose=True):
+def inexact_augmented_lagrange_multiplier(X, lmbda, tol, maxiter,
+                                          verbose=False):
     """
     Inexact Augmented Lagrange Multiplier
     """

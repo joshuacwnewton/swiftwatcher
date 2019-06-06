@@ -112,7 +112,7 @@ class FrameQueue:
         # Set appropriate directory
         if not folder_name:
             time = self.timestamps[0].split(":")
-            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
+            save_directory = base_save_directory+"/frames/"+time[0]+":"+time[1]
         else:
             save_directory = base_save_directory+"/"+folder_name
 
@@ -141,7 +141,7 @@ class FrameQueue:
         # HH:MM formatting. However, a custom subfolder can be chosen instead.
         if not folder_name:
             time = self.timestamps[index].split(":")
-            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
+            save_directory = base_save_directory+"/frames/"+time[0]+":"+time[1]
         else:
             save_directory = base_save_directory+"/"+folder_name
 
@@ -179,7 +179,7 @@ class FrameQueue:
 
     def convert_grayscale(self, index=0, algorithm="cv2 built-in"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
-        if algorithm == "cv2 built-in":
+        if algorithm == "cv2 default":
             self.queue[index] = cv2.cvtColor(self.queue[index],
                                              cv2.COLOR_BGR2GRAY)
 
@@ -199,19 +199,12 @@ class FrameQueue:
         if width is not self.width:
             self.width = width
 
-    def resize_frame(self, scale_percent, index=0):
-        s = scale_percent/100
-        self.queue[index] = cv2.resize(self.queue[index],
-                                       (round(self.queue[index].shape[1]*s),
-                                        round(self.queue[index].shape[0]*s)),
-                                       interpolation=cv2.INTER_AREA)
-
     def frame_to_column(self, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
         self.queue[index] = np.squeeze(np.reshape(self.queue[index],
                                                   (self.width*self.height, 1)))
 
-    def rpca(self, index=0, darker_only=False):
+    def rpca(self, lmbda, tol, maxiter, darker, index=0):
         """Decompose set of images into corresponding low-rank and sparse
         images. Method expects images to have been reshaped to matrix of
         column vectors.
@@ -219,26 +212,30 @@ class FrameQueue:
         The size of the queue will determine the tradeoff between efficiency
         and accuracy."""
 
-        # np.array alone would give an e.g. 20x12500x1 matrix. Adding transpose
-        # and squeeze yields 12500x20. (i.e. a matrix of column vectors)
+        # np.array alone would give an (#)x(N*M)x1 matrix. Adding transpose
+        # and squeeze yields (N*M)x(#). (i.e. a matrix of column vectors)
         matrix = np.squeeze(np.transpose(np.array(self.queue)))
 
         # Algorithm for the IALM approximation of Robust PCA method.
         lr_columns, s_columns = \
-            inexact_augmented_lagrange_multiplier(matrix, verbose=False)
+            inexact_augmented_lagrange_multiplier(matrix, lmbda, tol, maxiter)
 
         # Slice frame from low rank and sparse and reshape back into image
         lr_image = np.reshape(lr_columns[:, index], (self.height, self.width))
         s_image = np.reshape(s_columns[:, index], (self.height, self.width))
 
         # Bring pixels that are darker than the background into [0, 255] range
-        if darker_only:
-            s_image = -1 * s_image  # Darker = negative -> mirror into positive
+        if darker:
+            s_image = -1 * s_image  # Darker=negative -> mirror into positive
             np.clip(s_image, 0, 255, s_image)
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
-    def segment_frame(self, index, visual=False):
+    def segment_frame(self, lmbda, tol, maxiter, darker,
+                      iters, diameter, sigma_color, sigma_space,
+                      thr_value, thr_type,
+                      gry_op_SE, segmentation,
+                      index, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
@@ -246,29 +243,29 @@ class FrameQueue:
         # lowrank = "background" image
         # sparse  = "foreground" errors which corrupts the "background" image
         # frame = lowrank + sparse
-        lowrank, sparse = self.rpca(index, darker_only=True)
+        lowrank, sparse = self.rpca(lmbda, tol, maxiter, darker, index)
 
         # Apply bilateral filter to smooth over low-contrast regions
         sparse_filtered = sparse
-        for i in range(2):
-            sparse_filtered = cv2.bilateralFilter(sparse_filtered,
-                                                  d=7,
-                                                  sigmaColor=15,
-                                                  sigmaSpace=1)
+        for i in range(iters):
+            sparse_filtered = cv2.bilateralFilter(sparse_filtered, diameter,
+                                                  sigma_color, sigma_space)
 
         # Apply thresholding to retain strongest areas and discard the rest
         _, sparse_thr = cv2.threshold(sparse_filtered,
-                                      thresh=35,
+                                      thresh=thr_value,
                                       maxval=255,
-                                      type=cv2.THRESH_TOZERO)
+                                      type=thr_type)
 
         # Discard areas where 2x2 structuring element will not fit
         sparse_opened = \
-            img.grey_opening(sparse_thr, size=(2, 2)).astype(sparse_thr.dtype)
+            img.grey_opening(sparse_thr, size=gry_op_SE) \
+            .astype(sparse_thr.dtype)
 
         # Segment using connected component labeling
-        num_components, sparse_cc = \
-            cv2.connectedComponents(sparse_opened, connectivity=4)
+        num_components, sparse_cc = eval(segmentation)
+        # num_components, sparse_cc = \
+        #     cv2.connectedComponents(sparse_opened, connectivity=conn)
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -301,7 +298,8 @@ class FrameQueue:
             processing_stages = None
         return processing_stages
 
-    def match_segments(self, index=0, visual=False):
+    def match_segments(self, match_function, notmatch_function,
+                       index=0, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames."""
         # Assign name to commonly used properties
@@ -336,8 +334,9 @@ class FrameQueue:
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
                     # Map distance values using a Gaussian curve
-                    likeilihood_matrix[index_v, index_h] = \
-                        math.exp(-1 * (((dist - 10) ** 2) / 40))
+                    likeilihood_matrix[index_v, index_h] = eval(match_function)
+                    # likeilihood_matrix[index_v, index_h] = \
+                    #     math.exp(-1 * (((dist - 10) ** 2) / 40))
 
             # Matrix values: likelihood of segments appearing/disappearing
             for i in range(count_total):
@@ -351,8 +350,9 @@ class FrameQueue:
                                      self.width - point[1]])
 
                 # Map distance values using an Exponential curve
-                likeilihood_matrix[i, i] = (1 / 2) * math.exp(
-                    -edge_distance / 10)
+                likeilihood_matrix[i, i] = eval(notmatch_function)
+                # likeilihood_matrix[i, i] = (1 / 2) * math.exp(
+                #     -edge_distance / 10)
 
             # Convert likelihood matrix into cost matrix
             cost_matrix = -1*likeilihood_matrix
