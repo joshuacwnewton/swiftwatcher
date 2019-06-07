@@ -143,7 +143,7 @@ class FrameQueue:
             time = self.timestamps[index].split(":")
             save_directory = base_save_directory+"/frames/"+time[0]+":"+time[1]
         else:
-            save_directory = base_save_directory+"/"+folder_name
+            save_directory = base_save_directory+"/"+folder_name+"/frames"
 
         # Create save directory if it does not already exist
         if not os.path.isdir(save_directory):
@@ -177,7 +177,7 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, index=0, algorithm="cv2 built-in"):
+    def convert_grayscale(self, index=0, algorithm="cv2 default"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
         if algorithm == "cv2 default":
             self.queue[index] = cv2.cvtColor(self.queue[index],
@@ -231,39 +231,43 @@ class FrameQueue:
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
-    def segment_frame(self, lmbda, tol, maxiter, darker,
-                      iters, diameter, sigma_color, sigma_space,
-                      thr_value, thr_type,
-                      gry_op_SE, segmentation,
-                      index, visual=False):
+    def segment_frame(self, load_directory, folder_name,
+                      params, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
+
         # Apply Robust PCA method to isolate regions of motion
         # lowrank = "background" image
         # sparse  = "foreground" errors which corrupts the "background" image
         # frame = lowrank + sparse
-        lowrank, sparse = self.rpca(lmbda, tol, maxiter, darker, index)
+        lowrank, sparse = self.rpca(params["ialm_lmbda"],
+                                    params["ialm_tol"],
+                                    params["ialm_maxiter"], 
+                                    params["ialm_darker"], 
+                                    index=self.queue_center)
 
         # Apply bilateral filter to smooth over low-contrast regions
         sparse_filtered = sparse
-        for i in range(iters):
-            sparse_filtered = cv2.bilateralFilter(sparse_filtered, diameter,
-                                                  sigma_color, sigma_space)
+        for i in range(params["blf_iter"]):
+            sparse_filtered = cv2.bilateralFilter(sparse_filtered,
+                                                  params["blf_diam"],
+                                                  params["blf_sigma_s"],
+                                                  params["blf_sigma_c"])
 
         # Apply thresholding to retain strongest areas and discard the rest
         _, sparse_thr = cv2.threshold(sparse_filtered,
-                                      thresh=thr_value,
+                                      thresh=params["thr_value"],
                                       maxval=255,
-                                      type=thr_type)
+                                      type=params["thr_type"])
 
         # Discard areas where 2x2 structuring element will not fit
         sparse_opened = \
-            img.grey_opening(sparse_thr, size=gry_op_SE) \
+            img.grey_opening(sparse_thr, size=params["gry_op_SE"]) \
             .astype(sparse_thr.dtype)
 
         # Segment using connected component labeling
-        num_components, sparse_cc = eval(segmentation)
+        num_components, sparse_cc = eval(params["seg_func"])
         # num_components, sparse_cc = \
         #     cv2.connectedComponents(sparse_opened, connectivity=conn)
 
@@ -280,11 +284,12 @@ class FrameQueue:
         # Create visualization of processing stages if requested
         if visual:
             # Fetch unprocessed frame, reshape into image from column vector
-            frame = np.reshape(self.queue[index], (self.height, self.width))
+            frame = np.reshape(self.queue[self.queue_center],
+                               (self.height, self.width))
 
             # Scale labeled image to be visible with uint8 grayscale
             if num_components > 0:
-                sparse_cc_scaled = sparse_cc*int(255/num_components)
+                sparse_cc = sparse_cc*int(255/num_components)
 
             # Combine each stage into one image, separated for visual clarity
             separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
@@ -293,39 +298,47 @@ class FrameQueue:
                                            sparse_filtered, separator,
                                            sparse_thr, separator,
                                            sparse_opened, separator,
-                                           sparse_cc_scaled)).astype(np.uint8)
-        else:
-            processing_stages = None
-        return processing_stages
+                                           sparse_cc)).astype(np.uint8)
 
-    def match_segments(self, match_function, notmatch_function,
-                       index=0, visual=False):
+            # Save to file
+            self.save_frame_to_file(load_directory,
+                                    frame=processing_stages,
+                                    index=self.queue_center,
+                                    folder_name=folder_name,
+                                    file_prefix="seg_",
+                                    scale=400)
+
+    def match_segments(self, load_directory, folder_name,
+                       params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames."""
+        
         # Assign name to commonly used properties
-        count = len(self.seg_properties[index])
-        count_prev = len(self.seg_properties[index+1])
+        count = len(self.seg_properties[0])
+        count_prev = len(self.seg_properties[1])
         count_total = count + count_prev
 
-        # Initialize coordinates and stats as empty
+        # Initialize coordinates and counts
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
-        stats = {
-            "total_matches": 0,
-            "appeared_from_edge": 0,
+        counts = {
+            "frame_number": self.framenumbers[self.queue_center],
+            "total_birds": count,
             "appeared_from_chimney": 0,
-            "disappeared_to_edge": 0,
+            "appeared_from_edge": 0,
             "disappeared_to_chimney": 0,
-            "anomalies": 0
+            "disappeared_to_edge": 0,
+            "anomalies": 0,
+            "total_matches": 0
         }
 
-        # Compute and analyze match pairs only if bird segments exist
+        # Compute and analyze match pairs only if segments exist in both frames
         if count_total > 0:
             # Initialize likelihood matrix
             likeilihood_matrix = np.zeros((count_total, count_total))
 
             # Matrix values: likelihood of segments being a match
-            for seg_prev in self.seg_properties[index+1]:
-                for seg in self.seg_properties[index]:
+            for seg_prev in self.seg_properties[1]:
+                for seg in self.seg_properties[0]:
                     # Convert segment labels to likelihood matrix indices
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
@@ -334,25 +347,22 @@ class FrameQueue:
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
                     # Map distance values using a Gaussian curve
-                    likeilihood_matrix[index_v, index_h] = eval(match_function)
-                    # likeilihood_matrix[index_v, index_h] = \
-                    #     math.exp(-1 * (((dist - 10) ** 2) / 40))
+                    likeilihood_matrix[index_v, index_h] \
+                        = eval(params["ap_func_match"])
 
             # Matrix values: likelihood of segments appearing/disappearing
             for i in range(count_total):
                 # Compute closest distance from segment to edge of frame
                 if i < count_prev:
-                    point = self.seg_properties[index+1][i].centroid
+                    point = self.seg_properties[1][i].centroid
                 if count_prev <= i < (count + count_prev):
-                    point = self.seg_properties[index][i - count_prev].centroid
+                    point = self.seg_properties[0][i - count_prev].centroid
                 edge_distance = min([point[0], point[1],
                                      self.height - point[0],
                                      self.width - point[1]])
 
                 # Map distance values using an Exponential curve
-                likeilihood_matrix[i, i] = eval(notmatch_function)
-                # likeilihood_matrix[i, i] = (1 / 2) * math.exp(
-                #     -edge_distance / 10)
+                likeilihood_matrix[i, i] = eval(params["ap_func_notmatch"])
 
             # Convert likelihood matrix into cost matrix
             cost_matrix = -1*likeilihood_matrix
@@ -362,28 +372,27 @@ class FrameQueue:
             _, matches = linear_sum_assignment(cost_matrix)
 
             # Convert matches (pairs of indices) into pairs of coordinates
+            # Note: cv2.line requires int, .centroid returns float
+            # Conversion must happen, hence intermediate "float_coord"
             for i in range(count_total):
                 j = matches[i]
-                # Note: cv2.line requires int, .centroid returns float
-                # Conversion must happen, hence intermediate "float_coord"
-
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
                     float_coord1 = \
-                        self.seg_properties[index+1][i].centroid
+                        self.seg_properties[1][i].centroid
                     float_coord2 = \
-                        self.seg_properties[index][j - count_prev].centroid
+                        self.seg_properties[0][j - count_prev].centroid
                     coords[i][0] = tuple([int(val) for val in float_coord1])
                     coords[i][1] = tuple([int(val) for val in float_coord2])
                 # Index condition for when a previous segment has disappeared
-                if (i == j) and (i < count_prev):
+                elif (i == j) and (i < count_prev):
                     float_coord1 = \
-                        self.seg_properties[index+1][i].centroid
+                        self.seg_properties[1][i].centroid
                     coords[i][0] = tuple([int(val) for val in float_coord1])
                 # Index condition for when a new segment has appeared
-                if (i == j) and (i >= count_prev):
+                elif (i == j) and (i >= count_prev):
                     float_coord2 = \
-                        self.seg_properties[index][j - count_prev].centroid
+                        self.seg_properties[0][j - count_prev].centroid
                     coords[i][1] = tuple([int(val) for val in float_coord2])
 
             # For each pair of coordinates, classify as certain behaviors
@@ -397,11 +406,11 @@ class FrameQueue:
                     chimney_distance = self.height - coord_pair[1][0]
 
                     if edge_distance <= 10:
-                        stats["appeared_from_edge"] += 1
+                        counts["appeared_from_edge"] += 1
                     elif chimney_distance <= 10:
-                        stats["appeared_from_chimney"] += 1
+                        counts["appeared_from_chimney"] += 1
                     else:
-                        stats["anomalies"] += 1
+                        counts["anomalies"] += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -409,45 +418,57 @@ class FrameQueue:
                     chimney_distance = self.height - coord_pair[0][0]
 
                     if edge_distance <= 10:
-                        stats["disappeared_to_edge"] += 1
+                        counts["disappeared_to_edge"] += 1
                     elif chimney_distance <= 10:
-                        stats["disappeared_to_chimney"] += 1
+                        counts["disappeared_to_chimney"] += 1
                     else:
-                        stats["anomalies"] += 1
+                        counts["anomalies"] += 1
                 # Otherwise, a match was made
                 else:
-                    stats["total_matches"] += 1
-                test = None
+                    counts["total_matches"] += 1
+
+        if self.framenumbers[self.queue_center] == 16246:
+            test = None
 
         # Create visualization of segment matches if requested
         if visual:
-            # Scale labeled images to be visible with uint8 grayscale
-            if count > 0:
-                frame = self.seg_queue[index]*int(255/count)
-            else:
-                frame = self.seg_queue[index]
+            frame = np.copy(self.seg_queue[0])
+            frame_prev = np.copy(self.seg_queue[1])
 
-            if count_prev > 0:
-                frame_prev = self.seg_queue[index+1]*int(255/count_prev)
-            else:
-                frame_prev = self.seg_queue[index + 1]
+            # Color matching between frames (grayscale, colormap comes later)
+            match_color = 20
+            for i in range(count_total):
+                j = matches[i]
+                # Index condition if two segments are matching
+                if (i < j) and (i < count_prev):
+                    frame_prev[frame_prev == (i+1)] = match_color
+                    frame[frame == (j+1 - count_prev)] = match_color
+                    match_color += 35
+                # Index condition for when a previous segment has disappeared
+                elif (i == j) and (i < count_prev):
+                    frame_prev[frame_prev == (i+1)] = 255
+                # Index condition for when a new segment has appeared
+                elif (i == j) and (i >= count_prev):
+                    frame[frame == (j+1 - count_prev)] = 255
 
             # Combine both frames into single image
-            separator_h = 64 * np.ones(shape=(self.height, 1),
-                                       dtype=np.uint8)
-            match_comparison = np.hstack((frame_prev, separator_h, frame))
+            separator_v = 255 * np.ones(shape=(1, self.width),
+                                        dtype=np.uint8)
+            match_comparison = np.vstack((frame_prev, separator_v, frame))
 
-            for coord_pair in coords:
-                if np.count_nonzero(coord_pair) == 4:
-                    # Note: cv2's point formatting is reversed to skimage's
-                    cv2.line(match_comparison,
-                             (coord_pair[0][1], coord_pair[0][0]),
-                             (coord_pair[1][1] + self.width, coord_pair[1][0]),
-                             color=(255, 255, 255), thickness=1)
-        else:
-            match_comparison = None
+            # Apply color mapping
+            match_comparison_color = cm.apply_custom_colormap(match_comparison)
 
-        return coords, stats, match_comparison
+            # Save image to folder
+            self.save_frame_to_file(load_directory,
+                                    frame=match_comparison_color,
+                                    index=self.queue_center,
+                                    folder_name=folder_name,
+                                    scale=400)
+
+            # Save plots for likelihood functions
+
+        return np.array(list(counts.values()), dtype=np.int)
 
 
 def ms_to_timestamp(total_ms):

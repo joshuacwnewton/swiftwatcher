@@ -6,48 +6,72 @@ import csv
 # Used for performance evaluation/grouth truth
 import numpy as np
 
-# TODO: Switch from "extract frames -> reload frames" to real-time analysis
-# Written this way to save time when testing with specific timestamps
 
+def save_test_details(params, count_estimate, load_directory, folder_name):
+    """Save the full ground truth comparison, as well as a summary of the test,
+    to csv files. Note, some parameters include commas, so .csv files are
+    delimited with semicolons instead of commas."""
 
-def save_test_details(params, stats_array, load_directory, folder_name):
+    # Create save directory if it does not already exist
+    save_directory = load_directory + "/" + folder_name
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    # Comparing ground truth to estimated counts, frame by frame
     ground_truth = np.genfromtxt(load_directory + '/groundtruth.csv',
                                  delimiter=',').astype(dtype=int)
-
-    full_results = np.hstack((ground_truth, stats_array[:, 1:6])) \
+    results_full = np.hstack((ground_truth, count_estimate[:, 1:6])) \
         .astype(np.int)
-    error = stats_array[:, 1:6] - ground_truth[:, 1:6]
-    error_over = np.copy(error)
+    error_full = count_estimate[:, 1:6] - ground_truth[:, 1:6]
+    
+    # Calculating when counts were overestimated
+    error_over = np.copy(error_full)
     error_over[error_over < 0] = 0
-    error_under = np.copy(error)
+    
+    # Calculating when counts were underestimated
+    error_under = np.copy(error_full)
     error_under[error_under > 0] = 0
-    performance = {
-        # [TOTAL_SEGM][ENTER_CHIMN][ENTER_FRAME][EXIT_CHIMN][EXIT_FRAME])
-        # "error_all": error,
-        "error_abs": np.sum(abs(error), axis=0),
-        "error_net": np.sum(error, axis=0),
-        "error_over": np.sum(error_over, axis=0),
-        "error_under": np.sum(error_under, axis=0),
+    
+    # Summarizing the performance of the algorithm across all frames
+    results_summary = {
         "count_true": np.sum(ground_truth[:, 1:6], axis=0),
-        "count_estimated": np.sum(stats_array[:, 1:6], axis=0),
-        # "count_all": np.hstack((ground_truth[:, 1:6],
-        # stats_array[:, 1:6]))
+        "count_estimated": np.sum(count_estimate[:, 1:6], axis=0),
+        "error_net": np.sum(error_full, axis=0),
+        "error_overestimate": np.sum(error_over, axis=0),
+        "error_underestimate": np.sum(error_under, axis=0),
+        "error_total": np.sum(abs(error_full), axis=0),
     }
 
-    np.savetxt(load_directory + '/' + folder_name + '/a_full-results.csv',
-               full_results, delimiter=",")
-    with open(load_directory + '/' + folder_name +
-              '/b_test_summary.csv', 'w') as csv_file:
+    # Writing the full results to a file
+    np.savetxt(save_directory+'/results_full.csv', results_full, delimiter=";")
+    
+    # Writing a summary of the parameters to a file
+    with open(save_directory+'/parameters.csv', 'w') as csv_file:
         filewriter = csv.writer(csv_file, delimiter=';',
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
         filewriter.writerow(["PARAMETERS"])
         for key in params.keys():
             filewriter.writerow(["{}".format(key),
                                  "{}".format(params[key])])
-        filewriter.writerow(["RESULTS"])
-        for key in performance.keys():
+
+    # Writing a summary of the results to a file
+    with open(save_directory+'/results_summary.csv', 'w') as csv_file:
+        filewriter = csv.writer(csv_file, delimiter=';',
+                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        filewriter.writerow([" ", "TOTAL BIRDS/SEGMENTS",
+                             "ENTERED CHIMNEY", "ENTERED FRAME",
+                             "EXITED CHIMNEY", "EXITED FRAME"])
+        for key in results_summary.keys():
             filewriter.writerow(["{}".format(key),
-                                 "{}".format(performance[key])])
+                                 "{}".format(results_summary[key][0]),
+                                 "{}".format(results_summary[key][1]),
+                                 "{}".format(results_summary[key][2]),
+                                 "{}".format(results_summary[key][3]),
+                                 "{}".format(results_summary[key][4])])
 
 
 def main(args, params):
@@ -61,6 +85,9 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
+    # TODO: Switch from "extract frames -> reload frames" to real-time analysis
+    # Written this way to save time when testing with specific time ranges
+
     # Code to extract all frames from video and save them to image files
     if args.extract:
         pv.extract_frames(args.video_dir, args.filename)
@@ -71,17 +98,16 @@ def main(args, params):
 
         # File I/O
         load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
-        save_directory = args.custom_dir + "/frames"
         frame_to_load = args.load[0]
         num_frames_to_read = args.load[1] - args.load[0]
 
         # FrameQueue object (class for caching frames, processing frames)
         frame_queue = pv.FrameQueue(args.video_dir, args.filename,
                                     queue_size=params["queue_size"])
-        frame_queue.stream.release()  # Videocapture not needed for frame reuse
+        frame_queue.stream.release()  # VideoCapture not needed for frame reuse
 
-        # Ground truth and measured stats
-        stats_array = np.array([]).reshape(0, 6)
+        # Array to store estimated counts
+        count_estimate = np.array([]).reshape(0, 8)
 
         # -------- INITIALIZATION ENDS, PROCESSING ALGORITHM BEGINS --------- #
 
@@ -94,70 +120,32 @@ def main(args, params):
 
             # Proceed only when enough frames are stored for motion estimation
             if frame_queue.frames_read > frame_queue.queue_center:
-                # Segment frame using context from adjacent frames in queue
-                processing_stages = \
-                    frame_queue.segment_frame(
-                        lmbda=params["ialm_lmbda"],
-                        tol=params["ialm_tol"],
-                        maxiter=params["ialm_maxiter"],
-                        darker=params["ialm_darker"],
-                        iters=params["blf_iter"],
-                        diameter=params["blf_diam"],
-                        sigma_space=params["blf_sigma_s"],
-                        sigma_color=params["blf_sigma_c"],
-                        thr_value=params["thr_value"],
-                        thr_type=params["thr_type"],
-                        gry_op_SE=params["gry_op_SE"],
-                        segmentation=params["seg_func"],
-                        index=frame_queue.queue_center,
-                        visual=True
-                    )
+                frame_queue.segment_frame(load_directory,
+                                          args.custom_dir,
+                                          params,
+                                          visual=args.visual)
+                match_counts = frame_queue.match_segments(load_directory,
+                                                          args.custom_dir,
+                                                          params,
+                                                          visual=args.visual)
 
-                # Match bird segments from two sequential frames.
-                match_coords, match_stats, match_comparison = \
-                    frame_queue.match_segments(
-                        match_function=params["ap_func_match"],
-                        notmatch_function=params["ap_func_notmatch"],
-                        visual=True
-                    )
+            # Save counts (only for frames with ground truth)
+            if 16200 <= (frame_to_load-frame_queue.queue_center) <= 16390:
+                count_estimate = np.vstack((count_estimate,
+                                            match_counts)).astype(int)
 
-                # Save results to image files for visual inspection.
-                if processing_stages is not None:
-                    frame_queue.save_frame_to_file(load_directory,
-                                                   frame=processing_stages,
-                                                   index=frame_queue.queue_center,
-                                                   folder_name=save_directory,
-                                                   file_prefix="seg_",
-                                                   scale=400)
-                if match_comparison is not None:
-                    frame_queue.save_frame_to_file(load_directory,
-                                                   frame=match_comparison,
-                                                   index=frame_queue.queue_center,
-                                                   folder_name=save_directory,
-                                                   scale=400)
-
-                # Store relevant matching stats in ground_truth data structure.
-                if 16200 <= (frame_to_load-frame_queue.queue_center) <= 16390:
-                    total_birds = (match_stats["total_matches"] +
-                                   match_stats["appeared_from_edge"] +
-                                   match_stats["appeared_from_chimney"])
-                    stats_list = [frame_to_load-frame_queue.queue_center,
-                                  total_birds,
-                                  match_stats["appeared_from_chimney"],
-                                  match_stats["appeared_from_edge"],
-                                  match_stats["disappeared_to_chimney"],
-                                  match_stats["disappeared_to_edge"]]
-                    stats_array = np.vstack((stats_array,
-                                             stats_list)).astype(int)
-
-            frame_to_load += (1 + frame_queue.delay)
+            # Status updates
             if frame_queue.frames_read % 25 == 0:
                 print("{0}/{1} frames processed."
                       .format(frame_queue.frames_read, num_frames_to_read))
 
-        # ----------- FRAME PROCESSING ENDS, STATS OUTPUT BEGINS ------------ #
+            # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
+            frame_to_load += (1 + frame_queue.delay)
 
-        save_test_details(params, stats_array, load_directory, args.custom_dir)
+        # ---------- PROCESSING ALGORITHM ENDS, TEST OUTPUT BEGINS ---------- #
+
+        save_test_details(params, count_estimate,
+                          load_directory, args.custom_dir)
 
 
 def set_parameters():
@@ -191,11 +179,11 @@ def set_parameters():
         "thr_value": 35,
 
         # Greyscale processing
-        "gry_op_SE": (2, 2),  # Structuring element for greyscale opening
+        "gry_op_SE": (2, 2),
 
         # Labelled segmentation
         "seg_func": "cv2.connectedComponents(sparse_opened, "
-                        "connectivity=4)",
+                    "connectivity=4)",
 
         # Assignment Problem
         # Used to roughly map distanced into correct regions, but very hastily
@@ -237,7 +225,12 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for extracted frame files",
-                        default="tests/directory test"
+                        default="tests/refactor check"
+                        )
+    parser.add_argument("-v",
+                        "--visual",
+                        help="Output visualization of frame processing",
+                        default=True
                         )
     arguments = parser.parse_args()
 

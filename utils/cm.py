@@ -3,7 +3,7 @@ from matplotlib import cm
 import cv2
 
 
-def apply_custom_colormap(image_gray, cmap='RdBu'):
+def apply_custom_colormap(image_gray, cmap='nipy_spectral'):
     image_gray = image_gray.astype(dtype=np.uint8)
     assert image_gray.dtype == np.uint8, 'must be np.uint8 image'
     if image_gray.ndim == 3: image_gray = image_gray.squeeze(-1)
