@@ -2,6 +2,7 @@
 import os
 import glob
 import collections
+import math
 from time import sleep
 
 # Imports used in numerous stages
@@ -14,28 +15,31 @@ from scipy import ndimage as img
 from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 
 # Necessary imports for matching stage
-import math
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
 
 
 class FrameQueue:
-    """Class for storing, describing, and manipulating frames from video file
-    using FIFO queues. Essentially deques with additional attributes and
-    methods specific to video analysis.
+    """Class for storing, describing, and manipulating frames from a video file
+    using two FIFO queues. More or less "collections" deques with additional
+    attributes and methods specific to video processing.
 
-    Example FrameQueue object of size 7:
+    Example:
+         Below is a FrameQueue object (size=7), where the last frame read had a
+    frame number of 571. Previous frames were pushed deeper into the queue:
 
-    framenumbers: [571][570][569][568][567][566][565]
-    queue:        [i_0][i_1][i_2][i_3][i_4][i_5][i_6] (primary)
-    seg_queue:                   [i_0][i_1][i_2][i_3] (secondary)
+    queue:        [i_0][i_1][i_2][i_3][i_4][i_5][i_6] (indexes)
+    seg_queue:                   [i_0][i_1][i_2][i_3] (indexes)
+    framenumbers: [571][570][569][568][567][566][565] (labelframes in queues)
 
     The primary queue ("queue") stores original frames, and the secondary queue
     ("seg_queue") stores segmented versions of the frames. As segmentation
     requires contextual information from past/future frames, the center index
-    of the primary queue (index 3) will correspond to the 0th index in the
-    secondary queue."""
+    of "queue" (index 3) will correspond to the 0th index in "seg_queue".
+    In other words, to generate a segmented version of frame 568,
+    frames 565-571 are necessary, and are taken from the primary queue."""
+
     def __init__(self, video_directory, filename, queue_size=1,
                  desired_fps=False):
         # Check validity of filepath
@@ -43,7 +47,7 @@ class FrameQueue:
         if not os.path.isfile(video_filepath):
             raise Exception("[!] Filepath does not point to valid video file.")
 
-        # Open source video file and store its immutable attributes
+        # Open source video file and initialize its immutable attributes
         self.src_filename = filename
         self.src_directory = video_directory
         self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
@@ -63,10 +67,11 @@ class FrameQueue:
         self.width = self.src_width    # Separate b/c dimensions may change
         if not desired_fps:
             self.fps = self.src_fps
-            self.delay = round(self.src_fps / self.fps) - 1
         else:
             self.fps = desired_fps
-            self.delay = 0  # Delay parameter needed to subsample video
+        # Delay parameter needed when subsampling video
+        self.delay = round(self.src_fps / self.fps) - 1
+        self.frame_to_load_next = 0
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -237,40 +242,72 @@ class FrameQueue:
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
-        # Apply Robust PCA method to isolate regions of motion
-        # lowrank = "background" image
-        # sparse  = "foreground" errors which corrupts the "background" image
-        # frame = lowrank + sparse
-        lowrank, sparse = self.rpca(params["ialm_lmbda"],
-                                    params["ialm_tol"],
-                                    params["ialm_maxiter"], 
-                                    params["ialm_darker"], 
-                                    index=self.queue_center)
+        # Set segmented image to empty if not enough frames have been read
+        # to do motion analysis.
+        if (self.frames_read-1) < self.queue_center:
+            sparse_cc = np.zeros((self.height, self.width), dtype=np.int)
+        else:
+            # Apply Robust PCA method to isolate regions of motion
+            # lowrank = "background" image
+            # sparse  = "foreground" errors corrupting the "background" image
+            # frame = lowrank + sparse
+            lowrank, sparse = self.rpca(params["ialm_lmbda"],
+                                        params["ialm_tol"],
+                                        params["ialm_maxiter"],
+                                        params["ialm_darker"],
+                                        index=self.queue_center)
 
-        # Apply bilateral filter to smooth over low-contrast regions
-        sparse_filtered = sparse
-        for i in range(params["blf_iter"]):
-            sparse_filtered = cv2.bilateralFilter(sparse_filtered,
-                                                  params["blf_diam"],
-                                                  params["blf_sigma_s"],
-                                                  params["blf_sigma_c"])
+            # Apply bilateral filter to smooth over low-contrast regions
+            sparse_filtered = sparse
+            for i in range(params["blf_iter"]):
+                sparse_filtered = cv2.bilateralFilter(sparse_filtered,
+                                                      params["blf_diam"],
+                                                      params["blf_sigma_s"],
+                                                      params["blf_sigma_c"])
 
-        # Apply thresholding to retain strongest areas and discard the rest
-        _, sparse_thr = cv2.threshold(sparse_filtered,
-                                      thresh=params["thr_value"],
-                                      maxval=255,
-                                      type=params["thr_type"])
+            # Apply thresholding to retain strongest areas and discard the rest
+            _, sparse_thr = cv2.threshold(sparse_filtered,
+                                          thresh=params["thr_value"],
+                                          maxval=255,
+                                          type=params["thr_type"])
 
-        # Discard areas where 2x2 structuring element will not fit
-        sparse_opened = \
-            img.grey_opening(sparse_thr, size=params["gry_op_SE"]) \
-            .astype(sparse_thr.dtype)
+            # Discard areas where 2x2 structuring element will not fit
+            sparse_opened = \
+                img.grey_opening(sparse_thr, size=params["gry_op_SE"]) \
+                .astype(sparse_thr.dtype)
 
-        # Segment using connected component labeling
-        num_components, sparse_cc = eval(params["seg_func"])
-        # num_components, sparse_cc = \
-        #     cv2.connectedComponents(sparse_opened, connectivity=conn)
+            # Segment using connected component labeling
+            num_components, sparse_cc = eval(params["seg_func"])
+            # num_components, sparse_cc = \
+            #     cv2.connectedComponents(sparse_opened, connectivity=conn)
 
+            # Create visualization of processing stages if requested
+            if visual:
+                # Fetch unprocessed frame, reshape into image from column vector
+                frame = np.reshape(self.queue[self.queue_center],
+                                   (self.height, self.width))
+
+                # Scale labeled image to be visible with uint8 grayscale
+                if num_components > 0:
+                    sparse_cc_scaled = sparse_cc*int(255/num_components)
+
+                # Combine each stage into one image, separated for visual clarity
+                separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
+                processing_stages = np.vstack((frame, separator,
+                                               sparse, separator,
+                                               sparse_filtered, separator,
+                                               sparse_thr, separator,
+                                               sparse_opened, separator,
+                                               sparse_cc_scaled)
+                                              ).astype(np.uint8)
+
+                # Save to file
+                self.save_frame_to_file(load_directory,
+                                        frame=processing_stages,
+                                        index=self.queue_center,
+                                        folder_name=folder_name,
+                                        file_prefix="seg_",
+                                        scale=400)
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
             self.seg_queue.appendleft(np.zeros((self.height, self.width))
@@ -280,33 +317,6 @@ class FrameQueue:
         # Append segmented frame (and information about frame) to queue
         self.seg_queue.appendleft(sparse_cc.astype(np.uint8))
         self.seg_properties.appendleft(measure.regionprops(sparse_cc))
-
-        # Create visualization of processing stages if requested
-        if visual:
-            # Fetch unprocessed frame, reshape into image from column vector
-            frame = np.reshape(self.queue[self.queue_center],
-                               (self.height, self.width))
-
-            # Scale labeled image to be visible with uint8 grayscale
-            if num_components > 0:
-                sparse_cc = sparse_cc*int(255/num_components)
-
-            # Combine each stage into one image, separated for visual clarity
-            separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
-            processing_stages = np.vstack((frame, separator,
-                                           sparse, separator,
-                                           sparse_filtered, separator,
-                                           sparse_thr, separator,
-                                           sparse_opened, separator,
-                                           sparse_cc)).astype(np.uint8)
-
-            # Save to file
-            self.save_frame_to_file(load_directory,
-                                    frame=processing_stages,
-                                    index=self.queue_center,
-                                    folder_name=folder_name,
-                                    file_prefix="seg_",
-                                    scale=400)
 
     def match_segments(self, load_directory, folder_name,
                        params, visual=False):
@@ -321,17 +331,20 @@ class FrameQueue:
         # Initialize coordinates and counts
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
         counts = {
-            "frame_number": self.framenumbers[self.queue_center],
+            "frame_number": self.frame_to_load_next - self.queue_center,
             "total_birds": count,
+            "total_matches": 0,
             "appeared_from_chimney": 0,
             "appeared_from_edge": 0,
+            "appeared_ambiguity": 0,
             "disappeared_to_chimney": 0,
             "disappeared_to_edge": 0,
-            "anomalies": 0,
-            "total_matches": 0
+            "disappeared_ambiguity": 0,
+            "outlier_behavior": 0,
+            "segmentation_error": 0
         }
 
-        # Compute and analyze match pairs only if segments exist in both frames
+        # Compute and analyze match pairs only if segments exist
         if count_total > 0:
             # Initialize likelihood matrix
             likeilihood_matrix = np.zeros((count_total, count_total))
@@ -410,7 +423,7 @@ class FrameQueue:
                     elif chimney_distance <= 10:
                         counts["appeared_from_chimney"] += 1
                     else:
-                        counts["anomalies"] += 1
+                        counts["segmentation_error"] += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -422,13 +435,10 @@ class FrameQueue:
                     elif chimney_distance <= 10:
                         counts["disappeared_to_chimney"] += 1
                     else:
-                        counts["anomalies"] += 1
+                        counts["segmentation_error"] += 1
                 # Otherwise, a match was made
                 else:
                     counts["total_matches"] += 1
-
-        if self.framenumbers[self.queue_center] == 16246:
-            test = None
 
         # Create visualization of segment matches if requested
         if visual:
@@ -519,8 +529,9 @@ def timestamp_to_framenumber(timestamp, fps):
 
 def extract_frames(video_directory, filename, queue_size=1,
                    save_directory=None):
-    """Helper function to extract individual frames one at a time 
-       from video file and save them to image files for future reuse."""
+    """Function which uses class methods to extract individual frames
+     (one at a time) from a video file. Saves each frame to image files for
+     future reuse."""
 
     # Default save directory chosen to be identical to filename
     if not save_directory:
