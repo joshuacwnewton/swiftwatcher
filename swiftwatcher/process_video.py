@@ -9,7 +9,7 @@ from time import sleep
 # Imports used in numerous stages
 import cv2
 import numpy as np
-import utils.cm as cm  # Used for colormapping, not entirely necessary
+import utils.cm as cm  # Used for visualization, not entirely necessary
 
 # Necessary imports for segmentation stage
 from scipy import ndimage as img
@@ -284,15 +284,17 @@ class FrameQueue:
 
             # Create visualization of processing stages if requested
             if visual:
-                # Fetch unprocessed frame, reshape into image from column vector
+                # Fetch unprocessed frame, reshape into image
                 frame = np.reshape(self.queue[self.queue_center],
                                    (self.height, self.width))
 
                 # Scale labeled image to be visible with uint8 grayscale
                 if num_components > 0:
                     sparse_cc_scaled = sparse_cc*int(255/num_components)
+                else:
+                    sparse_cc_scaled = sparse_cc
 
-                # Combine each stage into one image, separated for visual clarity
+                # Combine stages into one image, separated for visual clarity
                 separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
                 processing_stages = np.vstack((frame, separator,
                                                sparse, separator,
@@ -386,28 +388,18 @@ class FrameQueue:
             _, matches = linear_sum_assignment(cost_matrix)
 
             # Convert matches (pairs of indices) into pairs of coordinates
-            # Note: cv2.line requires int, .centroid returns float
-            # Conversion must happen, hence intermediate "float_coord"
             for i in range(count_total):
                 j = matches[i]
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
-                    float_coord1 = \
-                        self.seg_properties[1][i].centroid
-                    float_coord2 = \
-                        self.seg_properties[0][j - count_prev].centroid
-                    coords[i][0] = tuple([int(val) for val in float_coord1])
-                    coords[i][1] = tuple([int(val) for val in float_coord2])
+                    coords[i][0] = self.seg_properties[1][i].centroid
+                    coords[i][1] = self.seg_properties[0][j-count_prev].centroid
                 # Index condition for when a previous segment has disappeared
                 elif (i == j) and (i < count_prev):
-                    float_coord1 = \
-                        self.seg_properties[1][i].centroid
-                    coords[i][0] = tuple([int(val) for val in float_coord1])
+                    coords[i][0] = self.seg_properties[1][i].centroid
                 # Index condition for when a new segment has appeared
                 elif (i == j) and (i >= count_prev):
-                    float_coord2 = \
-                        self.seg_properties[0][j - count_prev].centroid
-                    coords[i][1] = tuple([int(val) for val in float_coord2])
+                    coords[i][1] = self.seg_properties[0][j-count_prev].centroid
 
             # For each pair of coordinates, classify as certain behaviors
             for coord_pair in coords:
