@@ -3,7 +3,6 @@ import os
 import glob
 import collections
 import math
-import csv
 from time import sleep
 
 # Imports used in numerous stages
@@ -19,6 +18,52 @@ from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
+
+
+def ms_to_timestamp(total_ms):
+    """Helper function to convert millisecond value into timestamp."""
+    # cv2's VideoCapture class provides the position of the video in
+    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
+    # think of video in terms of hours, minutes, and seconds, it's helpful to
+    # be able to convert back and forth.
+    total_s = int(total_ms/1000)
+    total_m = int(total_s/60)
+    total_h = int(total_m/60)
+
+    ms = round(total_ms % 1000)
+    s = round(total_s % 60)
+    m = round(total_m % 60)
+    h = round(total_h % 24)
+
+    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
+    return timestamp
+
+
+def framenumber_to_timestamp(frame_number, fps):
+    """Helper function to convert an amount of frames into a timestamp."""
+    # cv2's VideoCapture class provides a frame count property
+    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+    # can be easier to think of video in terms of hours, minutes, and seconds,
+    # it's helpful to be able to convert back and forth.
+    milliseconds = (frame_number / fps)*1000
+    timestamp = ms_to_timestamp(milliseconds)
+
+    return timestamp
+
+
+def timestamp_to_framenumber(timestamp, fps):
+    """Helper function to convert timestamp into an amount of frames."""
+    # cv2's VideoCapture class provides a frame count property
+    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+    # can be easier to think of video in terms of hours, minutes, and seconds,
+    # it's helpful to be able to convert back and forth.
+    time = timestamp.split(":")
+    seconds = (float(time[0])*60*60 +
+               float(time[1])*60 +
+               float(time[2]) +
+               float(time[3])/1000)
+    frame_number = int(round(seconds * fps))
+    return frame_number
 
 
 class FrameQueue:
@@ -474,157 +519,15 @@ class FrameQueue:
         return np.array(list(counts.values()), dtype=np.int)
 
 
-def ms_to_timestamp(total_ms):
-    """Helper function to convert millisecond value into timestamp."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    total_s = int(total_ms/1000)
-    total_m = int(total_s/60)
-    total_h = int(total_m/60)
+def process_extracted_frames(args, params):
+    """Function which uses class methods to analyse a sequence of previously
+    extracted frames, and determine bird counts for that sequence."""
 
-    ms = round(total_ms % 1000)
-    s = round(total_s % 60)
-    m = round(total_m % 60)
-    h = round(total_h % 24)
+    # Load direction matches formatting found in extract_frames()
+    load_directory = args.video_dir + os.path.splitext(args.filename)[0]
 
-    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
-    return timestamp
-
-
-def framenumber_to_timestamp(frame_number, fps):
-    """Helper function to convert an amount of frames into a timestamp."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    milliseconds = (frame_number / fps)*1000
-    timestamp = ms_to_timestamp(milliseconds)
-
-    return timestamp
-
-
-def timestamp_to_framenumber(timestamp, fps):
-    """Helper function to convert timestamp into an amount of frames."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    time = timestamp.split(":")
-    seconds = (float(time[0])*60*60 +
-               float(time[1])*60 +
-               float(time[2]) +
-               float(time[3])/1000)
-    frame_number = int(round(seconds * fps))
-    return frame_number
-
-
-def save_test_details(args, params, count_estimate):
-    """Save the full ground truth evaluation, as well as a summary of the test,
-    to csv files.
-
-    Some parameters include commas, so files are delimited with semicolons.
-
-    Example:
-        For a queue of size 21, pre-loading 10 frames is necessary to
-    segment one frame (frame 11 is the first frame that can be segmented).
-    Thus, for 100 frames loaded, only 90 will be segmented (and therefore only
-    90 will have counts).
-
-    Count labels:
-        0, frame_number
-        1, total_birds
-        2, total_matches
-        3, appeared_from_chimney
-        4, appeared_from_edge
-        5, appeared_ambiguous (could be removed, future-proofing for now)
-        6, disappeared_to_chimney
-        7, disappeared_to_edge
-        8, disappeared_ambiguous (could be removed, future-proofing for now)
-        9, outlier_behavior
-
-    Estimate array contains a 10th catch-all count, "segmentation_error"."""
-
-    # Create save directory if it does not already exist
-    load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
-    save_directory = load_directory + "/" + args.custom_dir
-    if not os.path.isdir(save_directory):
-        try:
-            os.makedirs(save_directory)
-        except OSError:
-            print("[!] Creation of the directory {0} failed."
-                  .format(save_directory))
-
-    # Comparing ground truth to estimated counts, frame by frame
-    ground_truth = np.genfromtxt(load_directory + '/groundtruth.csv',
-                                 delimiter=',').astype(dtype=int)
-    num_counts = count_estimate.shape[0]
-    results_full = np.hstack((ground_truth[0:num_counts, 0:10],
-                              count_estimate[:, 0:10])).astype(np.int)
-
-    # Using columns 1:10 so that frame numbers are excluded in error counting
-    error_full = count_estimate[:, 1:10] - ground_truth[0:num_counts, 1:10]
-
-    # Calculating when counts were overestimated
-    error_over = np.copy(error_full)
-    error_over[error_over < 0] = 0
-
-    # Calculating when counts were underestimated
-    error_under = np.copy(error_full)
-    error_under[error_under > 0] = 0
-
-    # Summarizing the performance of the algorithm across all frames
-    results_summary = {
-        "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
-        "count_estimated": np.sum(count_estimate[:, 1:10], axis=0),
-        "error_net": np.sum(error_full, axis=0),
-        "error_overestimate": np.sum(error_over, axis=0),
-        "error_underestimate": np.sum(error_under, axis=0),
-        "error_total": np.sum(abs(error_full), axis=0),
-    }
-
-    # Writing the full results to a file
-    np.savetxt(save_directory + "/results_full.csv", results_full,
-               delimiter=';')
-
-    # Writing a summary of the parameters to a file
-    with open(save_directory + "/parameters.csv", 'w') as csv_file:
-        filewriter = csv.writer(csv_file, delimiter=';',
-                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        filewriter.writerow(["PARAMETERS"])
-        for key in params.keys():
-            filewriter.writerow(["{}".format(key),
-                                 "{}".format(params[key])])
-
-    # Writing a summary of the results to a file
-    with open(save_directory + "/results_summary.csv", 'w') as csv_file:
-        filewriter = csv.writer(csv_file, delimiter=';',
-                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        filewriter.writerow([" ", "SEGMNTS", "MATCHES",
-                             "ENT_CHM", "ENT_FRM", "ENT_AMB",
-                             "EXT_CHM", "EXT_FRM", "EXT_AMB", "OUTLIER"])
-        for key in results_summary.keys():
-            filewriter.writerow(["{}".format(key),
-                                 "{}".format(results_summary[key][0]),
-                                 "{}".format(results_summary[key][1]),
-                                 "{}".format(results_summary[key][2]),
-                                 "{}".format(results_summary[key][3]),
-                                 "{}".format(results_summary[key][4]),
-                                 "{}".format(results_summary[key][5]),
-                                 "{}".format(results_summary[key][6]),
-                                 "{}".format(results_summary[key][7]),
-                                 "{}".format(results_summary[key][8])])
-
-
-def analyse_extracted_frames(args, params):
-    """Function which uses class methods to analyse previously extracted frames
-    and determine bird counts for the specified sequence."""
-
-    # File I/O Initialization
-    load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
-
-    # FrameQueue object (class for caching frames, processing frames)
+    # FrameQueue object (class for caching frames and applying
+    #                    image processing to cached frames)
     frame_queue = FrameQueue(args.video_dir, args.filename,
                              queue_size=params["queue_size"])
     frame_queue.stream.release()  # VideoCapture not needed for frame reuse
@@ -634,10 +537,13 @@ def analyse_extracted_frames(args, params):
     # Array to store estimated counts
     count_estimate = np.empty((0, 11), int)
 
+    print("[========================================================]")
+    print("[*] Analysing frames... (This may take a while!)")
+
     # The number of frames to read has an additional amount added,
     # "frame_queue.queue_center", because a cache of frames is needed to
-    # segment a frame (equal to this amount). See pv.FrameQueue's
-    # __init__() docstring for more information.
+    # segment a frame. (Sequential context for motion estimation.)
+    # See pv.FrameQueue's __init__() docstring for more information.
     while frame_queue.frames_read < (num_frames_to_analyse +
                                      frame_queue.queue_center):
 
@@ -668,6 +574,10 @@ def analyse_extracted_frames(args, params):
 
         # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
+
+    print("[========================================================]")
+    print("[-] Analysis complete. {} total frames used in counting."
+          .format(frame_queue.frames_read - frame_queue.queue_center))
 
     return count_estimate
 

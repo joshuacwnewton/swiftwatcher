@@ -1,4 +1,5 @@
-import swiftwatcher.process_video as pv
+import swiftwatcher.video_processing as vid
+import swiftwatcher.data_analysis as data
 import argparse as ap
 
 
@@ -11,14 +12,22 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    # Code to extract all frames from video and save them to image files
     if args.extract:
-        pv.extract_frames(args.video_dir, args.filename)
+        # Extract all frames from a video and save them to image files
+        vid.extract_frames(args.video_dir, args.filename)
 
-    # Code to analyse previously extracted frames, and evaluate the analysis
     else:
-        count_estimate = pv.analyse_extracted_frames(args, params)
-        pv.save_test_details(args, params, count_estimate)
+        # Save the chosen parameters for this test to a csv file
+        data.save_test_config(args, params)
+
+        # Apply computer vision algorithm to estimate bird counts in frames
+        count_estimate = vid.process_extracted_frames(args, params)
+
+        # Save estimated bird counts (summary, raw counts) to csv files
+        data.save_test_results(args, count_estimate)
+
+        # Generate cumulative sums and compare for ground truth + estimation
+        data.plot_cumulative_comparison()
 
 
 def set_parameters():
@@ -60,7 +69,7 @@ def set_parameters():
                     "connectivity=4)",
 
         # Assignment Problem
-        # Used to roughly map distanced into correct regions, but very hastily
+        # Used to roughly map distances into correct regions, but very hastily
         # done. Actual functions will be chosen much more methodically.
         "ap_func_match": "math.exp(-1 * (((dist - 10) ** 2) / 40))",
         "ap_func_notmatch": "(1 / 8) * math.exp(-edge_distance / 10)"
@@ -84,7 +93,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 7300])
+                        default=([7200, 7250])
                         )
     parser.add_argument("-d",
                         "--video_dir",
@@ -98,7 +107,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument("-c",
                         "--custom_dir",
-                        help="Custom directory for extracted frame files",
+                        help="Custom directory for saving various things",
                         default="tests/delete-me"
                         )
     parser.add_argument("-v",
