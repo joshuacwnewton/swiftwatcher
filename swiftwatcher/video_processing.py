@@ -139,18 +139,21 @@ class FrameQueue:
         return success
 
     def save_frame_to_file(self, base_save_directory, frame=None, index=0,
-                           folder_name=None, file_prefix="", file_suffix="",
-                           scale=100):
+                           scale=100, single_folder=False,
+                           base_folder="", frame_folder="/frames",
+                           file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
         provided, frame will be pulled from frame_queue at specified index."""
 
         # By default, frames will be saved in a subfolder corresponding to
         # HH:MM formatting. However, a custom subfolder can be chosen instead.
-        if not folder_name:
-            time = self.timestamps[index].split(":")
-            save_directory = base_save_directory+"/frames/"+time[0]+":"+time[1]
+        base_save_directory = base_save_directory+base_folder+frame_folder
+
+        if single_folder:
+            save_directory = base_save_directory
         else:
-            save_directory = base_save_directory+"/"+folder_name+"/frames"
+            time = self.timestamps[index].split(":")
+            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
 
         # Create save directory if it does not already exist
         if not os.path.isdir(save_directory):
@@ -309,9 +312,10 @@ class FrameQueue:
                 self.save_frame_to_file(load_directory,
                                         frame=processing_stages,
                                         index=self.queue_center,
-                                        folder_name=folder_name,
-                                        file_prefix="seg_",
+                                        base_folder=folder_name,
+                                        frame_folder="/segmentation",
                                         scale=400)
+
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
             self.seg_queue.appendleft(np.zeros((self.height, self.width))
@@ -468,7 +472,8 @@ class FrameQueue:
             self.save_frame_to_file(load_directory,
                                     frame=match_comparison_color,
                                     index=self.queue_center,
-                                    folder_name=folder_name,
+                                    base_folder=folder_name,
+                                    frame_folder="/matches",
                                     scale=400)
 
             # Save plots for likelihood functions

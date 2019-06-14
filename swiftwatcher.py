@@ -21,7 +21,7 @@ def main(args, params):
         # data.save_test_config(args, params)
 
         # Apply computer vision algorithm to estimate bird counts in frames
-        # count_estimate = vid.process_extracted_frames(args, params)
+        count_estimate = vid.process_extracted_frames(args, params)
 
         # Generate Pandas DataFrame objects from estimation, ground truth
         df_estimate, df_groundtruth = \
@@ -119,12 +119,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 7205])
+                        default=([8990, 9030])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/delete-me"
+                        default="/tests/delete-me"
                         )
     parser.add_argument("-v",
                         "--visual",
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     parser.add_argument("-g",
                         "--groundtruth",
                         help="Path to ground truth file",
-                        default="/groundtruth.csv"
+                        default="/groundtruth/groundtruth.csv"
                         )
     arguments = parser.parse_args()
 
