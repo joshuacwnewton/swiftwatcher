@@ -20,52 +20,6 @@ from scipy.optimize import linear_sum_assignment
 from skimage import measure
 
 
-def ms_to_timestamp(total_ms):
-    """Helper function to convert millisecond value into timestamp."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    total_s = int(total_ms/1000)
-    total_m = int(total_s/60)
-    total_h = int(total_m/60)
-
-    ms = round(total_ms % 1000)
-    s = round(total_s % 60)
-    m = round(total_m % 60)
-    h = round(total_h % 24)
-
-    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:03d}".format(h, m, s, ms)
-    return timestamp
-
-
-def framenumber_to_timestamp(frame_number, fps):
-    """Helper function to convert an amount of frames into a timestamp."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    milliseconds = (frame_number / fps)*1000
-    timestamp = ms_to_timestamp(milliseconds)
-
-    return timestamp
-
-
-def timestamp_to_framenumber(timestamp, fps):
-    """Helper function to convert timestamp into an amount of frames."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    time = timestamp.split(":")
-    seconds = (float(time[0])*60*60 +
-               float(time[1])*60 +
-               float(time[2]) +
-               float(time[3])/1000)
-    frame_number = int(round(seconds * fps))
-    return frame_number
-
-
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from a video file
     using two FIFO queues. More or less "collections" deques with additional
@@ -167,10 +121,12 @@ class FrameQueue:
         else:
             save_directory = base_save_directory+"/"+folder_name
 
-        # Load frame from file
+        # Load frame from file ([:11] -> limit precision to get things to work
+        # because I increased precision after extracting frames)
+        # TODO: Remove this precision limit when frames are re-extracted
         file_paths = glob.glob("{0}/frame{1}_{2}*".format(save_directory,
                                                           frame_number,
-                                                          timestamp))
+                                                          timestamp[:11]))
         frame = cv2.imread(file_paths[0])
         self.queue.appendleft(np.array(frame))
 
@@ -379,17 +335,18 @@ class FrameQueue:
         # Initialize coordinates and counts
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
         counts = {
-            "frame_number": self.frame_to_load_next - self.queue_center,
-            "total_birds": count,
-            "total_matches": 0,
-            "appeared_from_chimney": 0,
-            "appeared_from_edge": 0,
-            "appeared_ambiguity": 0,
-            "disappeared_to_chimney": 0,
-            "disappeared_to_edge": 0,
-            "disappeared_ambiguity": 0,
-            "outlier_behavior": 0,
-            "segmentation_error": 0
+            "TMSTAMP": self.timestamps[self.queue_center],
+            "FRM_NUM": self.framenumbers[self.queue_center],
+            "SEGMNTS": count,
+            "MATCHES": 0,
+            "ENT_CHM": 0,
+            "ENT_FRM": 0,
+            "ENT_AMB": 0,
+            "EXT_CHM": 0,
+            "EXT_FRM": 0,
+            "EXT_AMB": 0,
+            "OUTLIER": 0,
+            "SEG_ERR": 0
         }
 
         # Compute and analyze match pairs only if segments exist
@@ -457,11 +414,11 @@ class FrameQueue:
                     chimney_distance = self.height - coord_pair[1][0]
 
                     if edge_distance <= 10:
-                        counts["appeared_from_edge"] += 1
+                        counts["ENT_FRM"] += 1
                     elif chimney_distance <= 10:
-                        counts["appeared_from_chimney"] += 1
+                        counts["ENT_CHM"] += 1
                     else:
-                        counts["segmentation_error"] += 1
+                        counts["SEG_ERR"] += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -469,14 +426,14 @@ class FrameQueue:
                     chimney_distance = self.height - coord_pair[0][0]
 
                     if edge_distance <= 10:
-                        counts["disappeared_to_edge"] += 1
+                        counts["EXT_FRM"] += 1
                     elif chimney_distance <= 10:
-                        counts["disappeared_to_chimney"] += 1
+                        counts["EXT_CHM"] += 1
                     else:
-                        counts["segmentation_error"] += 1
+                        counts["SEG_ERR"] += 1
                 # Otherwise, a match was made
                 else:
-                    counts["total_matches"] += 1
+                    counts["MATCHES"] += 1
 
         # Create visualization of segment matches if requested
         if visual:
@@ -516,7 +473,7 @@ class FrameQueue:
 
             # Save plots for likelihood functions
 
-        return np.array(list(counts.values()), dtype=np.int)
+        return counts
 
 
 def process_extracted_frames(args, params):
@@ -534,8 +491,9 @@ def process_extracted_frames(args, params):
     frame_queue.frame_to_load_next = args.load[0]
     num_frames_to_analyse = args.load[1] - args.load[0]
 
-    # Array to store estimated counts
-    count_estimate = np.empty((0, 11), int)
+    # Empty list. Will be filled with a dictionary of counts for each frame.
+    # Then, list of dictionaries will be converted to pandas DataFrame.
+    count_estimate = []
 
     print("[========================================================]")
     print("[*] Analysing frames... (This may take a while!)")
@@ -564,18 +522,16 @@ def process_extracted_frames(args, params):
                                                       args.custom_dir,
                                                       params,
                                                       visual=args.visual)
-            count_estimate = np.vstack((count_estimate,
-                                        match_counts)).astype(int)
+            count_estimate.append(match_counts)
 
         # Status updates
         if frame_queue.frames_read % 25 == 0:
-            print("{0}/{1} frames processed."
+            print("[-] {0}/{1} frames processed."
                   .format(frame_queue.frames_read, num_frames_to_analyse))
 
         # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
 
-    print("[========================================================]")
     print("[-] Analysis complete. {} total frames used in counting."
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
@@ -615,3 +571,65 @@ def extract_frames(video_directory, filename, queue_size=1,
     print("[========================================================]")
     print("[-] Extraction complete. {} total frames extracted."
           .format(frame_queue.frames_read))
+
+
+def ms_to_timestamp(total_ms):
+    """Helper function to convert millisecond value into timestamp."""
+    # cv2's VideoCapture class provides the position of the video in
+    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
+    # think of video in terms of hours, minutes, and seconds, it's helpful to
+    # be able to convert back and forth.
+    total_s = int(total_ms/1000)
+    total_m = int(total_s/60)
+    total_h = int(total_m/60)
+
+    ns = int(1000000*(total_ms % 1000))
+    s = round(total_s % 60)
+    m = round(total_m % 60)
+    h = round(total_h % 24)
+
+    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:09d}".format(h, m, s, ns)
+    return timestamp
+
+
+def timestamp_to_ms(timestamp):
+    """Helper function to convert timestamps to millisecond totals."""
+    # cv2's VideoCapture class provides the position of the video in
+    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
+    # think of video in terms of hours, minutes, and seconds, it's helpful to
+    # be able to convert back and forth.
+    time = timestamp.split(":")
+    total_ms = (float(time[0])*60*60*1000 +
+                float(time[1])*60*1000 +
+                float(time[2])*1000 +
+                float(time[3]))
+
+    return total_ms
+
+
+def framenumber_to_timestamp(frame_number, fps):
+    """Helper function to convert an amount of frames into a timestamp."""
+    # cv2's VideoCapture class provides a frame count property
+    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+    # can be easier to think of video in terms of hours, minutes, and seconds,
+    # it's helpful to be able to convert back and forth.
+    milliseconds = (frame_number / fps)*1000
+    timestamp = ms_to_timestamp(milliseconds)
+
+    return timestamp
+
+
+def timestamp_to_framenumber(timestamp, fps):
+    """Helper function to convert timestamp into an amount of frames."""
+    # cv2's VideoCapture class provides a frame count property
+    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+    # can be easier to think of video in terms of hours, minutes, and seconds,
+    # it's helpful to be able to convert back and forth.
+    time = timestamp.split(":")
+    seconds = (float(time[0])*60*60 +
+               float(time[1])*60 +
+               float(time[2]) +
+               float(time[3])/1000)
+    frame_number = int(round(seconds * fps))
+    return frame_number
+

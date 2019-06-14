@@ -18,13 +18,17 @@ def main(args, params):
 
     else:
         # Save the chosen parameters for this test to a csv file
-        data.save_test_config(args, params)
+        # data.save_test_config(args, params)
 
         # Apply computer vision algorithm to estimate bird counts in frames
-        count_estimate = vid.process_extracted_frames(args, params)
+        # count_estimate = vid.process_extracted_frames(args, params)
+
+        # Generate Pandas DataFrame objects from estimation, ground truth
+        df_estimate, df_groundtruth = \
+            data.generate_dataframes(args)
 
         # Save estimated bird counts (summary, raw counts) to csv files
-        data.save_test_results(args, count_estimate)
+        # data.save_test_results(args, count_estimate)
 
         # Generate cumulative sums and compare for ground truth + estimation
         data.plot_cumulative_comparison()
@@ -82,19 +86,16 @@ if __name__ == "__main__":
     # Command line arguments used for specifying file I/O.
     # (NOT algorithm parameters. See set_parameters() for parameter choices.)
     parser = ap.ArgumentParser()
+
+    # Flag to determine which mode to run the program in, <EXTRACT/LOAD>
+    # (if flag is not provided, previously extracted frames will be loaded)
     parser.add_argument("-e",
                         "--extract",
                         help="Extract frames to HH:MM subfolders",
                         action="store_true"
                         )
-    parser.add_argument("-l",
-                        "--load",
-                        help="Option to load previously saved frames",
-                        nargs=2,
-                        type=int,
-                        metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 7250])
-                        )
+
+    # General arguments for video file I/O
     parser.add_argument("-d",
                         "--video_dir",
                         help="Path to directory containing video file",
@@ -105,6 +106,21 @@ if __name__ == "__main__":
                         help="Name of video file",
                         default="ch04_20170518205849.mp4"
                         )
+    parser.add_argument("-t",
+                        "--timestamp",
+                        help="In-frame timestamp for start of video",
+                        default="2017-05-18 20:58:49.000000000"
+                        )
+
+    # Arguments for running image processing/analysis tests
+    parser.add_argument("-l",
+                        "--load",
+                        help="Specify indices to load previously saved frames",
+                        nargs=2,
+                        type=int,
+                        metavar=('START_INDEX', 'END_INDEX'),
+                        default=([7200, 7205])
+                        )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
@@ -114,6 +130,11 @@ if __name__ == "__main__":
                         "--visual",
                         help="Output visualization of frame processing",
                         default=True
+                        )
+    parser.add_argument("-g",
+                        "--groundtruth",
+                        help="Path to ground truth file",
+                        default="/groundtruth.csv"
                         )
     arguments = parser.parse_args()
 

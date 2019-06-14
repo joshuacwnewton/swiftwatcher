@@ -2,8 +2,40 @@
 import os
 import csv
 
-# Data structure handling
+# Data science libraries
 import numpy as np
+import pandas as pd
+
+from swiftwatcher.video_processing import timestamp_to_ms, framenumber_to_timestamp
+
+
+def generate_dataframes(args, count_estimate=None):
+    load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
+
+    if count_estimate is not None:
+        # Create Pandas DataFrame for estimated counts
+        num_timestamps = len(count_estimate)  # Number of timestamps needed
+        timedelta = int(timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
+                        timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
+        duration = timedelta * (num_timestamps - 1)
+        indices = pd.date_range(start=args.timestamp,
+                                end=(pd.Timestamp(args.timestamp) +
+                                     pd.Timedelta(duration, 'ns')),
+                                periods=num_timestamps)
+        columns = ["FRM_NUM", "SEGMNTS", "MATCHES",
+                   "ENT_CHM", "ENT_FRM", "ENT_AMB",
+                   "EXT_CHM", "EXT_FRM", "EXT_AMB",
+                   "OUTLIER"]
+        df_estimation = pd.DataFrame(count_estimate, indices, columns)
+    else:
+        df_estimation = pd.read_csv(load_directory+args.groundtruth,
+                                    index_col="TMSTAMP")
+
+    # Load ground truth csv file into Pandas DataFrame
+    df_groundtruth = pd.read_csv(load_directory+"/results_full.csv",
+                                 index_col="TMSTAMP")
+
+    return df_estimation, df_groundtruth
 
 
 def save_test_config(args, params):
