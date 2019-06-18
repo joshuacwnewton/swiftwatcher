@@ -14,17 +14,17 @@ def main(args, params):
         set_parameters() function."""
 
     if args.extract:
-        # Extract all frames from a video and save them to image files
         vid.extract_frames(args.video_dir, args.filename)
 
     else:
         data.save_test_config(args, params)
 
-        # count_estimate = vid.process_extracted_frames(args, params)
+        df_estimation = vid.process_extracted_frames(args, params)
+        # It's called "df_estimation" because save_test_results converts from
+        # dataframe to ndarray for parsing. When save_test_results() gets
+        # rewritten to use dataframes, the "df_" prefix should be dropped
 
-        df_estimate = data.generate_dataframes(args)  # count_estimate)
-
-        data.save_test_results(args, df_estimate)
+        data.save_test_results(args, df_estimation)
 
         # Generate cumulative sums and compare for ground truth + estimation
         # data.plot_function_for_testing(args, df_estimate, df_groundtruth)
@@ -115,12 +115,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([12930, 16200])
+                        default=([7200, 7250])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="/tests/1_segmentation-analysis"
+                        default="/tests/refactor_dataframe"
                         )
     parser.add_argument("-v",
                         "--visual",

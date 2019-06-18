@@ -19,6 +19,9 @@ from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
 
+# Data structure to store final results
+import pandas as pd
+
 # Data visualization libraries
 import matplotlib.pyplot as plt
 import seaborn; seaborn.set()
@@ -586,7 +589,23 @@ def process_extracted_frames(args, params):
     print("[-] Analysis complete. {} total frames used in counting."
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
-    return count_estimate
+    # Convert list of dictionaries to pandas dataframe
+    # Create Pandas DataFrame for estimated counts
+    num_timestamps = len(count_estimate)  # Number of timestamps needed
+    timedelta = int(timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
+                    timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
+    duration = timedelta * (num_timestamps - 1)
+    indices = pd.date_range(start=args.timestamp,
+                            end=(pd.Timestamp(args.timestamp) +
+                                 pd.Timedelta(duration, 'ns')),
+                            periods=num_timestamps)
+    columns = ["FRM_NUM", "SEGMNTS", "MATCHES",
+               "ENT_CHM", "ENT_FRM", "ENT_AMB",
+               "EXT_CHM", "EXT_FRM", "EXT_AMB",
+               "OUTLIER"]
+    df_estimation = pd.DataFrame(count_estimate, indices, columns)
+
+    return df_estimation
 
 
 def extract_frames(video_directory, filename, queue_size=1,
