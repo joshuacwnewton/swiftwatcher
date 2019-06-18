@@ -3,6 +3,10 @@ import swiftwatcher.data_analysis as data
 import argparse as ap
 import os
 
+# ======= TODOs to attend to when branching off into code refactoring ======= #
+# - TODO: Replace all instances of load_directory with argument
+# =========================================================================== #
+
 
 def main(args, params):
     """To understand the current configuration of the algorithm, please look
