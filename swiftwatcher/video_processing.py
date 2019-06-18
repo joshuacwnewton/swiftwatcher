@@ -24,7 +24,8 @@ import pandas as pd
 
 # Data visualization libraries
 import matplotlib.pyplot as plt
-import seaborn; seaborn.set()
+import seaborn
+seaborn.set()
 
 
 class FrameQueue:

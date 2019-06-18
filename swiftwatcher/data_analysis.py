@@ -8,9 +8,8 @@ import pandas as pd
 
 # Data visualization libraries
 import matplotlib.pyplot as plt
-import seaborn; seaborn.set()
-
-from swiftwatcher.video_processing import timestamp_to_ms, framenumber_to_timestamp
+import seaborn
+seaborn.set()
 
 
 def save_test_config(args, params):
@@ -126,7 +125,7 @@ def save_test_results(args, df_estimation):
     print("[-] Results successfully saved to files.")
 
 
-def plot_function_for_testing(args, df_estimate, df_groundtruth):
+def plot_function_for_testing(df_estimate, df_groundtruth):
     """For a given pair of equal-length sequences, plot a comparison of the
     cumulative totals and save to an image. Used to compare running totals
     between bird count estimates and ground truth."""

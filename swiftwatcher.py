@@ -11,10 +11,9 @@
 # -TODO: Convert save_test_results() into using dataframes.
 #
 # File I/O:
-# -TODO: Look at how program handles "default directory" formatting
 #
 # Minor refactoring:
-# -TODO: PEP8 refactoring (always!)
+# -TODO: PEP8 formatting (always!)
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
