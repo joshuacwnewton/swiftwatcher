@@ -265,27 +265,6 @@ class FrameQueue:
                                         params["ialm_darker"],
                                         index=self.queue_center)
 
-            if self.framenumbers[self.queue_center] == 12954:
-                mser = cv2.MSER_create(_min_area=6, _max_area=1000)
-                regions, _ = mser.detectRegions(cv2.bitwise_not(sparse))
-                vis = sparse.copy()
-                hulls = [cv2.convexHull(p.reshape(-1, 1, 2)) for p in regions]
-                mask = np.zeros((sparse.shape[0], sparse.shape[1], 1),
-                                dtype=np.uint8)
-                mask = cv2.dilate(mask, np.ones((150, 150), np.uint8))
-                count = 1
-                for contour in hulls:
-                    cv2.drawContours(mask, [contour], -1, (255, 255, 255), -1)
-                    self.save_frame_to_file(load_directory,
-                                            frame=mask,
-                                            index=self.queue_center,
-                                            base_folder=folder_name,
-                                            frame_folder="/mser",
-                                            file_suffix=str(count),
-                                            scale=4)
-                    count += 1
-                test = None
-
             # Apply bilateral filter to smooth over low-contrast regions
             sparse_filtered = sparse
             for i in range(params["blf_iter"]):
