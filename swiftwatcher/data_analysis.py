@@ -35,11 +35,7 @@ def generate_dataframes(args, count_estimate=None):
         df_estimation = pd.read_csv(load_directory+"/results_full.csv",
                                     index_col="TMSTAMP")
 
-    # Load ground truth csv file into Pandas DataFrame
-    df_groundtruth = pd.read_csv(load_directory+args.groundtruth,
-                                 index_col="TMSTAMP")
-
-    return df_estimation, df_groundtruth
+    return df_estimation
 
 
 def save_test_config(args, params):
@@ -63,7 +59,7 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def save_test_results(args, df_estimation, df_groundtruth):
+def save_test_results(args, df_estimation):
     """Save the bird count estimations from image processing to csv files.
 
     Count labels:
@@ -94,6 +90,10 @@ def save_test_results(args, df_estimation, df_groundtruth):
     print("[*] Saving results of test to files.")
 
     count_estimate = df_estimation.values
+
+    # Load ground truth csv file into Pandas DataFrame
+    df_groundtruth = pd.read_csv(load_directory+args.groundtruth,
+                                 index_col="TMSTAMP")
     ground_truth = df_groundtruth.values
 
     # Comparing ground truth to estimated counts, frame by frame

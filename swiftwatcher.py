@@ -20,12 +20,11 @@ def main(args, params):
     else:
         data.save_test_config(args, params)
 
-        count_estimate = vid.process_extracted_frames(args, params)
+        # count_estimate = vid.process_extracted_frames(args, params)
 
-        df_estimate, df_groundtruth = \
-            data.generate_dataframes(args, count_estimate)
+        df_estimate = data.generate_dataframes(args)  # count_estimate)
 
-        data.save_test_results(args, df_estimate, df_groundtruth)
+        data.save_test_results(args, df_estimate)
 
         # Generate cumulative sums and compare for ground truth + estimation
         # data.plot_function_for_testing(args, df_estimate, df_groundtruth)
