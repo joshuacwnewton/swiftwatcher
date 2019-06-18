@@ -16,8 +16,7 @@ from swiftwatcher.video_processing import timestamp_to_ms, framenumber_to_timest
 def save_test_config(args, params):
     """Save the parameters chosen for the given test of the algorithm. Some
     parameters include commas, so files are delimited with semicolons."""
-    load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
-    save_directory = load_directory + "/" + args.custom_dir
+    save_directory = args.load_dir+args.custom_dir
     if not os.path.isdir(save_directory):
         try:
             os.makedirs(save_directory)

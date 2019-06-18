@@ -247,7 +247,7 @@ class FrameQueue:
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
-    def segment_frame(self, load_directory, folder_name,
+    def segment_frame(self, save_directory, folder_name,
                       params, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
@@ -315,7 +315,7 @@ class FrameQueue:
                                               ).astype(np.uint8)
 
                 # Save to file
-                self.save_frame_to_file(load_directory,
+                self.save_frame_to_file(save_directory,
                                         frame=processing_stages,
                                         index=self.queue_center,
                                         base_folder=folder_name,
@@ -332,7 +332,7 @@ class FrameQueue:
         self.seg_queue.appendleft(sparse_cc.astype(np.uint8))
         self.seg_properties.appendleft(measure.regionprops(sparse_cc))
 
-    def match_segments(self, load_directory, folder_name,
+    def match_segments(self, save_directory, folder_name,
                        params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames."""
@@ -520,7 +520,7 @@ class FrameQueue:
                                                               cmap="tab20")
 
             # Save image to folder
-            self.save_frame_to_file(load_directory,
+            self.save_frame_to_file(save_directory,
                                     frame=match_comparison_color,
                                     index=self.queue_center,
                                     base_folder=folder_name,
@@ -535,7 +535,7 @@ def process_extracted_frames(args, params):
     extracted frames, and determine bird counts for that sequence."""
 
     # Load direction matches formatting found in extract_frames()
-    load_directory = args.video_dir + os.path.splitext(args.filename)[0]
+    args.load_dir = args.video_dir + os.path.splitext(args.filename)[0]
 
     # FrameQueue object (class for caching frames and applying
     #                    image processing to cached frames)
@@ -560,7 +560,7 @@ def process_extracted_frames(args, params):
                                      frame_queue.queue_center):
 
         # Load frame into index 0 and apply preprocessing
-        frame_queue.load_frame_from_file(load_directory,
+        frame_queue.load_frame_from_file(args.load_dir,
                                          frame_queue.frame_to_load_next)
         frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
         frame_queue.crop_frame(corners=params["corners"])
@@ -568,11 +568,11 @@ def process_extracted_frames(args, params):
 
         # Proceed only when enough frames are stored for motion estimation
         if frame_queue.frames_read > frame_queue.queue_center:
-            frame_queue.segment_frame(load_directory,
+            frame_queue.segment_frame(args.load_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
-            match_counts = frame_queue.match_segments(load_directory,
+            match_counts = frame_queue.match_segments(args.load_dir,
                                                       args.custom_dir,
                                                       params,
                                                       visual=args.visual)
@@ -614,20 +614,19 @@ def process_extracted_frames(args, params):
     return pd.DataFrame(count_estimate, indices, columns)
 
 
-def extract_frames(video_directory, filename, queue_size=1,
-                   save_directory=None):
+def extract_frames(args, queue_size=1, save_directory=None):
     """Function which uses class methods to extract individual frames
      (one at a time) from a video file. Saves each frame to image files for
      future reuse."""
 
     # Default save directory chosen to be identical to filename
     if not save_directory:
-        save_directory = video_directory + os.path.splitext(filename)[0]
+        save_directory = args.load_dir
 
     print("[========================================================]")
     print("[*] Reading frames... (This may take a while!)")
 
-    frame_queue = FrameQueue(video_directory, filename, queue_size)
+    frame_queue = FrameQueue(args.video_dir, args.filename, queue_size)
     while frame_queue.frames_read < frame_queue.src_framecount:
         # Attempt to read frame from video into queue object
         success = frame_queue.load_frame_from_video()

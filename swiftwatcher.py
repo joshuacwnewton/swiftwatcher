@@ -10,8 +10,11 @@
 # Transition to pandas:
 # -TODO: Convert save_test_results() into using dataframes.
 #
+# File I/O:
+# -TODO: Look at how program handles "default directory" formatting
+#
 # Minor refactoring:
-# -TODO: Replace all instances of load_directory with argument
+# -TODO: PEP8 refactoring (always!)
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
@@ -30,7 +33,7 @@ def main(args, params):
         set_parameters() function."""
 
     if args.extract:
-        vid.extract_frames(args.video_dir, args.filename)
+        vid.extract_frames(args)
 
     else:
         data.save_test_config(args, params)
@@ -152,8 +155,8 @@ if __name__ == "__main__":
 
     # Repeatedly used path. Storing here because it is a derived from only
     # arguments, and it makes more sense than to repeatedly derive it.
-    arguments.load_directory = (arguments.video_dir +
-                                os.path.splitext(arguments.filename)[0])
+    arguments.load_dir = (arguments.video_dir +
+                          os.path.splitext(arguments.filename)[0])
 
     parameters = set_parameters()
     main(arguments, parameters)
