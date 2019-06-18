@@ -19,6 +19,9 @@ from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
 
+# Data structure to store final results
+import pandas as pd
+
 # Data visualization libraries
 import matplotlib.pyplot as plt
 import seaborn; seaborn.set()
@@ -586,7 +589,29 @@ def process_extracted_frames(args, params):
     print("[-] Analysis complete. {} total frames used in counting."
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
-    return count_estimate
+    # Generate pandas "DateTimeIndex" indices from custom "TMSTAMP" formatting
+    # TODO: Possible change (big) for removing custom formatting?
+    # I made my own timestamp formatting before I learned that standardized
+    # timestamps existed. There's a bit of a rift here but I'm not sure how
+    # high-priority refactoring the timestamp code is at this point. It would
+    # be a pretty large undertaking.
+    num_timestamps = len(count_estimate)
+    timedelta = int(timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
+                    timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
+    duration = timedelta * (num_timestamps - 1)
+    indices = pd.date_range(start=args.timestamp,
+                            end=(pd.Timestamp(args.timestamp) +
+                                 pd.Timedelta(duration, 'ns')),
+                            periods=num_timestamps)
+
+    # Specifying exactly which columns should be used for DataFrame
+    columns = ["FRM_NUM", "SEGMNTS", "MATCHES",
+               "ENT_CHM", "ENT_FRM", "ENT_AMB",
+               "EXT_CHM", "EXT_FRM", "EXT_AMB",
+               "OUTLIER"]
+
+    # Convert list of dictionaries into Pandas DataFrame
+    return pd.DataFrame(count_estimate, indices, columns)
 
 
 def extract_frames(video_directory, filename, queue_size=1,
