@@ -1,11 +1,23 @@
+# ================================= TODOs =================================== #
+# Improving segmentation:
+# -TODO: Add MSER scratch code to secondary segmentation function
+#
+# Automating tests for different parameters:
+# -TODO: Research differences between JSON files and other storage types
+# -TODO: Save algorithm parameters to a JSON file
+# -TODO: Write code to load algorithm parameters from a JSON file
+#
+# Transition to pandas:
+# -TODO: Convert save_test_results() into using dataframes.
+#
+# Minor refactoring:
+# -TODO: Replace all instances of load_directory with argument
+# =========================================================================== #
+
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
 import argparse as ap
 import os
-
-# ======= TODOs to attend to when branching off into code refactoring ======= #
-# - TODO: Replace all instances of load_directory with argument
-# =========================================================================== #
 
 
 def main(args, params):
