@@ -19,6 +19,10 @@ from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
 
+# Data visualization libraries
+import matplotlib.pyplot as plt
+import seaborn; seaborn.set()
+
 
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from a video file
@@ -139,7 +143,7 @@ class FrameQueue:
         return success
 
     def save_frame_to_file(self, base_save_directory, frame=None, index=0,
-                           scale=100, single_folder=False,
+                           scale=1, single_folder=False,
                            base_folder="", frame_folder="/frames",
                            file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
@@ -169,11 +173,10 @@ class FrameQueue:
             frame = self.queue[index]
 
         # Resize frame for viewing convenience
-        if scale is not 100:
-            s = scale / 100
+        if scale is not 1:
             frame = cv2.resize(frame,
-                               (round(frame.shape[1]*s),
-                                round(frame.shape[0]*s)),
+                               (round(frame.shape[1]*scale),
+                                round(frame.shape[0]*scale)),
                                interpolation=cv2.INTER_AREA)
 
         # Write frame to image file within save_directory
@@ -262,6 +265,27 @@ class FrameQueue:
                                         params["ialm_darker"],
                                         index=self.queue_center)
 
+            if self.framenumbers[self.queue_center] == 12954:
+                mser = cv2.MSER_create(_min_area=6, _max_area=1000)
+                regions, _ = mser.detectRegions(cv2.bitwise_not(sparse))
+                vis = sparse.copy()
+                hulls = [cv2.convexHull(p.reshape(-1, 1, 2)) for p in regions]
+                mask = np.zeros((sparse.shape[0], sparse.shape[1], 1),
+                                dtype=np.uint8)
+                mask = cv2.dilate(mask, np.ones((150, 150), np.uint8))
+                count = 1
+                for contour in hulls:
+                    cv2.drawContours(mask, [contour], -1, (255, 255, 255), -1)
+                    self.save_frame_to_file(load_directory,
+                                            frame=mask,
+                                            index=self.queue_center,
+                                            base_folder=folder_name,
+                                            frame_folder="/mser",
+                                            file_suffix=str(count),
+                                            scale=4)
+                    count += 1
+                test = None
+
             # Apply bilateral filter to smooth over low-contrast regions
             sparse_filtered = sparse
             for i in range(params["blf_iter"]):
@@ -314,7 +338,7 @@ class FrameQueue:
                                         index=self.queue_center,
                                         base_folder=folder_name,
                                         frame_folder="/segmentation",
-                                        scale=400)
+                                        scale=4)
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -352,6 +376,8 @@ class FrameQueue:
             "OUTLIER": 0,
             "SEG_ERR": 0
         }
+        frame_err = 0
+        frame_prev_err = 0
 
         # Compute and analyze match pairs only if segments exist
         if count_total > 0:
@@ -409,9 +435,9 @@ class FrameQueue:
 
             # For each pair of coordinates, classify as certain behaviors
             for coord_pair in coords:
-                # If this condition is met, pair means a segment appeared
                 if coord_pair[0] == (0, 0) and coord_pair[1] == (0, 0):
                     pass
+                # If this condition is met, pair means a segment appeared
                 elif coord_pair[0] == (0, 0):
                     edge_distance = min(coord_pair[1][0], coord_pair[1][1],
                                         self.width - coord_pair[1][1])
@@ -423,6 +449,7 @@ class FrameQueue:
                         counts["ENT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
+                        frame_err += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -435,6 +462,7 @@ class FrameQueue:
                         counts["EXT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
+                        frame_prev_err += 1
                 # Otherwise, a match was made
                 else:
                     counts["MATCHES"] += 1
@@ -444,29 +472,70 @@ class FrameQueue:
             frame = np.copy(self.seg_queue[0])
             frame_prev = np.copy(self.seg_queue[1])
 
+            # Colormappings for tab20 colormap in colormap
+            colors = [14, 40, 118, 144, 170, 222, 248,
+                      1, 27, 105, 131, 157, 209, 235]  # non-G/R colors
+            appeared_color = 53     # Green
+            disappeared_color = 79  # Red
+
             # Color matching between frames (grayscale, colormap comes later)
-            match_color = 20
+            frame_prev[frame_prev == 0] = 196
+            frame[frame == 0] = 196
+            color_index = 0
             for i in range(count_total):
                 j = matches[i]
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
-                    frame_prev[frame_prev == (i+1)] = match_color
-                    frame[frame == (j+1 - count_prev)] = match_color
-                    match_color += 35
+                    frame_prev[frame_prev == (i+1)] = colors[color_index]
+                    frame[frame == (j+1 - count_prev)] = colors[color_index]
+                    color_index += 1
                 # Index condition for when a previous segment has disappeared
                 elif (i == j) and (i < count_prev):
-                    frame_prev[frame_prev == (i+1)] = 255
+                    frame_prev[frame_prev == (i+1)] = disappeared_color
                 # Index condition for when a new segment has appeared
                 elif (i == j) and (i >= count_prev):
-                    frame[frame == (j+1 - count_prev)] = 255
+                    frame[frame == (j+1 - count_prev)] = appeared_color
+
+            # Resize frames for visual convenience
+            scale = 4
+            frame = cv2.resize(frame,
+                               (round(frame.shape[1] * scale),
+                                round(frame.shape[0] * scale)),
+                               interpolation=cv2.INTER_AREA)
+            frame_prev = cv2.resize(frame_prev,
+                                    (round(frame_prev.shape[1] * scale),
+                                     round(frame_prev.shape[0] * scale)),
+                                    interpolation=cv2.INTER_AREA)
 
             # Combine both frames into single image
-            separator_v = 255 * np.ones(shape=(1, self.width),
+            separator_v = 183*np.ones(shape=(self.height*scale, 1),
+                                      dtype=np.uint8)
+            match_comparison = np.hstack((frame_prev, separator_v, frame))
+
+            # Adding horizontal bar to display frame information
+            horizontal_bg = 183*np.ones(shape=(50, match_comparison.shape[1]),
                                         dtype=np.uint8)
-            match_comparison = np.vstack((frame_prev, separator_v, frame))
+            match_comparison = np.vstack((match_comparison, horizontal_bg))
+
+            # Write text on image
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(match_comparison,
+                        'Frame {0} -- Exit, edge: {1} | Exit, chimn: {2} | '
+                        'False positive: {3}              '
+                        'Frame {4} -- Enter, edge: {5} | Enter, chimn: {6} | '
+                        'False positive: {7}'.format(counts["FRM_NUM"]-1,
+                                                     counts["EXT_FRM"],
+                                                     counts["EXT_CHM"],
+                                                     frame_prev_err,
+                                                     counts["FRM_NUM"],
+                                                     counts["ENT_FRM"],
+                                                     counts["ENT_CHM"],
+                                                     frame_err),
+                        (10, 350), font, 0.5, 196, 2)
 
             # Apply color mapping
-            match_comparison_color = cm.apply_custom_colormap(match_comparison)
+            match_comparison_color = cm.apply_custom_colormap(match_comparison,
+                                                              cmap="tab20")
 
             # Save image to folder
             self.save_frame_to_file(load_directory,
@@ -474,9 +543,7 @@ class FrameQueue:
                                     index=self.queue_center,
                                     base_folder=folder_name,
                                     frame_folder="/matches",
-                                    scale=400)
-
-            # Save plots for likelihood functions
+                                    scale=1)
 
         return counts
 
@@ -588,7 +655,7 @@ def ms_to_timestamp(total_ms):
     total_m = int(total_s/60)
     total_h = int(total_m/60)
 
-    ns = int(1000000*(total_ms % 1000))
+    ns = round(1000000*(total_ms % 1000))
     s = round(total_s % 60)
     m = round(total_m % 60)
     h = round(total_h % 24)
@@ -637,4 +704,3 @@ def timestamp_to_framenumber(timestamp, fps):
                float(time[3])/1000)
     frame_number = int(round(seconds * fps))
     return frame_number
-

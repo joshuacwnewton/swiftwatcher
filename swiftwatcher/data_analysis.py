@@ -6,6 +6,10 @@ import csv
 import numpy as np
 import pandas as pd
 
+# Data visualization libraries
+import matplotlib.pyplot as plt
+import seaborn; seaborn.set()
+
 from swiftwatcher.video_processing import timestamp_to_ms, framenumber_to_timestamp
 
 
@@ -28,11 +32,11 @@ def generate_dataframes(args, count_estimate=None):
                    "OUTLIER"]
         df_estimation = pd.DataFrame(count_estimate, indices, columns)
     else:
-        df_estimation = pd.read_csv(load_directory+args.groundtruth,
+        df_estimation = pd.read_csv(load_directory+"/results_full.csv",
                                     index_col="TMSTAMP")
 
     # Load ground truth csv file into Pandas DataFrame
-    df_groundtruth = pd.read_csv(load_directory+"/results_full.csv",
+    df_groundtruth = pd.read_csv(load_directory+args.groundtruth,
                                  index_col="TMSTAMP")
 
     return df_estimation, df_groundtruth
@@ -54,13 +58,12 @@ def save_test_config(args, params):
     with open(save_directory + "/parameters.csv", 'w') as csv_file:
         filewriter = csv.writer(csv_file, delimiter=';',
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        filewriter.writerow(["PARAMETERS"])
         for key in params.keys():
             filewriter.writerow(["{}".format(key),
                                  "{}".format(params[key])])
 
 
-def save_test_results(args, count_estimate):
+def save_test_results(args, df_estimation, df_groundtruth):
     """Save the bird count estimations from image processing to csv files.
 
     Count labels:
@@ -90,9 +93,10 @@ def save_test_results(args, count_estimate):
     print("[========================================================]")
     print("[*] Saving results of test to files.")
 
+    count_estimate = df_estimation.values
+    ground_truth = df_groundtruth.values
+
     # Comparing ground truth to estimated counts, frame by frame
-    ground_truth = np.genfromtxt(load_directory + '/groundtruth.csv',
-                                 delimiter=',').astype(dtype=int)
     num_counts = count_estimate.shape[0]
     results_full = np.hstack((ground_truth[0:num_counts, 0:10],
                               count_estimate[:, 0:10])).astype(np.int)
@@ -144,11 +148,34 @@ def save_test_results(args, count_estimate):
     print("[-] Results successfully saved to files.")
 
 
-def plot_cumulative_comparison(sequence1=None, sequence2=None):
+def plot_function_for_testing(args, df_estimate, df_groundtruth):
     """For a given pair of equal-length sequences, plot a comparison of the
     cumulative totals and save to an image. Used to compare running totals
     between bird count estimates and ground truth."""
 
-    results_full = np.genfromtxt('videos/ch04_20170518205849/tests/'
-                                 '0_initial-configuration/results_full.csv',
-                                 delimiter=';').astype(dtype=int)
+    segments_es = df_estimate["SEGMNTS"].cumsum()
+    segments_gt = df_groundtruth["SEGMNTS"].cumsum()
+
+    exit_chimney_cumsum_es = df_estimate["EXT_CHM"].cumsum()
+    exit_chimney_cumsum_gt = df_groundtruth["EXT_CHM"].cumsum()
+
+    enter_chimney_cumsum_es = df_estimate["ENT_CHM"].cumsum()
+    enter_chimney_cumsum_gt = df_groundtruth["ENT_CHM"].cumsum()
+
+    fig1, ax1 = plt.subplots()
+    segments_es.plot(ax=ax1)
+    segments_gt.plot(ax=ax1)
+    ax1.legend(["ESTIMATION", "GROUND TRUTH"])
+    plt.savefig('segments_cumsum.png', bbox_inches='tight')
+
+    fig2, ax2 = plt.subplots()
+    exit_chimney_cumsum_es.plot(ax=ax2)
+    exit_chimney_cumsum_gt.plot(ax=ax2)
+    ax2.legend(["ESTIMATION", "GROUND TRUTH"])
+    plt.savefig('exit_chimney.png', bbox_inches='tight')
+
+    fig3, ax3 = plt.subplots()
+    enter_chimney_cumsum_es.plot(ax=ax3)
+    enter_chimney_cumsum_gt.plot(ax=ax3)
+    ax3.legend(["ESTIMATION", "GROUND TRUTH"])
+    plt.savefig('enter_chimney.png', bbox_inches='tight')

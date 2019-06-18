@@ -1,6 +1,7 @@
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
 import argparse as ap
+import os
 
 
 def main(args, params):
@@ -17,21 +18,17 @@ def main(args, params):
         vid.extract_frames(args.video_dir, args.filename)
 
     else:
-        # Save the chosen parameters for this test to a csv file
-        # data.save_test_config(args, params)
+        data.save_test_config(args, params)
 
-        # Apply computer vision algorithm to estimate bird counts in frames
         count_estimate = vid.process_extracted_frames(args, params)
 
-        # Generate Pandas DataFrame objects from estimation, ground truth
         df_estimate, df_groundtruth = \
-            data.generate_dataframes(args)
+            data.generate_dataframes(args, count_estimate)
 
-        # Save estimated bird counts (summary, raw counts) to csv files
-        # data.save_test_results(args, count_estimate)
+        data.save_test_results(args, df_estimate, df_groundtruth)
 
         # Generate cumulative sums and compare for ground truth + estimation
-        data.plot_cumulative_comparison()
+        # data.plot_function_for_testing(args, df_estimate, df_groundtruth)
 
 
 def set_parameters():
@@ -63,7 +60,7 @@ def set_parameters():
 
         # Thresholding
         "thr_type": 3,     # value of cv2.THRESH_TOZERO option
-        "thr_value": 35,
+        "thr_value": 50,
 
         # Greyscale processing
         "gry_op_SE": (2, 2),
@@ -119,12 +116,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([8990, 9030])
+                        default=([12930, 16200])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="/tests/delete-me"
+                        default="/tests/1_segmentation-analysis"
                         )
     parser.add_argument("-v",
                         "--visual",
@@ -137,6 +134,11 @@ if __name__ == "__main__":
                         default="/groundtruth/groundtruth.csv"
                         )
     arguments = parser.parse_args()
+
+    # Repeatedly used path. Storing here because it is a derived from only
+    # arguments, and it makes more sense than to repeatedly derive it.
+    arguments.load_directory = (arguments.video_dir +
+                                os.path.splitext(arguments.filename)[0])
 
     parameters = set_parameters()
     main(arguments, parameters)
