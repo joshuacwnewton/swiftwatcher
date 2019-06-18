@@ -78,7 +78,7 @@ def set_parameters():
 
         # Thresholding
         "thr_type": 3,     # value of cv2.THRESH_TOZERO option
-        "thr_value": 50,
+        "thr_value": 35,
 
         # Greyscale processing
         "gry_op_SE": (2, 2),
