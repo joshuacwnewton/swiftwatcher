@@ -535,7 +535,7 @@ def process_extracted_frames(args, params):
     extracted frames, and determine bird counts for that sequence."""
 
     # Load direction matches formatting found in extract_frames()
-    args.load_dir = args.video_dir + os.path.splitext(args.filename)[0]
+    args.default_dir = args.video_dir + os.path.splitext(args.filename)[0]
 
     # FrameQueue object (class for caching frames and applying
     #                    image processing to cached frames)
@@ -560,7 +560,7 @@ def process_extracted_frames(args, params):
                                      frame_queue.queue_center):
 
         # Load frame into index 0 and apply preprocessing
-        frame_queue.load_frame_from_file(args.load_dir,
+        frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
         frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
         frame_queue.crop_frame(corners=params["corners"])
@@ -568,11 +568,11 @@ def process_extracted_frames(args, params):
 
         # Proceed only when enough frames are stored for motion estimation
         if frame_queue.frames_read > frame_queue.queue_center:
-            frame_queue.segment_frame(args.load_dir,
+            frame_queue.segment_frame(args.default_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
-            match_counts = frame_queue.match_segments(args.load_dir,
+            match_counts = frame_queue.match_segments(args.default_dir,
                                                       args.custom_dir,
                                                       params,
                                                       visual=args.visual)
@@ -621,7 +621,7 @@ def extract_frames(args, queue_size=1, save_directory=None):
 
     # Default save directory chosen to be identical to filename
     if not save_directory:
-        save_directory = args.load_dir
+        save_directory = args.default_dir
 
     print("[========================================================]")
     print("[*] Reading frames... (This may take a while!)")

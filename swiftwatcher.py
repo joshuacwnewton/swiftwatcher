@@ -153,10 +153,10 @@ if __name__ == "__main__":
                         )
     arguments = parser.parse_args()
 
-    # Repeatedly used path. Storing here because it is a derived from only
-    # arguments, and it makes more sense than to repeatedly derive it.
-    arguments.load_dir = (arguments.video_dir +
-                          os.path.splitext(arguments.filename)[0])
+    # Repeatedly used default directory to ensure standardization. Storing here
+    # because it is a derived from only arguments.
+    arguments.default_dir = (arguments.video_dir +
+                             os.path.splitext(arguments.filename)[0])
 
     parameters = set_parameters()
     main(arguments, parameters)
