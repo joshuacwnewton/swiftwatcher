@@ -54,7 +54,7 @@ def main(args, params):
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
                                      index_col="TMSTAMP")
 
-        data.save_test_results(args, df_estimation)
+        data.save_test_results(args, df_estimation, df_groundtruth)
 
         # data.plot_function_for_testing(args)
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",

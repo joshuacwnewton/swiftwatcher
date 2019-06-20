@@ -610,7 +610,10 @@ def process_extracted_frames(args, params):
                "OUTLIER"]
 
     # Convert list of dictionaries into Pandas DataFrame
-    return pd.DataFrame(count_estimate, indices, columns)
+    df_estimation = pd.DataFrame(count_estimate, indices, columns)
+    df_estimation.index.rename("TMSTAMP", inplace=True)
+
+    return df_estimation
 
 
 def extract_frames(args, queue_size=1, save_directory=None):
