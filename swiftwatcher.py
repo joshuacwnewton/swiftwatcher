@@ -1,6 +1,5 @@
 # ============================= General TODOs =============================== #
 # Improving segmentation:
-# -TODO: Add MSER scratch code to secondary segmentation function
 #
 # Automating tests for different parameters:
 # -TODO: Research differences between JSON files and other storage types
@@ -11,14 +10,20 @@
 # -TODO: Convert save_test_results() into using dataframes.
 #
 # File I/O:
+# -TODO: Convert command line arguments into JSON parameters
 #
 # Minor refactoring:
 # -TODO: PEP8 formatting (always!)
+#
 # ============================== Branch TODOs =============================== #
 # Improving feedback on algorithm performance:
-# -TODO: Switch to "re-use results" mode to save time
-# -TODO: Create cumulative plot for oversegmentation error (with total count)
-# -TODO: Create cumulative plot for undersegmentation error (with total count)
+# -TODO: Rewrite segmentation visualization to be independent of No. of stages
+# -TODO: Add segment counts (estimate, ground truth) to segmentation vis
+# -TODO: Add ground truth information to matching visualization
+# -
+# =========================================================================== #
+
+
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
 import pandas as pd
