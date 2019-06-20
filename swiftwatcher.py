@@ -1,4 +1,4 @@
-# ================================= TODOs =================================== #
+# ============================= General TODOs =============================== #
 # Improving segmentation:
 # -TODO: Add MSER scratch code to secondary segmentation function
 #
@@ -14,10 +14,14 @@
 #
 # Minor refactoring:
 # -TODO: PEP8 formatting (always!)
-# =========================================================================== #
-
+# ============================== Branch TODOs =============================== #
+# Improving feedback on algorithm performance:
+# -TODO: Switch to "re-use results" mode to save time
+# -TODO: Create cumulative plot for oversegmentation error (with total count)
+# -TODO: Create cumulative plot for undersegmentation error (with total count)
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
+import pandas as pd
 import argparse as ap
 import os
 
@@ -33,18 +37,26 @@ def main(args, params):
     if args.extract:
         vid.extract_frames(args)
 
-    else:
+    if args.process:
         data.save_test_config(args, params)
 
-        # df_estimation = vid.process_extracted_frames(args, params)
+        df_estimation = vid.process_extracted_frames(args, params)
         # It's called "df_estimation" because save_test_results converts from
         # dataframe to ndarray for parsing. When save_test_results() gets
         # rewritten to use dataframes, the "df_" prefix should be dropped
+    else:
+        df_estimation = pd.read_csv(args.default_dir +
+                                    args.custom_dir +
+                                    "results/estimation_full.csv",
+                                    index_col="TMSTAMP")
 
-        # data.save_test_results(args, df_estimation)
+    if args.analyse:
+        df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
+                                     index_col="TMSTAMP")
 
-        # Generate cumulative sums and compare for ground truth + estimation
-        # data.plot_function_for_testing(args, df_estimate, df_groundtruth)
+        data.save_test_results(args, df_estimation)
+
+        # data.plot_function_for_testing(args)
 
 
 def set_parameters():
@@ -100,12 +112,24 @@ if __name__ == "__main__":
     # (NOT algorithm parameters. See set_parameters() for parameter choices.)
     parser = ap.ArgumentParser()
 
-    # Flag to determine which mode to run the program in, <EXTRACT/LOAD>
-    # (if flag is not provided, previously extracted frames will be loaded)
+    # Flags to determine which program functionality should be run in testing
     parser.add_argument("-e",
                         "--extract",
                         help="Extract frames to HH:MM subfolders",
-                        action="store_true"
+                        action="store_true",
+                        default=False
+                        )
+    parser.add_argument("-p",
+                        "--process",
+                        help="Load and process frames from HH:MM subfolders",
+                        action="store_true",
+                        default=True
+                        )
+    parser.add_argument("-a",
+                        "--analyse",
+                        help="Analyse results by comparing to ground truth",
+                        action="store_true",
+                        default=True
                         )
 
     # General arguments for video file I/O
@@ -132,12 +156,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 16200])
+                        default=([7200, 7250])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="/tests/0_initial-configuration"
+                        default="tests/1_initial-configuration/"
                         )
     parser.add_argument("-v",
                         "--visual",
@@ -147,14 +171,14 @@ if __name__ == "__main__":
     parser.add_argument("-g",
                         "--groundtruth",
                         help="Path to ground truth file",
-                        default="/groundtruth/groundtruth.csv"
+                        default="groundtruth/groundtruth.csv"
                         )
     arguments = parser.parse_args()
 
     # Repeatedly used default directory to ensure standardization. Storing here
     # because it is a derived from only arguments.
     arguments.default_dir = (arguments.video_dir +
-                             os.path.splitext(arguments.filename)[0])
+                             os.path.splitext(arguments.filename)[0] + "/")
 
     parameters = set_parameters()
     main(arguments, parameters)

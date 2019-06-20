@@ -320,7 +320,8 @@ class FrameQueue:
                                         frame=processing_stages,
                                         index=self.queue_center,
                                         base_folder=folder_name,
-                                        frame_folder="/vis_segmentation",
+                                        frame_folder="/visualizations" +
+                                                     "/segmentation",
                                         scale=4)
 
         # Append empty values first if queue is empty
@@ -525,7 +526,7 @@ class FrameQueue:
                                     frame=match_comparison_color,
                                     index=self.queue_center,
                                     base_folder=folder_name,
-                                    frame_folder="/vis_matching",
+                                    frame_folder="/visualizations/matching",
                                     scale=1)
 
         return counts
@@ -534,9 +535,6 @@ class FrameQueue:
 def process_extracted_frames(args, params):
     """Function which uses class methods to analyse a sequence of previously
     extracted frames, and determine bird counts for that sequence."""
-
-    # Load direction matches formatting found in extract_frames()
-    args.default_dir = args.video_dir + os.path.splitext(args.filename)[0]
 
     # FrameQueue object (class for caching frames and applying
     #                    image processing to cached frames)

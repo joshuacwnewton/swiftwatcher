@@ -61,21 +61,14 @@ def save_test_results(args, df_estimation):
     print("[========================================================]")
     print("[*] Saving results of test to files.")
 
-    if df_estimation is None:
-        df_estimation = pd.read_csv(args.save_directory+"/full.csv",
-                                    index_col="TMSTAMP")
-
+    # Fetching values from DataFrame
     count_estimate = df_estimation.values
+    num_counts = count_estimate.shape[0]
 
     # Load ground truth csv file into Pandas DataFrame
     df_groundtruth = pd.read_csv(args.default_dir+args.groundtruth,
                                  index_col="TMSTAMP")
     ground_truth = df_groundtruth.values
-
-    # Comparing ground truth to estimated counts, frame by frame
-    num_counts = count_estimate.shape[0]
-    results_full = np.hstack((ground_truth[0:num_counts, 0:10],
-                              count_estimate[:, 0:10])).astype(np.int)
 
     # Using columns 1:10 so that the "frame number" column is excluded
     error_full = count_estimate[:, 1:10] - ground_truth[0:num_counts, 1:10]
@@ -98,9 +91,8 @@ def save_test_results(args, df_estimation):
         "error_total": np.sum(abs(error_full), axis=0),
     }
 
-    # Writing the full results to a file
-    np.savetxt(save_directory+"/full.csv", results_full,
-               delimiter=';')
+    # Writing the full estimate to a file
+    df_estimation.to_csv(save_directory+"/estimation_full.csv")
 
     # Writing a summary of the results to a file
     with open(save_directory+"/summary.csv", 'w') as csv_file:
