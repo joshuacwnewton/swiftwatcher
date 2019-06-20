@@ -112,6 +112,28 @@ if __name__ == "__main__":
     # (NOT algorithm parameters. See set_parameters() for parameter choices.)
     parser = ap.ArgumentParser()
 
+    # General arguments for video file I/O (should not change for testing)
+    parser.add_argument("-d",
+                        "--video_dir",
+                        help="Path to directory containing video file",
+                        default="videos/"
+                        )
+    parser.add_argument("-f",
+                        "--filename",
+                        help="Name of video file",
+                        default="ch04_20170518205849.mp4"
+                        )
+    parser.add_argument("-t",
+                        "--timestamp",
+                        help="In-frame timestamp for start of video",
+                        default="2017-05-18 20:58:49.000000000"
+                        )
+    parser.add_argument("-g",
+                        "--groundtruth",
+                        help="Path to ground truth file associated with video",
+                        default="groundtruth/groundtruth.csv"
+                        )
+
     # Flags to determine which program functionality should be run in testing
     parser.add_argument("-e",
                         "--extract",
@@ -132,23 +154,6 @@ if __name__ == "__main__":
                         default=True
                         )
 
-    # General arguments for video file I/O
-    parser.add_argument("-d",
-                        "--video_dir",
-                        help="Path to directory containing video file",
-                        default="videos/"
-                        )
-    parser.add_argument("-f",
-                        "--filename",
-                        help="Name of video file",
-                        default="ch04_20170518205849.mp4"
-                        )
-    parser.add_argument("-t",
-                        "--timestamp",
-                        help="In-frame timestamp for start of video",
-                        default="2017-05-18 20:58:49.000000000"
-                        )
-
     # Arguments for running image processing/analysis tests
     parser.add_argument("-l",
                         "--load",
@@ -167,11 +172,6 @@ if __name__ == "__main__":
                         "--visual",
                         help="Output visualization of frame processing",
                         default=True
-                        )
-    parser.add_argument("-g",
-                        "--groundtruth",
-                        help="Path to ground truth file",
-                        default="groundtruth/groundtruth.csv"
                         )
     arguments = parser.parse_args()
 
