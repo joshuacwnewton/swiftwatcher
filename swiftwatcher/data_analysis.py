@@ -8,8 +8,8 @@ import pandas as pd
 
 # Data visualization libraries
 import matplotlib.pyplot as plt
-import seaborn
-seaborn.set()
+# import seaborn
+# seaborn.set()
 
 
 def save_test_config(args, params):
@@ -50,7 +50,7 @@ def save_test_results(args, df_estimation, df_groundtruth):
     Estimate array contains a 10th catch-all count, "segmentation_error"."""
 
     # Create save directory if it does not already exist
-    save_directory = args.default_dir+args.custom_dir+"/results"
+    save_directory = args.default_dir+args.custom_dir+"results/"
     if not os.path.isdir(save_directory):
         try:
             os.makedirs(save_directory)
@@ -112,34 +112,61 @@ def save_test_results(args, df_estimation, df_groundtruth):
     print("[-] Results successfully saved to files.")
 
 
-def plot_function_for_testing(df_estimate, df_groundtruth):
-    """For a given pair of equal-length sequences, plot a comparison of the
-    cumulative totals and save to an image. Used to compare running totals
-    between bird count estimates and ground truth."""
+def plot_segmentation_results(args, df_estimation, df_groundtruth):
+    """Plot comparisons between estimation and ground truth for segments."""
+    save_directory = args.default_dir + args.custom_dir + "results/"
 
-    segments_es = df_estimate["SEGMNTS"].cumsum()
-    segments_gt = df_groundtruth["SEGMNTS"].cumsum()
+    # Extract segment counts as series objects (from dataframes)
+    segments_es = df_estimation["SEGMNTS"]
+    segments_gt = df_groundtruth["SEGMNTS"]
 
-    exit_chimney_cumsum_es = df_estimate["EXT_CHM"].cumsum()
-    exit_chimney_cumsum_gt = df_groundtruth["EXT_CHM"].cumsum()
+    # Replace timestamp indices with frame number indices for visual clarity
+    segments_es.index = df_estimation["FRM_NUM"]
+    segments_gt.index = df_groundtruth["FRM_NUM"]
 
-    enter_chimney_cumsum_es = df_estimate["ENT_CHM"].cumsum()
-    enter_chimney_cumsum_gt = df_groundtruth["ENT_CHM"].cumsum()
+    # Calculate the overestimate error and underestimate error
+    difference = segments_es.subtract(segments_gt)
+    over_error = difference.where(difference > 0, 0)
+    under_error = -1 * difference.where(difference < 0, 0)
 
+    # Plot a comparison between the cumulative sums of both segment counts
     fig1, ax1 = plt.subplots()
-    segments_es.plot(ax=ax1)
-    segments_gt.plot(ax=ax1)
+    segments_es_cumu = segments_es.cumsum()
+    segments_gt_cumu = segments_gt.cumsum()
+    segments_es_cumu.plot(ax=ax1)
+    segments_gt_cumu.plot(ax=ax1)
     ax1.legend(["ESTIMATION", "GROUND TRUTH"])
-    plt.savefig('segments_cumsum.png', bbox_inches='tight')
+    ax1.set_title('Comparison between Cumulative Segment Sums')
+    ax1.set_xlabel('Frame Number')
+    ax1.set_ylabel('Segment Count')
+    plt.savefig(save_directory+'segment_totals.png', bbox_inches='tight')
 
+    # Plot a comparison between the cumulative sums of both error types
     fig2, ax2 = plt.subplots()
-    exit_chimney_cumsum_es.plot(ax=ax2)
-    exit_chimney_cumsum_gt.plot(ax=ax2)
-    ax2.legend(["ESTIMATION", "GROUND TRUTH"])
-    plt.savefig('exit_chimney.png', bbox_inches='tight')
+    over_cumu = over_error.cumsum()
+    rolling_over = over_error.rolling(50).sum()
+    ax2.text(7500, 1150, 'Total = {} Errors'.format(over_error.sum()),
+             bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
+    over_cumu.plot(ax=ax2, color="black", linestyle="--")
+    rolling_over.plot(ax=ax2, color="black")
+    ax2.legend(["Cumulative Sum", "Rolling Counts"])
+    ax2.set_title('Overestimate Error for Swift Segments')
+    ax2.set_xlabel('Frame Number')
+    ax2.set_ylabel('Error Count')
+    ax2.axis([7200, 16200, 0, 1250])
+    plt.savefig(save_directory+'error_over.png', bbox_inches='tight')
 
+    # Plot a comparison between the rolling sums of both error types
     fig3, ax3 = plt.subplots()
-    enter_chimney_cumsum_es.plot(ax=ax3)
-    enter_chimney_cumsum_gt.plot(ax=ax3)
-    ax3.legend(["ESTIMATION", "GROUND TRUTH"])
-    plt.savefig('enter_chimney.png', bbox_inches='tight')
+    under_cumu = under_error.cumsum()
+    rolling_under = under_error.rolling(50).sum()
+    ax3.text(7500, 1150, 'Total = {} Errors'.format(under_error.sum()),
+             bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
+    under_cumu.plot(ax=ax3, color="black", linestyle="--")
+    rolling_under.plot(ax=ax3, color="black")
+    ax3.legend(["Cumulative Sum", "Rolling Counts"])
+    ax3.set_title('Underestimate Error for Swift Segments')
+    ax3.set_xlabel('Frame Number')
+    ax3.set_ylabel('Error Count')
+    ax3.axis([7200, 16200, 0, 1250])
+    plt.savefig(save_directory+'error_under.png', bbox_inches='tight')

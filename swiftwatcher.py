@@ -61,7 +61,7 @@ def main(args, params):
 
         data.save_test_results(args, df_estimation, df_groundtruth)
 
-        # data.plot_function_for_testing(args)
+        data.plot_segmentation_results(args, df_estimation, df_groundtruth)
 
 
 def set_parameters():
@@ -166,12 +166,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 7250])
+                        default=([7200, 16200])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/1_initial-configuration/"
+                        default="tests/0_initial-configuration/"
                         )
     parser.add_argument("-v",
                         "--visual",
