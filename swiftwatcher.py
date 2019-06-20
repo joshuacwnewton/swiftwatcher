@@ -30,19 +30,18 @@ def main(args, params):
         if __name__ == "__main__": block of code.
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
-
     if args.extract:
         vid.extract_frames(args)
 
     else:
         data.save_test_config(args, params)
 
-        df_estimation = vid.process_extracted_frames(args, params)
+        # df_estimation = vid.process_extracted_frames(args, params)
         # It's called "df_estimation" because save_test_results converts from
         # dataframe to ndarray for parsing. When save_test_results() gets
         # rewritten to use dataframes, the "df_" prefix should be dropped
 
-        data.save_test_results(args, df_estimation)
+        # data.save_test_results(args, df_estimation)
 
         # Generate cumulative sums and compare for ground truth + estimation
         # data.plot_function_for_testing(args, df_estimate, df_groundtruth)
@@ -133,12 +132,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 7250])
+                        default=([7200, 16200])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="/tests/refactor_dataframe"
+                        default="/tests/0_initial-configuration"
                         )
     parser.add_argument("-v",
                         "--visual",

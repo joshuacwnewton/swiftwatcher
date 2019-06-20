@@ -320,7 +320,7 @@ class FrameQueue:
                                         frame=processing_stages,
                                         index=self.queue_center,
                                         base_folder=folder_name,
-                                        frame_folder="/segmentation",
+                                        frame_folder="/vis_segmentation",
                                         scale=4)
 
         # Append empty values first if queue is empty
@@ -525,7 +525,7 @@ class FrameQueue:
                                     frame=match_comparison_color,
                                     index=self.queue_center,
                                     base_folder=folder_name,
-                                    frame_folder="/matches",
+                                    frame_folder="/vis_matching",
                                     scale=1)
 
         return counts

@@ -50,8 +50,7 @@ def save_test_results(args, df_estimation):
     Estimate array contains a 10th catch-all count, "segmentation_error"."""
 
     # Create save directory if it does not already exist
-    load_directory = (args.video_dir + os.path.splitext(args.filename)[0])
-    save_directory = load_directory + "/" + args.custom_dir
+    save_directory = args.default_dir+args.custom_dir+"/results"
     if not os.path.isdir(save_directory):
         try:
             os.makedirs(save_directory)
@@ -63,13 +62,13 @@ def save_test_results(args, df_estimation):
     print("[*] Saving results of test to files.")
 
     if df_estimation is None:
-        df_estimation = pd.read_csv(load_directory+"/results_full.csv",
+        df_estimation = pd.read_csv(args.save_directory+"/full.csv",
                                     index_col="TMSTAMP")
 
     count_estimate = df_estimation.values
 
     # Load ground truth csv file into Pandas DataFrame
-    df_groundtruth = pd.read_csv(load_directory+args.groundtruth,
+    df_groundtruth = pd.read_csv(args.default_dir+args.groundtruth,
                                  index_col="TMSTAMP")
     ground_truth = df_groundtruth.values
 
@@ -100,11 +99,11 @@ def save_test_results(args, df_estimation):
     }
 
     # Writing the full results to a file
-    np.savetxt(save_directory + "/results_full.csv", results_full,
+    np.savetxt(save_directory+"/full.csv", results_full,
                delimiter=';')
 
     # Writing a summary of the results to a file
-    with open(save_directory + "/results_summary.csv", 'w') as csv_file:
+    with open(save_directory+"/summary.csv", 'w') as csv_file:
         filewriter = csv.writer(csv_file, delimiter=';',
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
         filewriter.writerow([" ", "SEGMNTS", "MATCHES",
