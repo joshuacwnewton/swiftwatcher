@@ -329,18 +329,25 @@ class FrameQueue:
                                                            self.width),
                                                           dtype=np.int)
 
-        # Add labeling to images
         for keys, key_values in seg.items():
+            # Resize frame for visual clarity
+            scale = 4
+            key_values = cv2.resize(key_values.astype(np.uint8),
+                                   (round(key_values.shape[1] * scale),
+                                    round(key_values.shape[0] * scale)),
+                                   interpolation=cv2.INTER_AREA)
+
+            # Apply label to frame
             horizontal_bg = 183 * np.ones(
-                shape=(10, key_values.shape[1]),
+                shape=(40, key_values.shape[1]),
                 dtype=np.uint8)
             seg[keys] = np.vstack((key_values, horizontal_bg))
             font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(seg[keys], keys, (2, 87), font, 0.25, 0, 1)
+            cv2.putText(seg[keys], keys, (5, 350), font, 1, 0, 2)
 
         # Concatenate images into Nx3 grid
         rows = [None] * 3
-        sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 1),
+        sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 2),
                              dtype=np.uint8)
         for i in range(math.ceil((len(seg) / 3))):
             # Concatenate into 1x3 rows
@@ -349,7 +356,7 @@ class FrameQueue:
                                  list(seg.values())[(2 + i * 3)]))
             # If more than one row, stack rows together
             if i > 0:
-                sep_v = 64 * np.ones(shape=(1, rows[0].shape[1]),
+                sep_v = 64 * np.ones(shape=(2, rows[0].shape[1]),
                                      dtype=np.uint8)
                 rows[0] = np.vstack((rows[0], sep_v,
                                      rows[i])).astype(np.uint8)
@@ -360,8 +367,7 @@ class FrameQueue:
                                 index=self.queue_center,
                                 base_folder=folder_name,
                                 frame_folder="/visualizations" +
-                                             "/segmentation",
-                                scale=4)
+                                             "/segmentation")
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
