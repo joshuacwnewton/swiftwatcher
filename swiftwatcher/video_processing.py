@@ -300,7 +300,6 @@ class FrameQueue:
             # Segment using connected component labeling
             num_components, labeled_frame = eval(params["seg_func"])
 
-            # Create visualization of processing stages if requested
             if visual:
                 # Scale labeled image to be visible with uint8 grayscale
                 if num_components > 0:
@@ -309,19 +308,42 @@ class FrameQueue:
                 else:
                     seg["connected_c_255"] = labeled_frame
 
-                # Combine stages into one image, separated for visual clarity
-                sep = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
-                processing_stages = np.vstack((seg["frame"], sep,
-                                               seg["RPCA_output"], sep,
-                                               seg["bilateral"], sep,
-                                               seg[threshold_str], sep,
-                                               seg["grey_opening"], sep,
-                                               seg["connected_c_255"])
-                                              ).astype(np.uint8)
+                # Add filler images if not enough stages to fill gaps
+                mod3 = len(seg) % 3
+                if mod3 > 0:
+                    for i in range(3 - mod3):
+                        seg["filler_{}".format(i+1)] = np.zeros((self.height,
+                                                                 self.width),
+                                                                dtype=np.int)
+
+                # Add labeling to images
+                for keys, key_values in seg.items():
+                    horizontal_bg = 183 * np.ones(
+                        shape=(10, key_values.shape[1]),
+                        dtype=np.uint8)
+                    seg[keys] = np.vstack((key_values, horizontal_bg))
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    cv2.putText(seg[keys], keys, (2, 87), font, 0.25, 0, 1)
+
+                # Concatenate images into Nx3 grid
+                rows = [None]*3
+                sep_h = 64*np.ones(shape=(list(seg.values())[0].shape[0], 1),
+                                   dtype=np.uint8)
+                for i in range(math.ceil((len(seg)/3))):
+                    # Concatenate into 1x3 rows
+                    rows[i] = np.hstack((list(seg.values())[(0+i*3)], sep_h,
+                                         list(seg.values())[(1+i*3)], sep_h,
+                                         list(seg.values())[(2+i*3)]))
+                    # If more than one row, stack rows together
+                    if i > 0:
+                        sep_v = 64 * np.ones(shape=(1, rows[0].shape[1]),
+                                             dtype=np.uint8)
+                        rows[0] = np.vstack((rows[0], sep_v,
+                                             rows[i])).astype(np.uint8)
 
                 # Save to file
                 self.save_frame_to_file(save_directory,
-                                        frame=processing_stages,
+                                        frame=rows[0],
                                         index=self.queue_center,
                                         base_folder=folder_name,
                                         frame_folder="/visualizations" +
