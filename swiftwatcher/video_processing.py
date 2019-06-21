@@ -272,15 +272,6 @@ class FrameQueue:
                                           params["ialm_darker"],
                                           index=self.queue_center)
 
-        # Apply bilateral filter to smooth over low-contrast regions
-        seg["bilateral"] = list(seg.values())[-1]
-        for i in range(params["blf_iter"]):
-            seg["bilateral"] = \
-                cv2.bilateralFilter(seg["bilateral"],
-                                    params["blf_diam"],
-                                    params["blf_sigma_s"],
-                                    params["blf_sigma_c"])
-
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
         _, seg[threshold_str] = \

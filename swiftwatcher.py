@@ -85,12 +85,6 @@ def set_parameters():
         "ialm_maxiter": 100,
         "ialm_darker": True,
 
-        # Bilateral filtering
-        "blf_iter": 2,     # How many times to iteratively apply
-        "blf_diam": 7,     # Size of pixel neighbourhood
-        "blf_sigma_c": 15,
-        "blf_sigma_s": 1,
-
         # Thresholding
         "thr_type": 3,     # value of cv2.THRESH_TOZERO option
         "thr_value": 35,
@@ -171,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2_initial-configuration/"
+                        default="tests/1_remove-bilateral/"
                         )
     parser.add_argument("-v",
                         "--visual",
