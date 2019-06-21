@@ -254,7 +254,7 @@ class FrameQueue:
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
-        # Dictionary for storing segmentation stages (only visualization)
+        # Dictionary for storing segmentation stages (used for visualization)
         seg = {
             "frame": np.reshape(self.queue[self.queue_center],
                                 (self.height, self.width))
@@ -300,55 +300,12 @@ class FrameQueue:
             # Segment using connected component labeling
             num_components, labeled_frame = eval(params["seg_func"])
 
-            if visual:
-                # Scale labeled image to be visible with uint8 grayscale
-                if num_components > 0:
-                    seg["connected_c_255"] = \
-                        labeled_frame*int(255/num_components)
-                else:
-                    seg["connected_c_255"] = labeled_frame
-
-                # Add filler images if not enough stages to fill gaps
-                mod3 = len(seg) % 3
-                if mod3 > 0:
-                    for i in range(3 - mod3):
-                        seg["filler_{}".format(i+1)] = np.zeros((self.height,
-                                                                 self.width),
-                                                                dtype=np.int)
-
-                # Add labeling to images
-                for keys, key_values in seg.items():
-                    horizontal_bg = 183 * np.ones(
-                        shape=(10, key_values.shape[1]),
-                        dtype=np.uint8)
-                    seg[keys] = np.vstack((key_values, horizontal_bg))
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    cv2.putText(seg[keys], keys, (2, 87), font, 0.25, 0, 1)
-
-                # Concatenate images into Nx3 grid
-                rows = [None]*3
-                sep_h = 64*np.ones(shape=(list(seg.values())[0].shape[0], 1),
-                                   dtype=np.uint8)
-                for i in range(math.ceil((len(seg)/3))):
-                    # Concatenate into 1x3 rows
-                    rows[i] = np.hstack((list(seg.values())[(0+i*3)], sep_h,
-                                         list(seg.values())[(1+i*3)], sep_h,
-                                         list(seg.values())[(2+i*3)]))
-                    # If more than one row, stack rows together
-                    if i > 0:
-                        sep_v = 64 * np.ones(shape=(1, rows[0].shape[1]),
-                                             dtype=np.uint8)
-                        rows[0] = np.vstack((rows[0], sep_v,
-                                             rows[i])).astype(np.uint8)
-
-                # Save to file
-                self.save_frame_to_file(save_directory,
-                                        frame=rows[0],
-                                        index=self.queue_center,
-                                        base_folder=folder_name,
-                                        frame_folder="/visualizations" +
-                                                     "/segmentation",
-                                        scale=4)
+            # Scale labeled image to be visible with uint8 grayscale
+            if num_components > 0:
+                seg["connected_c_255"] = \
+                    labeled_frame * int(255 / num_components)
+            else:
+                seg["connected_c_255"] = labeled_frame
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -359,6 +316,52 @@ class FrameQueue:
         # Append segmented frame (and information about frame) to queue
         self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
         self.seg_properties.appendleft(measure.regionprops(labeled_frame))
+
+        if visual:
+            self.segment_visualization(seg, save_directory, folder_name)
+
+    def segment_visualization(self, seg, save_directory, folder_name):
+        # Add filler images if not enough stages to fill gaps
+        mod3 = len(seg) % 3
+        if mod3 > 0:
+            for i in range(3 - mod3):
+                seg["filler_{}".format(i + 1)] = np.zeros((self.height,
+                                                           self.width),
+                                                          dtype=np.int)
+
+        # Add labeling to images
+        for keys, key_values in seg.items():
+            horizontal_bg = 183 * np.ones(
+                shape=(10, key_values.shape[1]),
+                dtype=np.uint8)
+            seg[keys] = np.vstack((key_values, horizontal_bg))
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(seg[keys], keys, (2, 87), font, 0.25, 0, 1)
+
+        # Concatenate images into Nx3 grid
+        rows = [None] * 3
+        sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 1),
+                             dtype=np.uint8)
+        for i in range(math.ceil((len(seg) / 3))):
+            # Concatenate into 1x3 rows
+            rows[i] = np.hstack((list(seg.values())[(0 + i * 3)], sep_h,
+                                 list(seg.values())[(1 + i * 3)], sep_h,
+                                 list(seg.values())[(2 + i * 3)]))
+            # If more than one row, stack rows together
+            if i > 0:
+                sep_v = 64 * np.ones(shape=(1, rows[0].shape[1]),
+                                     dtype=np.uint8)
+                rows[0] = np.vstack((rows[0], sep_v,
+                                     rows[i])).astype(np.uint8)
+
+        # Save to file
+        self.save_frame_to_file(save_directory,
+                                frame=rows[0],
+                                index=self.queue_center,
+                                base_folder=folder_name,
+                                frame_folder="/visualizations" +
+                                             "/segmentation",
+                                scale=4)
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
@@ -479,83 +482,92 @@ class FrameQueue:
 
         # Create visualization of segment matches if requested
         if visual:
-            frame = np.copy(self.seg_queue[0])
-            frame_prev = np.copy(self.seg_queue[1])
-
-            # Colormappings for tab20 colormap in colormap
-            colors = [14, 40, 118, 144, 170, 222, 248,
-                      1, 27, 105, 131, 157, 209, 235]  # non-G/R colors
-            appeared_color = 53     # Green
-            disappeared_color = 79  # Red
-
-            # Color matching between frames (grayscale, colormap comes later)
-            frame_prev[frame_prev == 0] = 196
-            frame[frame == 0] = 196
-            color_index = 0
-            for i in range(count_total):
-                j = matches[i]
-                # Index condition if two segments are matching
-                if (i < j) and (i < count_prev):
-                    frame_prev[frame_prev == (i+1)] = colors[color_index]
-                    frame[frame == (j+1 - count_prev)] = colors[color_index]
-                    color_index += 1
-                # Index condition for when a previous segment has disappeared
-                elif (i == j) and (i < count_prev):
-                    frame_prev[frame_prev == (i+1)] = disappeared_color
-                # Index condition for when a new segment has appeared
-                elif (i == j) and (i >= count_prev):
-                    frame[frame == (j+1 - count_prev)] = appeared_color
-
-            # Resize frames for visual convenience
-            scale = 4
-            frame = cv2.resize(frame,
-                               (round(frame.shape[1] * scale),
-                                round(frame.shape[0] * scale)),
-                               interpolation=cv2.INTER_AREA)
-            frame_prev = cv2.resize(frame_prev,
-                                    (round(frame_prev.shape[1] * scale),
-                                     round(frame_prev.shape[0] * scale)),
-                                    interpolation=cv2.INTER_AREA)
-
-            # Combine both frames into single image
-            separator_v = 183*np.ones(shape=(self.height*scale, 1),
-                                      dtype=np.uint8)
-            match_comparison = np.hstack((frame_prev, separator_v, frame))
-
-            # Adding horizontal bar to display frame information
-            horizontal_bg = 183*np.ones(shape=(50, match_comparison.shape[1]),
-                                        dtype=np.uint8)
-            match_comparison = np.vstack((match_comparison, horizontal_bg))
-
-            # Write text on image
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(match_comparison,
-                        'Frame {0} -- Exit, edge: {1} | Exit, chimn: {2} | '
-                        'False positive: {3}              '
-                        'Frame {4} -- Enter, edge: {5} | Enter, chimn: {6} | '
-                        'False positive: {7}'.format(counts["FRM_NUM"]-1,
-                                                     counts["EXT_FRM"],
-                                                     counts["EXT_CHM"],
-                                                     frame_prev_err,
-                                                     counts["FRM_NUM"],
-                                                     counts["ENT_FRM"],
-                                                     counts["ENT_CHM"],
-                                                     frame_err),
-                        (10, 350), font, 0.5, 196, 2)
-
-            # Apply color mapping
-            match_comparison_color = cm.apply_custom_colormap(match_comparison,
-                                                              cmap="tab20")
-
-            # Save image to folder
-            self.save_frame_to_file(save_directory,
-                                    frame=match_comparison_color,
-                                    index=self.queue_center,
-                                    base_folder=folder_name,
-                                    frame_folder="/visualizations/matching",
-                                    scale=1)
+            self.match_visualization(count_prev, count_total,
+                                     matches, counts,
+                                     frame_prev_err, frame_err,
+                                     save_directory, folder_name)
 
         return counts
+
+    def match_visualization(self, count_prev, count_total,
+                            matches, counts,
+                            frame_prev_err, frame_err,
+                            save_directory, folder_name):
+        frame = np.copy(self.seg_queue[0])
+        frame_prev = np.copy(self.seg_queue[1])
+
+        # Colormappings for tab20 colormap in colormap
+        colors = [14, 40, 118, 144, 170, 222, 248,
+                  1, 27, 105, 131, 157, 209, 235]  # non-G/R colors
+        appeared_color = 53  # Green
+        disappeared_color = 79  # Red
+
+        # Color matching between frames (grayscale, colormap comes later)
+        frame_prev[frame_prev == 0] = 196
+        frame[frame == 0] = 196
+        color_index = 0
+        for i in range(count_total):
+            j = matches[i]
+            # Index condition if two segments are matching
+            if (i < j) and (i < count_prev):
+                frame_prev[frame_prev == (i + 1)] = colors[color_index]
+                frame[frame == (j + 1 - count_prev)] = colors[color_index]
+                color_index += 1
+            # Index condition for when a previous segment has disappeared
+            elif (i == j) and (i < count_prev):
+                frame_prev[frame_prev == (i + 1)] = disappeared_color
+            # Index condition for when a new segment has appeared
+            elif (i == j) and (i >= count_prev):
+                frame[frame == (j + 1 - count_prev)] = appeared_color
+
+        # Resize frames for visual convenience
+        scale = 4
+        frame = cv2.resize(frame,
+                           (round(frame.shape[1] * scale),
+                            round(frame.shape[0] * scale)),
+                           interpolation=cv2.INTER_AREA)
+        frame_prev = cv2.resize(frame_prev,
+                                (round(frame_prev.shape[1] * scale),
+                                 round(frame_prev.shape[0] * scale)),
+                                interpolation=cv2.INTER_AREA)
+
+        # Combine both frames into single image
+        separator_v = 183 * np.ones(shape=(self.height * scale, 1),
+                                    dtype=np.uint8)
+        match_comparison = np.hstack((frame_prev, separator_v, frame))
+
+        # Adding horizontal bar to display frame information
+        horizontal_bg = 183 * np.ones(shape=(50, match_comparison.shape[1]),
+                                      dtype=np.uint8)
+        match_comparison = np.vstack((match_comparison, horizontal_bg))
+
+        # Write text on image
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(match_comparison,
+                    'Frame {0} -- Exit, edge: {1} | Exit, chimn: {2} | '
+                    'False positive: {3}              '
+                    'Frame {4} -- Enter, edge: {5} | Enter, chimn: {6} | '
+                    'False positive: {7}'.format(counts["FRM_NUM"] - 1,
+                                                 counts["EXT_FRM"],
+                                                 counts["EXT_CHM"],
+                                                 frame_prev_err,
+                                                 counts["FRM_NUM"],
+                                                 counts["ENT_FRM"],
+                                                 counts["ENT_CHM"],
+                                                 frame_err),
+                    (10, 350), font, 0.5, 196, 2)
+
+        # Apply color mapping
+        match_comparison_color = cm.apply_custom_colormap(match_comparison,
+                                                          cmap="tab20")
+
+        # Save image to folder
+        self.save_frame_to_file(save_directory,
+                                frame=match_comparison_color,
+                                index=self.queue_center,
+                                base_folder=folder_name,
+                                frame_folder="/visualizations/matching",
+                                scale=1)
 
 
 def process_extracted_frames(args, params):
