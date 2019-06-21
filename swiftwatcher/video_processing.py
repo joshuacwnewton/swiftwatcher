@@ -226,6 +226,11 @@ class FrameQueue:
         images. Method expects images to have been reshaped to matrix of
         column vectors.
 
+        Note: frame = lowrank + sparse
+                      lowrank = "background" image
+                      sparse  = "foreground" errors corrupting
+                                the "background" image
+
         The size of the queue will determine the tradeoff between efficiency
         and accuracy."""
 
@@ -361,8 +366,7 @@ class FrameQueue:
                                 frame=rows[0],
                                 index=self.queue_center,
                                 base_folder=folder_name,
-                                frame_folder="/visualizations" +
-                                             "/segmentation")
+                                frame_folder="/visualizations/segmentation")
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
