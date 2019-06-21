@@ -260,53 +260,45 @@ class FrameQueue:
                                 (self.height, self.width))
         }
 
-        # Set segmented image to empty if not enough frames have been read
-        # to do motion analysis.
-        if (self.frames_read-1) < self.queue_center:
-            labeled_frame = np.zeros((self.height, self.width), dtype=np.int)
+        # Apply Robust PCA method to isolate regions of motion
+        _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
+                                          params["ialm_tol"],
+                                          params["ialm_maxiter"],
+                                          params["ialm_darker"],
+                                          index=self.queue_center)
+
+        # Apply bilateral filter to smooth over low-contrast regions
+        seg["bilateral"] = list(seg.values())[-1]
+        for i in range(params["blf_iter"]):
+            seg["bilateral"] = \
+                cv2.bilateralFilter(seg["bilateral"],
+                                    params["blf_diam"],
+                                    params["blf_sigma_s"],
+                                    params["blf_sigma_c"])
+
+        # Apply thresholding to retain strongest areas and discard the rest
+        threshold_str = "thresh_{}".format(params["thr_value"])
+        _, seg[threshold_str] = \
+            cv2.threshold(list(seg.values())[-1],
+                          thresh=params["thr_value"],
+                          maxval=255,
+                          type=params["thr_type"])
+
+        # Discard areas where 2x2 structuring element will not fit
+        seg["grey_opening"] = \
+            img.grey_opening(list(seg.values())[-1],
+                             size=params["gry_op_SE"]) \
+            .astype(seg[threshold_str].dtype)
+
+        # Segment using connected component labeling
+        num_components, labeled_frame = eval(params["seg_func"])
+
+        # Scale labeled image to be visible with uint8 grayscale
+        if num_components > 0:
+            seg["connected_c_255"] = \
+                labeled_frame * int(255 / num_components)
         else:
-            # Apply Robust PCA method to isolate regions of motion
-            # lowrank = "background" image
-            # sparse  = "foreground" errors corrupting the "background" image
-            # frame = lowrank + sparse
-            lowrank, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
-                                                    params["ialm_tol"],
-                                                    params["ialm_maxiter"],
-                                                    params["ialm_darker"],
-                                                    index=self.queue_center)
-
-            # Apply bilateral filter to smooth over low-contrast regions
-            seg["bilateral"] = list(seg.values())[-1]
-            for i in range(params["blf_iter"]):
-                seg["bilateral"] = \
-                    cv2.bilateralFilter(seg["bilateral"],
-                                        params["blf_diam"],
-                                        params["blf_sigma_s"],
-                                        params["blf_sigma_c"])
-
-            # Apply thresholding to retain strongest areas and discard the rest
-            threshold_str = "thresh_{}".format(params["thr_value"])
-            _, seg[threshold_str] = \
-                cv2.threshold(list(seg.values())[-1],
-                              thresh=params["thr_value"],
-                              maxval=255,
-                              type=params["thr_type"])
-
-            # Discard areas where 2x2 structuring element will not fit
-            seg["grey_opening"] = \
-                img.grey_opening(list(seg.values())[-1],
-                                 size=params["gry_op_SE"]) \
-                .astype(seg[threshold_str].dtype)
-
-            # Segment using connected component labeling
-            num_components, labeled_frame = eval(params["seg_func"])
-
-            # Scale labeled image to be visible with uint8 grayscale
-            if num_components > 0:
-                seg["connected_c_255"] = \
-                    labeled_frame * int(255 / num_components)
-            else:
-                seg["connected_c_255"] = labeled_frame
+            seg["connected_c_255"] = labeled_frame
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
