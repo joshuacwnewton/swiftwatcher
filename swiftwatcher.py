@@ -99,7 +99,7 @@ def set_parameters():
         "gry_op_SE": (2, 2),
 
         # Labelled segmentation
-        "seg_func": "cv2.connectedComponents(seg['grey_opening'], "
+        "seg_func": "cv2.connectedComponents(list(seg.values())[-1], "
                     "connectivity=4)",
 
         # Assignment Problem
@@ -166,12 +166,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([12900, 13000])
+                        default=([7200, 16200])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/1_initial-configuration/"
+                        default="tests/2_initial-configuration/"
                         )
     parser.add_argument("-v",
                         "--visual",

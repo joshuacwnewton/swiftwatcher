@@ -276,7 +276,7 @@ class FrameQueue:
                                                     index=self.queue_center)
 
             # Apply bilateral filter to smooth over low-contrast regions
-            seg["bilateral"] = seg["RPCA_output"]
+            seg["bilateral"] = list(seg.values())[-1]
             for i in range(params["blf_iter"]):
                 seg["bilateral"] = \
                     cv2.bilateralFilter(seg["bilateral"],
@@ -287,14 +287,15 @@ class FrameQueue:
             # Apply thresholding to retain strongest areas and discard the rest
             threshold_str = "thresh_{}".format(params["thr_value"])
             _, seg[threshold_str] = \
-                cv2.threshold(seg["bilateral"],
+                cv2.threshold(list(seg.values())[-1],
                               thresh=params["thr_value"],
                               maxval=255,
                               type=params["thr_type"])
 
             # Discard areas where 2x2 structuring element will not fit
             seg["grey_opening"] = \
-                img.grey_opening(seg[threshold_str], size=params["gry_op_SE"])\
+                img.grey_opening(list(seg.values())[-1],
+                                 size=params["gry_op_SE"]) \
                 .astype(seg[threshold_str].dtype)
 
             # Segment using connected component labeling
@@ -380,6 +381,7 @@ class FrameQueue:
         count_total = count + count_prev
 
         # Initialize coordinates and counts
+        matches = []
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
         counts = {
             "TMSTAMP": self.timestamps[self.queue_center],
