@@ -254,65 +254,69 @@ class FrameQueue:
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
+        # Dictionary for storing segmentation stages (only visualization)
+        seg = {
+            "frame": np.reshape(self.queue[self.queue_center],
+                                (self.height, self.width))
+        }
+
         # Set segmented image to empty if not enough frames have been read
         # to do motion analysis.
         if (self.frames_read-1) < self.queue_center:
-            sparse_cc = np.zeros((self.height, self.width), dtype=np.int)
+            labeled_frame = np.zeros((self.height, self.width), dtype=np.int)
         else:
             # Apply Robust PCA method to isolate regions of motion
             # lowrank = "background" image
             # sparse  = "foreground" errors corrupting the "background" image
             # frame = lowrank + sparse
-            lowrank, sparse = self.rpca(params["ialm_lmbda"],
-                                        params["ialm_tol"],
-                                        params["ialm_maxiter"],
-                                        params["ialm_darker"],
-                                        index=self.queue_center)
+            lowrank, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
+                                                    params["ialm_tol"],
+                                                    params["ialm_maxiter"],
+                                                    params["ialm_darker"],
+                                                    index=self.queue_center)
 
             # Apply bilateral filter to smooth over low-contrast regions
-            sparse_filtered = sparse
+            seg["bilateral"] = seg["RPCA_output"]
             for i in range(params["blf_iter"]):
-                sparse_filtered = cv2.bilateralFilter(sparse_filtered,
-                                                      params["blf_diam"],
-                                                      params["blf_sigma_s"],
-                                                      params["blf_sigma_c"])
+                seg["bilateral"] = \
+                    cv2.bilateralFilter(seg["bilateral"],
+                                        params["blf_diam"],
+                                        params["blf_sigma_s"],
+                                        params["blf_sigma_c"])
 
             # Apply thresholding to retain strongest areas and discard the rest
-            _, sparse_thr = cv2.threshold(sparse_filtered,
-                                          thresh=params["thr_value"],
-                                          maxval=255,
-                                          type=params["thr_type"])
+            threshold_str = "thresh_{}".format(params["thr_value"])
+            _, seg[threshold_str] = \
+                cv2.threshold(seg["bilateral"],
+                              thresh=params["thr_value"],
+                              maxval=255,
+                              type=params["thr_type"])
 
             # Discard areas where 2x2 structuring element will not fit
-            sparse_opened = \
-                img.grey_opening(sparse_thr, size=params["gry_op_SE"]) \
-                .astype(sparse_thr.dtype)
+            seg["grey_opening"] = \
+                img.grey_opening(seg[threshold_str], size=params["gry_op_SE"])\
+                .astype(seg[threshold_str].dtype)
 
             # Segment using connected component labeling
-            num_components, sparse_cc = eval(params["seg_func"])
-            # num_components, sparse_cc = \
-            #     cv2.connectedComponents(sparse_opened, connectivity=conn)
+            num_components, labeled_frame = eval(params["seg_func"])
 
             # Create visualization of processing stages if requested
             if visual:
-                # Fetch unprocessed frame, reshape into image
-                frame = np.reshape(self.queue[self.queue_center],
-                                   (self.height, self.width))
-
                 # Scale labeled image to be visible with uint8 grayscale
                 if num_components > 0:
-                    sparse_cc_scaled = sparse_cc*int(255/num_components)
+                    seg["connected_c_255"] = \
+                        labeled_frame*int(255/num_components)
                 else:
-                    sparse_cc_scaled = sparse_cc
+                    seg["connected_c_255"] = labeled_frame
 
                 # Combine stages into one image, separated for visual clarity
-                separator = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
-                processing_stages = np.vstack((frame, separator,
-                                               sparse, separator,
-                                               sparse_filtered, separator,
-                                               sparse_thr, separator,
-                                               sparse_opened, separator,
-                                               sparse_cc_scaled)
+                sep = 64*np.ones(shape=(1, self.width), dtype=np.uint8)
+                processing_stages = np.vstack((seg["frame"], sep,
+                                               seg["RPCA_output"], sep,
+                                               seg["bilateral"], sep,
+                                               seg[threshold_str], sep,
+                                               seg["grey_opening"], sep,
+                                               seg["connected_c_255"])
                                               ).astype(np.uint8)
 
                 # Save to file
@@ -331,8 +335,8 @@ class FrameQueue:
             self.seg_properties.appendleft([])
 
         # Append segmented frame (and information about frame) to queue
-        self.seg_queue.appendleft(sparse_cc.astype(np.uint8))
-        self.seg_properties.appendleft(measure.regionprops(sparse_cc))
+        self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
+        self.seg_properties.appendleft(measure.regionprops(labeled_frame))
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
