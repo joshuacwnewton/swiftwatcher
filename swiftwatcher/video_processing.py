@@ -323,20 +323,20 @@ class FrameQueue:
 
     def segment_visualization(self, seg, save_directory, folder_name):
         # Add filler images if not enough stages to fill gaps
-        mod3 = len(seg) % 3
-        if mod3 > 0:
-            for i in range(3 - mod3):
+        mod3remainder = len(seg) % 3
+        if mod3remainder > 0:
+            for i in range(3 - mod3remainder):
                 seg["filler_{}".format(i + 1)] = np.zeros((self.height,
                                                            self.width),
                                                           dtype=np.int)
 
         for keys, key_values in seg.items():
             # Resize frame for visual clarity
-            scale = 4
+            scale = 4  # 400%
             key_values = cv2.resize(key_values.astype(np.uint8),
-                                   (round(key_values.shape[1] * scale),
+                                    (round(key_values.shape[1] * scale),
                                     round(key_values.shape[0] * scale)),
-                                   interpolation=cv2.INTER_AREA)
+                                    interpolation=cv2.INTER_AREA)
 
             # Apply label to frame
             horizontal_bg = 183 * np.ones(
@@ -344,17 +344,19 @@ class FrameQueue:
                 dtype=np.uint8)
             seg[keys] = np.vstack((key_values, horizontal_bg))
             font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(seg[keys], keys, (5, 350), font, 1, 0, 2)
+            cv2.putText(seg[keys], keys,
+                        (5, seg[keys].shape[0]-10),  # Bottom-left corner
+                        font, 1, 0, 2)
 
         # Concatenate images into Nx3 grid
-        rows = [None] * 3
+        rows = [None] * math.ceil((len(seg) / 3))
         sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 2),
                              dtype=np.uint8)
-        for i in range(math.ceil((len(seg) / 3))):
-            # Concatenate into 1x3 rows
-            rows[i] = np.hstack((list(seg.values())[(0 + i * 3)], sep_h,
-                                 list(seg.values())[(1 + i * 3)], sep_h,
-                                 list(seg.values())[(2 + i * 3)]))
+        for i in range(len(rows)):
+            # Concatenate 3 images into 1x3 row
+            rows[i] = np.hstack((list(seg.values())[0 + (i*3)], sep_h,
+                                 list(seg.values())[1 + (i*3)], sep_h,
+                                 list(seg.values())[2 + (i*3)]))
             # If more than one row, stack rows together
             if i > 0:
                 sep_v = 64 * np.ones(shape=(2, rows[0].shape[1]),
