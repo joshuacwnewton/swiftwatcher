@@ -26,6 +26,7 @@
 
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
+import numpy as np
 import pandas as pd
 import argparse as ap
 import os
@@ -90,7 +91,9 @@ def set_parameters():
         "thr_value": 35,
 
         # Greyscale processing
-        "gry_op_SE": (2, 2),
+        "gry_op_SE": np.array([(1, 1, 0),
+                               (1, 1, 0),
+                               (0, 1, 0)]),
 
         # Labelled segmentation
         "seg_func": "cv2.connectedComponents(list(seg.values())[-1], "
@@ -160,12 +163,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([7200, 16200])
+                        default=([12900, 13000])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/1_remove-bilateral/"
+                        default="tests/2_gray-opening-cross/"
                         )
     parser.add_argument("-v",
                         "--visual",
