@@ -687,37 +687,26 @@ def extract_frames(args, queue_size=1, save_directory=None):
 
 
 def chimney_hotspot_segmentation(frame, bottom_corners):
-    # TODO: Make demonstration images for all four chimney images
-    # TODO: Convert this into grayscale mask and apply to matching stage
+    """Generate a frame with the chimney's 'hotspot' from only the two bottom
+    corners of the chimney region."""
+    # From the two bottom corners, generate a "chimney region"
     width = bottom_corners[1][0] - bottom_corners[0][0]
     height = round(0.15*width)
     bottom = max(bottom_corners[0][1], bottom_corners[1][1])
     left = min(bottom_corners[0][0], bottom_corners[1][0])
     region = [(left, bottom - height), (left + width, bottom)]
 
+    # Apply processing stages to segment hotspot from cropped chimney/sky image
     cropped = frame[region[0][1]:region[1][1], region[0][0]:region[1][0]]
-    blur = cv2.medianBlur(cropped, 11)
-    blur = cv2.medianBlur(blur, 11)
+    blur = cv2.medianBlur(cv2.medianBlur(cropped, 11), 11)
     a, b, c = cv2.split(blur)
-    ret2, th2 = cv2.threshold(a, 0, 255,
-                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    ret, thr = cv2.threshold(a, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    cropped0 = np.add(np.copy(cropped[:, :, 0]).astype(np.int),
-                      np.copy(th2).astype(np.int))
-    cropped0[cropped0 > 255] = 255
-    cropped1 = np.add(np.copy(cropped[:, :, 0]).astype(np.int),
-                      np.copy(th2).astype(np.int))
-    cropped1[cropped1 > 255] = 255
-    cropped2 = np.add(np.copy(cropped[:, :, 0]).astype(np.int),
-                      np.copy(th2).astype(np.int))
-    cropped2[cropped2 > 255] = 255
+    # Add hotspot to empty image of the same size as the frame
+    frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+    frame_with_thr[region[0][1]:region[1][1], region[0][0]:region[1][0]] = thr
 
-    cropped[:, :, 0] = cropped0
-    cropped[:, :, 1] = cropped1
-    cropped[:, :, 2] = cropped2
-    frame[region[0][1]:region[1][1], region[0][0]:region[1][0]] = cropped
-    cv2.imwrite("videos/chimney-segmentation/frame-with-hotspot.png",
-                frame)
+    return frame_with_thr
 
 
 def ms_to_timestamp(total_ms):

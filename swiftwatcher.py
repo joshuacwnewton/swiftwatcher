@@ -44,7 +44,7 @@ def main(args, params):
 
     frame = cv2.imread("videos/chimney-segmentation/frame0_00:00:00:000.jpg")
     bottom_corners = [(748, 691), (921, 683)]
-    vid.chimney_hotspot_segmentation(frame, bottom_corners)
+    hotspot = vid.chimney_hotspot_segmentation(frame, bottom_corners)
 
     if args.extract:
         vid.extract_frames(args)
