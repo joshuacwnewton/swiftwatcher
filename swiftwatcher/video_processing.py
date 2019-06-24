@@ -686,6 +686,17 @@ def extract_frames(args, queue_size=1, save_directory=None):
           .format(frame_queue.frames_read))
 
 
+def chimney_hotspot_segmentation():
+    chim1 = cv2.imread("videos/chimney-segmentation/frame0_00:00:00:000.jpg")
+    blur = cv2.medianBlur(chim1, 11)
+    blur = cv2.medianBlur(blur, 11)
+    a, b, c = cv2.split(blur)
+    ret2, th2 = cv2.threshold(a, 0, 255,
+                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    cv2.imwrite("videos/chimney-segmentation/test-chimney1_thresholded.png",
+                th2)
+
+
 def ms_to_timestamp(total_ms):
     """Helper function to convert millisecond value into timestamp."""
     # cv2's VideoCapture class provides the position of the video in

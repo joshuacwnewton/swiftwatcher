@@ -26,6 +26,7 @@
 
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
+import cv2
 import numpy as np
 import pandas as pd
 import argparse as ap
@@ -40,6 +41,8 @@ def main(args, params):
         if __name__ == "__main__": block of code.
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
+    vid.chimney_hotspot_segmentation()
+
     if args.extract:
         vid.extract_frames(args)
 
