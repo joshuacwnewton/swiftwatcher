@@ -685,15 +685,11 @@ def extract_frames(args, queue_size=1, save_directory=None):
           .format(frame_queue.frames_read))
 
 
-def chimney_hotspot_segmentation(frame, bottom_corners):
+def chimney_hotspot_segmentation(frame, region):
     """Generate a frame with the chimney's 'hotspot' from only the two bottom
     corners of the chimney region."""
-    # From the two bottom corners, generate a "chimney region"
-    width = bottom_corners[1][0] - bottom_corners[0][0]
-    height = round(0.15*width)
-    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
-    left = min(bottom_corners[0][0], bottom_corners[1][0])
-    region = [(left, bottom - height), (left + width, bottom)]
+
+    # Usage: hotspot = vid.chimney_hotspot_segmentation(frame, hotspot_region)
 
     # Apply processing stages to segment hotspot from cropped chimney/sky image
     cropped = frame[region[0][1]:region[1][1], region[0][0]:region[1][0]]
@@ -706,6 +702,21 @@ def chimney_hotspot_segmentation(frame, bottom_corners):
     frame_with_thr[region[0][1]:region[1][1], region[0][0]:region[1][0]] = thr
 
     return frame_with_thr
+
+
+def generate_chimney_regions(bottom_corners, alpha):
+    width = bottom_corners[1][0] - bottom_corners[0][0]
+    height = round(alpha*width)
+    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+    left = min(bottom_corners[0][0], bottom_corners[1][0])
+
+    hotspot_region = [(left, bottom - height), (left + width, bottom)]
+    crop_region = [(bottom_corners[0][0] - height,
+                    bottom_corners[0][1] - 2*height),
+                   (bottom_corners[1][0] + height,
+                    bottom_corners[1][1] + height)]
+
+    return hotspot_region, crop_region
 
 
 def ms_to_timestamp(total_ms):
