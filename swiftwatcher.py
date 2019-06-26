@@ -97,9 +97,7 @@ def set_parameters():
         "thr_value": 35,
 
         # Greyscale processing
-        "gry_op_SE": np.array([(1, 1, 0),
-                               (1, 1, 0),
-                               (0, 1, 0)]),
+        "gry_op_SE": (2, 2),
 
         # Labelled segmentation
         "seg_func": "cv2.connectedComponents(list(seg.values())[-1], "
