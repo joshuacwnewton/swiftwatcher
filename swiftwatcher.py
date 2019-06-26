@@ -28,8 +28,6 @@
 
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
-import cv2
-import numpy as np
 import pandas as pd
 import argparse as ap
 import os
@@ -43,10 +41,6 @@ def main(args, params):
         if __name__ == "__main__": block of code.
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
-
-    # frame = cv2.imread("videos/chimney-segmentation/frame0_00:00:00:000.jpg")
-    # bottom_corners = [(748, 691), (921, 683)]
-    # hotspot = vid.chimney_hotspot_segmentation(frame, bottom_corners)
 
     if args.extract:
         vid.extract_frames(args)
@@ -81,9 +75,6 @@ def set_parameters():
     processing and analysis parts of the algorithm instead."""
 
     params = {
-        # Frame cropping
-        "corners": [(750, 300), (1200, 500)],  # [(760, 606), (920, 686)],  # (->, v), (--->, V)
-
         # Grayscale conversion
         "gs_algorithm": "cv2 default",
 
@@ -136,7 +127,7 @@ if __name__ == "__main__":
                         help="In-frame timestamp for start of video",
                         default="2019-06-14 00:00:00.000000000"
                         )
-    # Ground truth only valid for ch04_20170518205849.mp4
+    # Ground truth "groundtruth.csv" only valid for ch04_20170518205849.mp4
     parser.add_argument("-g",
                         "--groundtruth",
                         help="Path to ground truth file associated with video",
@@ -170,7 +161,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 50])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
@@ -181,6 +172,11 @@ if __name__ == "__main__":
                         "--visual",
                         help="Output visualization of frame processing",
                         default=True
+                        )
+    parser.add_argument("-n",
+                        "--chimney",
+                        help="Bottom corners which define chimney edge",
+                        default=[(798, 449), (1150, 435)]
                         )
     arguments = parser.parse_args()
 

@@ -48,16 +48,16 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, video_directory, filename, queue_size=1,
-                 desired_fps=False):
+    def __init__(self, args, queue_size=1, desired_fps=False):
+        # args.video_dir, args.filename
         # Check validity of filepath
-        video_filepath = video_directory + filename
+        video_filepath = args.video_dir + args.filename
         if not os.path.isfile(video_filepath):
             raise Exception("[!] Filepath does not point to valid video file.")
 
         # Open source video file and initialize its immutable attributes
-        self.src_filename = filename
-        self.src_directory = video_directory
+        self.src_filename = args.filename
+        self.src_directory = args.video_dir
         self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
                                                       self.src_filename))
         if not self.stream.isOpened():
@@ -70,16 +70,19 @@ class FrameQueue:
             self.src_height = int(self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-        # Initialize mutable frame/video attributes
+        # Initialize user-defined frame/video attributes
         self.height = self.src_height  # Separate b/c dimensions may change
         self.width = self.src_width    # Separate b/c dimensions may change
         if not desired_fps:
             self.fps = self.src_fps
         else:
             self.fps = desired_fps
-        # Delay parameter needed when subsampling video
-        self.delay = round(self.src_fps / self.fps) - 1
+        self.delay = round(self.src_fps / self.fps) - 1  # For subsampling vid
         self.frame_to_load_next = 0
+
+        # Generate details for regions of interest in frames
+        self.hotspot_region, self.crop_region = \
+            generate_chimney_regions(args.chimney, 0.10)
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -200,8 +203,9 @@ class FrameQueue:
             self.queue[index] = cv2.cvtColor(self.queue[index],
                                              cv2.COLOR_BGR2GRAY)
 
-    def crop_frame(self, corners, index=0):
+    def crop_frame(self, index=0):
         """Crop frame at specified index of FrameQueue."""
+        corners = self.crop_region
         try:
             self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
                                                   corners[0][0]:corners[1][0]]
@@ -573,8 +577,7 @@ def process_extracted_frames(args, params):
 
     # FrameQueue object (class for caching frames and applying
     #                    image processing to cached frames)
-    frame_queue = FrameQueue(args.video_dir, args.filename,
-                             queue_size=params["queue_size"])
+    frame_queue = FrameQueue(args, queue_size=params["queue_size"])
     frame_queue.stream.release()  # VideoCapture not needed for frame reuse
     frame_queue.frame_to_load_next = args.load[0]
     num_frames_to_analyse = args.load[1] - args.load[0]
@@ -597,7 +600,7 @@ def process_extracted_frames(args, params):
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
         frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
-        frame_queue.crop_frame(corners=params["corners"])
+        frame_queue.crop_frame()
         frame_queue.frame_to_column()
 
         # Proceed only when enough frames are stored for motion estimation
@@ -685,15 +688,11 @@ def extract_frames(args, queue_size=1, save_directory=None):
           .format(frame_queue.frames_read))
 
 
-def chimney_hotspot_segmentation(frame, bottom_corners):
+def chimney_hotspot_segmentation(frame, region):
     """Generate a frame with the chimney's 'hotspot' from only the two bottom
     corners of the chimney region."""
-    # From the two bottom corners, generate a "chimney region"
-    width = bottom_corners[1][0] - bottom_corners[0][0]
-    height = round(0.15*width)
-    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
-    left = min(bottom_corners[0][0], bottom_corners[1][0])
-    region = [(left, bottom - height), (left + width, bottom)]
+
+    # Usage: hotspot = vid.chimney_hotspot_segmentation(frame, hotspot_region)
 
     # Apply processing stages to segment hotspot from cropped chimney/sky image
     cropped = frame[region[0][1]:region[1][1], region[0][0]:region[1][0]]
@@ -706,6 +705,23 @@ def chimney_hotspot_segmentation(frame, bottom_corners):
     frame_with_thr[region[0][1]:region[1][1], region[0][0]:region[1][0]] = thr
 
     return frame_with_thr
+
+
+def generate_chimney_regions(bottom_corners, alpha):
+    width = bottom_corners[1][0] - bottom_corners[0][0]
+    height = round(alpha*width)
+
+    # Outside coordinates from provided corners
+    left = min(bottom_corners[0][0], bottom_corners[1][0])
+    right = max(bottom_corners[0][0], bottom_corners[1][0])
+    top = min(bottom_corners[0][1], bottom_corners[1][1])
+    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+
+    hotspot_region = [(left, bottom - height), (left + width, bottom)]
+    crop_region = [(left-height, top-3*height),
+                   (right+height, bottom+height)]
+
+    return hotspot_region, crop_region
 
 
 def ms_to_timestamp(total_ms):
