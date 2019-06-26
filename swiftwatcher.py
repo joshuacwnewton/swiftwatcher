@@ -1,26 +1,31 @@
-# ============================= General TODOs =============================== #
-# Improving segmentation:
+# =========================================================================== #
+# Note: Each category of TODOs represents a git branch.
+# =========================================================================== #
+# segmentation-improvements:
+# -TODO: Brainstorm improvements for antennae overlapping.
 #
-# Automating tests for different parameters:
-# -TODO: Research differences between JSON files and other storage types
-# -TODO: Save algorithm parameters to a JSON file
-# -TODO: Write code to load algorithm parameters from a JSON file
+# test-automation:
+# -TODO: Research differences between JSON files and other storage types.
+# -TODO: Save algorithm parameters to a JSON file.
+# -TODO: Load algorithm parameters from a JSON file.
+# -TODO: Save command line arguments to JSON parameters.
+# -TODO: Load command line arguments from JSON parameters.
 #
-# Transition to pandas:
+# transition-to-pandas:
 # -TODO: Convert save_test_results() into using dataframes.
 #
-# File I/O:
-# -TODO: Convert command line arguments into JSON parameters
+# algorithm-visualization:
+# -TODO: Add ground truth counts to segmentation vis.
+# -TODO: Add ground truth information to matching visualization.
 #
-# Minor refactoring:
-# -TODO: PEP8 formatting (always!)
+# crop-from-corners:
+# -TODO: Dummy to-do for merge commit.
 #
-# ============================== Branch TODOs =============================== #
-# Improving feedback on algorithm performance:
-# -TODO: Rewrite segmentation visualization to be independent of No. of stages
-# -TODO: Add segment counts (estimate, ground truth) to segmentation vis
-# -TODO: Add ground truth information to matching visualization
-# -
+# chimney-roi:
+# -TODO: Incorporate chimney ROI into counting criteria.
+#
+# resize-cropped-frame:
+# -TODO: Implement cv2.pyrDown to speed up RPCA.
 # =========================================================================== #
 
 
