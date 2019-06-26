@@ -40,9 +40,6 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    hotspot_region, crop_region = \
-        vid.generate_chimney_regions(params["corners"], 0.15)
-
     if args.extract:
         vid.extract_frames(args)
 
@@ -76,9 +73,6 @@ def set_parameters():
     processing and analysis parts of the algorithm instead."""
 
     params = {
-        # Frame cropping
-        "corners": [(748, 691), (921, 683)],  # [(760, 606), (920, 686)],  # (->, v), (--->, V)
-
         # Grayscale conversion
         "gs_algorithm": "cv2 default",
 
@@ -176,6 +170,11 @@ if __name__ == "__main__":
                         "--visual",
                         help="Output visualization of frame processing",
                         default=True
+                        )
+    parser.add_argument("-n",
+                        "--chimney",
+                        help="Bottom corners which define chimney edge",
+                        default=[(748, 691), (921, 683)]
                         )
     arguments = parser.parse_args()
 

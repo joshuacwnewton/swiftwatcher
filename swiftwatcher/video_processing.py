@@ -48,16 +48,16 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, video_directory, filename, queue_size=1,
-                 desired_fps=False):
+    def __init__(self, args, queue_size=1, desired_fps=False):
+        # args.video_dir, args.filename
         # Check validity of filepath
-        video_filepath = video_directory + filename
+        video_filepath = args.video_dir + args.filename
         if not os.path.isfile(video_filepath):
             raise Exception("[!] Filepath does not point to valid video file.")
 
         # Open source video file and initialize its immutable attributes
-        self.src_filename = filename
-        self.src_directory = video_directory
+        self.src_filename = args.filename
+        self.src_directory = args.video_dir
         self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
                                                       self.src_filename))
         if not self.stream.isOpened():
@@ -70,16 +70,19 @@ class FrameQueue:
             self.src_height = int(self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-        # Initialize mutable frame/video attributes
+        # Initialize user-defined frame/video attributes
         self.height = self.src_height  # Separate b/c dimensions may change
         self.width = self.src_width    # Separate b/c dimensions may change
         if not desired_fps:
             self.fps = self.src_fps
         else:
             self.fps = desired_fps
-        # Delay parameter needed when subsampling video
-        self.delay = round(self.src_fps / self.fps) - 1
+        self.delay = round(self.src_fps / self.fps) - 1  # For subsampling vid
         self.frame_to_load_next = 0
+
+        # Generate details for regions of interest in frames
+        self.hotspot_region, self.crop_region = \
+            generate_chimney_regions(args.chimney, 0.15)
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -573,8 +576,7 @@ def process_extracted_frames(args, params):
 
     # FrameQueue object (class for caching frames and applying
     #                    image processing to cached frames)
-    frame_queue = FrameQueue(args.video_dir, args.filename,
-                             queue_size=params["queue_size"])
+    frame_queue = FrameQueue(args, queue_size=params["queue_size"])
     frame_queue.stream.release()  # VideoCapture not needed for frame reuse
     frame_queue.frame_to_load_next = args.load[0]
     num_frames_to_analyse = args.load[1] - args.load[0]
