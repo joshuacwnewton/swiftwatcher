@@ -17,9 +17,6 @@
 # algorithm-visualization:
 # -TODO: Add ground truth counts to segmentation vis.
 # -TODO: Add ground truth information to matching visualization.
-#
-# chimney-roi:
-# -TODO: Incorporate chimney ROI into counting criteria.
 # =========================================================================== #
 
 
