@@ -82,7 +82,7 @@ class FrameQueue:
 
         # Generate details for regions of interest in frames
         self.hotspot_region, self.crop_region = \
-            generate_chimney_regions(args.chimney, 0.10)
+            generate_chimney_regions(args.chimney, 0.15)
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -212,13 +212,17 @@ class FrameQueue:
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
 
-        # Update frame attributes if necessary
-        height = corners[1][1] - corners[0][1]
-        width = corners[1][0] - corners[0][0]
-        if height is not self.height:
-            self.height = height
-        if width is not self.width:
-            self.width = width
+        # Update frame attributes
+        self.height = self.queue[index].shape[0]
+        self.width = self.queue[index].shape[1]
+
+    def pyramid_down(self, iterations=1, index=0):
+        for i in range(iterations):
+            self.queue[index] = cv2.pyrDown(self.queue[index])
+
+        # Update frame attributes
+        self.height = self.queue[index].shape[0]
+        self.width = self.queue[index].shape[1]
 
     def frame_to_column(self, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
@@ -601,6 +605,7 @@ def process_extracted_frames(args, params):
                                          frame_queue.frame_to_load_next)
         frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
         frame_queue.crop_frame()
+        frame_queue.pyramid_down(iterations=1)
         frame_queue.frame_to_column()
 
         # Proceed only when enough frames are stored for motion estimation
