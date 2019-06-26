@@ -509,11 +509,12 @@ class FrameQueue:
                 elif coord_pair[0] == (0, 0):
                     edge_distance = min(coord_pair[1][0], coord_pair[1][1],
                                         self.width - coord_pair[1][1])
-                    chimney_distance = self.height - coord_pair[1][0]
+                    roi_value = self.roi_mask[int(coord_pair[1][0])] \
+                                             [int(coord_pair[1][1])]
 
                     if edge_distance <= 10:
                         counts["ENT_FRM"] += 1
-                    elif chimney_distance <= 10:
+                    elif roi_value == 255:
                         counts["ENT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
@@ -522,11 +523,12 @@ class FrameQueue:
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
                                         self.width - coord_pair[0][1])
-                    chimney_distance = self.height - coord_pair[0][0]
+                    roi_value = self.roi_mask[int(coord_pair[0][0])] \
+                                             [int(coord_pair[0][1])]
 
                     if edge_distance <= 10:
                         counts["EXT_FRM"] += 1
-                    elif chimney_distance <= 10:
+                    elif roi_value == 255:
                         counts["EXT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
