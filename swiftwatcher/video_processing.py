@@ -203,8 +203,9 @@ class FrameQueue:
             self.queue[index] = cv2.cvtColor(self.queue[index],
                                              cv2.COLOR_BGR2GRAY)
 
-    def crop_frame(self, corners, index=0):
+    def crop_frame(self, index=0):
         """Crop frame at specified index of FrameQueue."""
+        corners = self.crop_region
         try:
             self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
                                                   corners[0][0]:corners[1][0]]
@@ -599,7 +600,7 @@ def process_extracted_frames(args, params):
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
         frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
-        frame_queue.crop_frame(corners=params["corners"])
+        frame_queue.crop_frame()
         frame_queue.frame_to_column()
 
         # Proceed only when enough frames are stored for motion estimation
