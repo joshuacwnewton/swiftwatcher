@@ -20,9 +20,6 @@
 #
 # chimney-roi:
 # -TODO: Incorporate chimney ROI into counting criteria.
-#
-# resize-cropped-frame:
-# -TODO: Implement cv2.pyrDown to speed up RPCA.
 # =========================================================================== #
 
 
