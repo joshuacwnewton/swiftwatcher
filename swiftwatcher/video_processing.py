@@ -83,7 +83,7 @@ class FrameQueue:
         # Generate details for regions of interest in frames
         self.roi, self.crop_region = \
             generate_chimney_regions(args.chimney, 0.25)
-        self.frame_with_roi = self.chimney_roi_segmentation()
+        self.roi_mask = self.chimney_roi_segmentation()
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -117,15 +117,10 @@ class FrameQueue:
         frame_with_thr[self.roi[0][1]:self.roi[1][1],
                        self.roi[0][0]:self.roi[1][0]] = thr
 
-        cv2.imwrite("test1.png", frame_with_thr)
-
         frame_with_thr = self.crop_frame(frame=frame_with_thr)
-        cv2.imwrite("test2.png", frame_with_thr)
         frame_with_thr = self.pyramid_down(frame=frame_with_thr, iterations=1)
-        cv2.imwrite("test3.png", frame_with_thr)
         _, frame_with_thr = cv2.threshold(frame_with_thr, 0, 255,
                                           cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        cv2.imwrite("test4.png", frame_with_thr)
 
         return frame_with_thr
 
@@ -343,8 +338,7 @@ class FrameQueue:
         # Discard areas where 2x2 structuring element will not fit
         seg["grey_opening"] = \
             img.grey_opening(list(seg.values())[-1],
-                             size=params["gry_op_SE"]) \
-            .astype(seg[threshold_str].dtype)
+                             size=params["gry_op_SE"]).astype(np.uint8)
 
         # Segment using connected component labeling
         num_components, labeled_frame = eval(params["seg_func"])
@@ -355,6 +349,10 @@ class FrameQueue:
                 labeled_frame * int(255 / num_components)
         else:
             seg["connected_c_255"] = labeled_frame
+
+        seg["cc_with_roi"] = \
+            cv2.addWeighted(self.roi_mask, 0.25,
+                            list(seg.values())[-1].astype(np.uint8), 0.75, 0)
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -601,9 +599,9 @@ class FrameQueue:
         # Write text on image
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(match_comparison,
-                    'Frame {0} -- Exit, edge: {1} | Exit, chimn: {2} | '
-                    'False positive: {3}              '
-                    'Frame {4} -- Enter, edge: {5} | Enter, chimn: {6} | '
+                    'Frame{0} - Ext, edge: {1} | Ext, chimn: {2} | '
+                    'False positive: {3}    '
+                    'Frame{4} - Ent, edge: {5} | Ent, chimn: {6} | '
                     'False positive: {7}'.format(counts["FRM_NUM"] - 1,
                                                  counts["EXT_FRM"],
                                                  counts["EXT_CHM"],
@@ -612,11 +610,29 @@ class FrameQueue:
                                                  counts["ENT_FRM"],
                                                  counts["ENT_CHM"],
                                                  frame_err),
-                    (10, 350), font, 0.5, 196, 2)
+                    (10, (self.height*scale+50)-10), font, 1, 196, 2)
+
+        # Combine two ROI masks into single image.
+        roi_mask = cv2.resize(self.roi_mask,
+                           (round(self.roi_mask.shape[1] * scale),
+                            round(self.roi_mask.shape[0] * scale)),
+                           interpolation=cv2.INTER_AREA)
+        separator_v = np.zeros(shape=(self.height*scale, 1), dtype=np.uint8)
+        roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
+
+        # Adding horizontal bar to display frame information
+        bar = np.zeros(shape=(50, roi_masks.shape[1]), dtype=np.uint8)
+        roi_masks = np.vstack((roi_masks, bar))
+        roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
 
         # Apply color mapping
         match_comparison_color = cm.apply_custom_colormap(match_comparison,
                                                           cmap="tab20")
+
+        match_comparison_color = \
+            cv2.addWeighted(roi_stacked, 0.10,
+                            match_comparison_color, 0.90, 0)
+
 
         # Save image to folder
         self.save_frame_to_file(save_directory,
