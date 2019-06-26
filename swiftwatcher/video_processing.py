@@ -81,8 +81,9 @@ class FrameQueue:
         self.frame_to_load_next = 0
 
         # Generate details for regions of interest in frames
-        self.hotspot_region, self.crop_region = \
-            generate_chimney_regions(args.chimney, 0.15)
+        self.roi, self.crop_region = \
+            generate_chimney_regions(args.chimney, 0.25)
+        self.frame_with_roi = self.chimney_roi_segmentation()
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -94,6 +95,39 @@ class FrameQueue:
         self.queue_center = int((queue_size - 1) / 2)
         self.seg_queue = collections.deque([], self.queue_center)
         self.seg_properties = collections.deque([], self.queue_center)
+
+    def chimney_roi_segmentation(self):
+        """Generate a frame with the chimney's region-of-interest from the
+        specified chimney region."""
+
+        # Read first frame from video file, then reset index back to 0
+        success, frame = self.stream.read()
+        self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        # Apply processing stages to segment roi from cropped frame
+        cropped = frame[self.roi[0][1]:self.roi[1][1],
+                        self.roi[0][0]:self.roi[1][0]]
+        blur = cv2.medianBlur(cv2.medianBlur(cropped, 7), 7)
+        a, b, c = cv2.split(blur)
+        ret, thr = cv2.threshold(a, 0, 255,
+                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Add roi to empty image of the same size as the frame
+        frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        frame_with_thr[self.roi[0][1]:self.roi[1][1],
+                       self.roi[0][0]:self.roi[1][0]] = thr
+
+        cv2.imwrite("test1.png", frame_with_thr)
+
+        frame_with_thr = self.crop_frame(frame=frame_with_thr)
+        cv2.imwrite("test2.png", frame_with_thr)
+        frame_with_thr = self.pyramid_down(frame=frame_with_thr, iterations=1)
+        cv2.imwrite("test3.png", frame_with_thr)
+        _, frame_with_thr = cv2.threshold(frame_with_thr, 0, 255,
+                                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        cv2.imwrite("test4.png", frame_with_thr)
+
+        return frame_with_thr
 
     def load_frame_from_video(self):
         """Insert next frame from stream into left side (index 0) of queue."""
@@ -199,7 +233,7 @@ class FrameQueue:
 
     def convert_grayscale(self, frame=None, index=0, algorithm="cv2 default"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
-        if not frame:
+        if frame is None:
             frame = self.queue[index]
 
         if algorithm == "cv2 default":
@@ -209,7 +243,7 @@ class FrameQueue:
 
     def crop_frame(self, frame=None, index=0):
         """Crop frame at specified index of FrameQueue."""
-        if not frame:
+        if frame is None:
             frame = self.queue[index]
         corners = self.crop_region
 
@@ -226,7 +260,7 @@ class FrameQueue:
         return frame
 
     def pyramid_down(self, frame=None, iterations=1, index=0):
-        if not frame:
+        if frame is None:
             frame = self.queue[index]
 
         for i in range(iterations):
@@ -240,7 +274,7 @@ class FrameQueue:
 
     def frame_to_column(self, frame=None, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
-        if not frame:
+        if frame is None:
             frame = self.queue[index]
 
         frame = np.squeeze(np.reshape(frame, (self.width*self.height, 1)))
@@ -722,11 +756,12 @@ def generate_chimney_regions(bottom_corners, alpha):
     top = min(bottom_corners[0][1], bottom_corners[1][1])
     bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
-    hotspot_region = [(left, bottom - height), (left + width, bottom)]
     crop_region = [(left-height, top-3*height),
                    (right+height, bottom+height)]
+    roi_region = [(int(left - 0.15*height), int(bottom - height)),
+                  (int(left + width+0.15*height), int(bottom))]
 
-    return hotspot_region, crop_region
+    return roi_region, crop_region
 
 
 def ms_to_timestamp(total_ms):

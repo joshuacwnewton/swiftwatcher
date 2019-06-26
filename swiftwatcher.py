@@ -163,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/resize-frame-test/"
+                        default="tests/roi-testing/"
                         )
     parser.add_argument("-v",
                         "--visual",
