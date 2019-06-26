@@ -81,8 +81,9 @@ class FrameQueue:
         self.frame_to_load_next = 0
 
         # Generate details for regions of interest in frames
-        self.hotspot_region, self.crop_region = \
-            generate_chimney_regions(args.chimney, 0.15)
+        self.roi, self.crop_region = \
+            generate_chimney_regions(args.chimney, 0.25)
+        self.roi_mask = self.chimney_roi_segmentation()
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -94,6 +95,34 @@ class FrameQueue:
         self.queue_center = int((queue_size - 1) / 2)
         self.seg_queue = collections.deque([], self.queue_center)
         self.seg_properties = collections.deque([], self.queue_center)
+
+    def chimney_roi_segmentation(self):
+        """Generate a frame with the chimney's region-of-interest from the
+        specified chimney region."""
+
+        # Read first frame from video file, then reset index back to 0
+        success, frame = self.stream.read()
+        self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        # Apply processing stages to segment roi from cropped frame
+        cropped = frame[self.roi[0][1]:self.roi[1][1],
+                        self.roi[0][0]:self.roi[1][0]]
+        blur = cv2.medianBlur(cv2.medianBlur(cropped, 7), 7)
+        a, b, c = cv2.split(blur)
+        ret, thr = cv2.threshold(a, 0, 255,
+                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Add roi to empty image of the same size as the frame
+        frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        frame_with_thr[self.roi[0][1]:self.roi[1][1],
+                       self.roi[0][0]:self.roi[1][0]] = thr
+
+        frame_with_thr = self.crop_frame(frame=frame_with_thr)
+        frame_with_thr = self.pyramid_down(frame=frame_with_thr, iterations=1)
+        _, frame_with_thr = cv2.threshold(frame_with_thr, 0, 255,
+                                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        return frame_with_thr
 
     def load_frame_from_video(self):
         """Insert next frame from stream into left side (index 0) of queue."""
@@ -197,37 +226,55 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, index=0, algorithm="cv2 default"):
+    def convert_grayscale(self, frame=None, index=0, algorithm="cv2 default"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
-        if algorithm == "cv2 default":
-            self.queue[index] = cv2.cvtColor(self.queue[index],
-                                             cv2.COLOR_BGR2GRAY)
+        if frame is None:
+            frame = self.queue[index]
 
-    def crop_frame(self, index=0):
+        if algorithm == "cv2 default":
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        return frame
+
+    def crop_frame(self, frame=None, index=0):
         """Crop frame at specified index of FrameQueue."""
+        if frame is None:
+            frame = self.queue[index]
         corners = self.crop_region
+
         try:
-            self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
-                                                  corners[0][0]:corners[1][0]]
+            frame = frame[corners[0][1]:corners[1][1],
+                          corners[0][0]:corners[1][0]]
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
 
         # Update frame attributes
-        self.height = self.queue[index].shape[0]
-        self.width = self.queue[index].shape[1]
+        self.height = frame.shape[0]
+        self.width = frame.shape[1]
 
-    def pyramid_down(self, iterations=1, index=0):
+        return frame
+
+    def pyramid_down(self, frame=None, iterations=1, index=0):
+        if frame is None:
+            frame = self.queue[index]
+
         for i in range(iterations):
-            self.queue[index] = cv2.pyrDown(self.queue[index])
+            frame = cv2.pyrDown(frame)
 
         # Update frame attributes
-        self.height = self.queue[index].shape[0]
-        self.width = self.queue[index].shape[1]
+        self.height = frame.shape[0]
+        self.width = frame.shape[1]
 
-    def frame_to_column(self, index=0):
+        return frame
+
+    def frame_to_column(self, frame=None, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
-        self.queue[index] = np.squeeze(np.reshape(self.queue[index],
-                                                  (self.width*self.height, 1)))
+        if frame is None:
+            frame = self.queue[index]
+
+        frame = np.squeeze(np.reshape(frame, (self.width*self.height, 1)))
+
+        return frame
 
     def rpca(self, lmbda, tol, maxiter, darker, index=0):
         """Decompose set of images into corresponding low-rank and sparse
@@ -291,8 +338,7 @@ class FrameQueue:
         # Discard areas where 2x2 structuring element will not fit
         seg["grey_opening"] = \
             img.grey_opening(list(seg.values())[-1],
-                             size=params["gry_op_SE"]) \
-            .astype(seg[threshold_str].dtype)
+                             size=params["gry_op_SE"]).astype(np.uint8)
 
         # Segment using connected component labeling
         num_components, labeled_frame = eval(params["seg_func"])
@@ -303,6 +349,10 @@ class FrameQueue:
                 labeled_frame * int(255 / num_components)
         else:
             seg["connected_c_255"] = labeled_frame
+
+        seg["cc_with_roi"] = \
+            cv2.addWeighted(self.roi_mask, 0.25,
+                            list(seg.values())[-1].astype(np.uint8), 0.75, 0)
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -459,11 +509,12 @@ class FrameQueue:
                 elif coord_pair[0] == (0, 0):
                     edge_distance = min(coord_pair[1][0], coord_pair[1][1],
                                         self.width - coord_pair[1][1])
-                    chimney_distance = self.height - coord_pair[1][0]
+                    roi_value = self.roi_mask[int(coord_pair[1][0])] \
+                                             [int(coord_pair[1][1])]
 
                     if edge_distance <= 10:
                         counts["ENT_FRM"] += 1
-                    elif chimney_distance <= 10:
+                    elif roi_value == 255:
                         counts["ENT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
@@ -472,11 +523,12 @@ class FrameQueue:
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
                                         self.width - coord_pair[0][1])
-                    chimney_distance = self.height - coord_pair[0][0]
+                    roi_value = self.roi_mask[int(coord_pair[0][0])] \
+                                             [int(coord_pair[0][1])]
 
                     if edge_distance <= 10:
                         counts["EXT_FRM"] += 1
-                    elif chimney_distance <= 10:
+                    elif roi_value == 255:
                         counts["EXT_CHM"] += 1
                     else:
                         counts["SEG_ERR"] += 1
@@ -549,9 +601,9 @@ class FrameQueue:
         # Write text on image
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(match_comparison,
-                    'Frame {0} -- Exit, edge: {1} | Exit, chimn: {2} | '
-                    'False positive: {3}              '
-                    'Frame {4} -- Enter, edge: {5} | Enter, chimn: {6} | '
+                    'Frame{0} - Ext, edge: {1} | Ext, chimn: {2} | '
+                    'False positive: {3}    '
+                    'Frame{4} - Ent, edge: {5} | Ent, chimn: {6} | '
                     'False positive: {7}'.format(counts["FRM_NUM"] - 1,
                                                  counts["EXT_FRM"],
                                                  counts["EXT_CHM"],
@@ -560,11 +612,29 @@ class FrameQueue:
                                                  counts["ENT_FRM"],
                                                  counts["ENT_CHM"],
                                                  frame_err),
-                    (10, 350), font, 0.5, 196, 2)
+                    (10, (self.height*scale+50)-10), font, 1, 196, 2)
+
+        # Combine two ROI masks into single image.
+        roi_mask = cv2.resize(self.roi_mask,
+                           (round(self.roi_mask.shape[1] * scale),
+                            round(self.roi_mask.shape[0] * scale)),
+                           interpolation=cv2.INTER_AREA)
+        separator_v = np.zeros(shape=(self.height*scale, 1), dtype=np.uint8)
+        roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
+
+        # Adding horizontal bar to display frame information
+        bar = np.zeros(shape=(50, roi_masks.shape[1]), dtype=np.uint8)
+        roi_masks = np.vstack((roi_masks, bar))
+        roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
 
         # Apply color mapping
         match_comparison_color = cm.apply_custom_colormap(match_comparison,
                                                           cmap="tab20")
+
+        match_comparison_color = \
+            cv2.addWeighted(roi_stacked, 0.10,
+                            match_comparison_color, 0.90, 0)
+
 
         # Save image to folder
         self.save_frame_to_file(save_directory,
@@ -603,10 +673,11 @@ def process_extracted_frames(args, params):
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
-        frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
-        frame_queue.crop_frame()
-        frame_queue.pyramid_down(iterations=1)
-        frame_queue.frame_to_column()
+        frame_queue.queue[0] = \
+            frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
+        frame_queue.queue[0] = frame_queue.crop_frame()
+        frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
+        frame_queue.queue[0] = frame_queue.frame_to_column()
 
         # Proceed only when enough frames are stored for motion estimation
         if frame_queue.frames_read > frame_queue.queue_center:
@@ -693,25 +764,6 @@ def extract_frames(args, queue_size=1, save_directory=None):
           .format(frame_queue.frames_read))
 
 
-def chimney_hotspot_segmentation(frame, region):
-    """Generate a frame with the chimney's 'hotspot' from only the two bottom
-    corners of the chimney region."""
-
-    # Usage: hotspot = vid.chimney_hotspot_segmentation(frame, hotspot_region)
-
-    # Apply processing stages to segment hotspot from cropped chimney/sky image
-    cropped = frame[region[0][1]:region[1][1], region[0][0]:region[1][0]]
-    blur = cv2.medianBlur(cv2.medianBlur(cropped, 11), 11)
-    a, b, c = cv2.split(blur)
-    ret, thr = cv2.threshold(a, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Add hotspot to empty image of the same size as the frame
-    frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
-    frame_with_thr[region[0][1]:region[1][1], region[0][0]:region[1][0]] = thr
-
-    return frame_with_thr
-
-
 def generate_chimney_regions(bottom_corners, alpha):
     width = bottom_corners[1][0] - bottom_corners[0][0]
     height = round(alpha*width)
@@ -722,11 +774,12 @@ def generate_chimney_regions(bottom_corners, alpha):
     top = min(bottom_corners[0][1], bottom_corners[1][1])
     bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
-    hotspot_region = [(left, bottom - height), (left + width, bottom)]
     crop_region = [(left-height, top-3*height),
                    (right+height, bottom+height)]
+    roi_region = [(int(left - 0.15*height), int(bottom - height)),
+                  (int(left + width+0.15*height), int(bottom))]
 
-    return hotspot_region, crop_region
+    return roi_region, crop_region
 
 
 def ms_to_timestamp(total_ms):

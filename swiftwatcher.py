@@ -81,7 +81,7 @@ def set_parameters():
 
         # Thresholding
         "thr_type": 3,     # value of cv2.THRESH_TOZERO option
-        "thr_value": 35,
+        "thr_value": 10,
 
         # Greyscale processing
         "gry_op_SE": (2, 2),
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/resize-frame-test/"
+                        default="tests/roi-testing/"
                         )
     parser.add_argument("-v",
                         "--visual",
