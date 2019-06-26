@@ -18,9 +18,6 @@
 # -TODO: Add ground truth counts to segmentation vis.
 # -TODO: Add ground truth information to matching visualization.
 #
-# crop-from-corners:
-# -TODO: Dummy to-do for merge commit.
-#
 # chimney-roi:
 # -TODO: Incorporate chimney ROI into counting criteria.
 #
