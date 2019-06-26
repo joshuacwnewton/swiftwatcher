@@ -197,37 +197,55 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, index=0, algorithm="cv2 default"):
+    def convert_grayscale(self, frame=None, index=0, algorithm="cv2 default"):
         """Convert to grayscale a frame at specified index of FrameQueue"""
-        if algorithm == "cv2 default":
-            self.queue[index] = cv2.cvtColor(self.queue[index],
-                                             cv2.COLOR_BGR2GRAY)
+        if not frame:
+            frame = self.queue[index]
 
-    def crop_frame(self, index=0):
+        if algorithm == "cv2 default":
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        return frame
+
+    def crop_frame(self, frame=None, index=0):
         """Crop frame at specified index of FrameQueue."""
+        if not frame:
+            frame = self.queue[index]
         corners = self.crop_region
+
         try:
-            self.queue[index] = self.queue[index][corners[0][1]:corners[1][1],
-                                                  corners[0][0]:corners[1][0]]
+            frame = frame[corners[0][1]:corners[1][1],
+                          corners[0][0]:corners[1][0]]
         except Exception as e:
             print("[!] Frame cropping failed due to: {0}".format(str(e)))
 
         # Update frame attributes
-        self.height = self.queue[index].shape[0]
-        self.width = self.queue[index].shape[1]
+        self.height = frame.shape[0]
+        self.width = frame.shape[1]
 
-    def pyramid_down(self, iterations=1, index=0):
+        return frame
+
+    def pyramid_down(self, frame=None, iterations=1, index=0):
+        if not frame:
+            frame = self.queue[index]
+
         for i in range(iterations):
-            self.queue[index] = cv2.pyrDown(self.queue[index])
+            frame = cv2.pyrDown(frame)
 
         # Update frame attributes
-        self.height = self.queue[index].shape[0]
-        self.width = self.queue[index].shape[1]
+        self.height = frame.shape[0]
+        self.width = frame.shape[1]
 
-    def frame_to_column(self, index=0):
+        return frame
+
+    def frame_to_column(self, frame=None, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
-        self.queue[index] = np.squeeze(np.reshape(self.queue[index],
-                                                  (self.width*self.height, 1)))
+        if not frame:
+            frame = self.queue[index]
+
+        frame = np.squeeze(np.reshape(frame, (self.width*self.height, 1)))
+
+        return frame
 
     def rpca(self, lmbda, tol, maxiter, darker, index=0):
         """Decompose set of images into corresponding low-rank and sparse
@@ -603,10 +621,11 @@ def process_extracted_frames(args, params):
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
-        frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
-        frame_queue.crop_frame()
-        frame_queue.pyramid_down(iterations=1)
-        frame_queue.frame_to_column()
+        frame_queue.queue[0] = \
+            frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
+        frame_queue.queue[0] = frame_queue.crop_frame()
+        frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
+        frame_queue.queue[0] = frame_queue.frame_to_column()
 
         # Proceed only when enough frames are stored for motion estimation
         if frame_queue.frames_read > frame_queue.queue_center:
@@ -691,25 +710,6 @@ def extract_frames(args, queue_size=1, save_directory=None):
     print("[========================================================]")
     print("[-] Extraction complete. {} total frames extracted."
           .format(frame_queue.frames_read))
-
-
-def chimney_hotspot_segmentation(frame, region):
-    """Generate a frame with the chimney's 'hotspot' from only the two bottom
-    corners of the chimney region."""
-
-    # Usage: hotspot = vid.chimney_hotspot_segmentation(frame, hotspot_region)
-
-    # Apply processing stages to segment hotspot from cropped chimney/sky image
-    cropped = frame[region[0][1]:region[1][1], region[0][0]:region[1][0]]
-    blur = cv2.medianBlur(cv2.medianBlur(cropped, 11), 11)
-    a, b, c = cv2.split(blur)
-    ret, thr = cv2.threshold(a, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Add hotspot to empty image of the same size as the frame
-    frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
-    frame_with_thr[region[0][1]:region[1][1], region[0][0]:region[1][0]] = thr
-
-    return frame_with_thr
 
 
 def generate_chimney_regions(bottom_corners, alpha):
