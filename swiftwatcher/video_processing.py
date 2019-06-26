@@ -82,7 +82,7 @@ class FrameQueue:
 
         # Generate details for regions of interest in frames
         self.hotspot_region, self.crop_region = \
-            generate_chimney_regions(args.chimney, 0.15)
+            generate_chimney_regions(args.chimney, 0.10)
 
         # Initialize primary queue for unaltered frames
         self.queue = collections.deque([], queue_size)
@@ -710,14 +710,16 @@ def chimney_hotspot_segmentation(frame, region):
 def generate_chimney_regions(bottom_corners, alpha):
     width = bottom_corners[1][0] - bottom_corners[0][0]
     height = round(alpha*width)
-    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+
+    # Outside coordinates from provided corners
     left = min(bottom_corners[0][0], bottom_corners[1][0])
+    right = max(bottom_corners[0][0], bottom_corners[1][0])
+    top = min(bottom_corners[0][1], bottom_corners[1][1])
+    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
     hotspot_region = [(left, bottom - height), (left + width, bottom)]
-    crop_region = [(bottom_corners[0][0] - height,
-                    bottom_corners[0][1] - 2*height),
-                   (bottom_corners[1][0] + height,
-                    bottom_corners[1][1] + height)]
+    crop_region = [(left-height, top-3*height),
+                   (right+height, bottom+height)]
 
     return hotspot_region, crop_region
 

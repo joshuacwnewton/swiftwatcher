@@ -159,7 +159,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 50])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument("-n",
                         "--chimney",
                         help="Bottom corners which define chimney edge",
-                        default=[(748, 691), (921, 683)]
+                        default=[(798, 449), (1150, 435)]
                         )
     arguments = parser.parse_args()
 
