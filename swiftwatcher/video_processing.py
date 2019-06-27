@@ -350,10 +350,6 @@ class FrameQueue:
         else:
             seg["connected_c_255"] = labeled_frame
 
-        seg["cc_with_roi"] = \
-            cv2.addWeighted(self.roi_mask, 0.25,
-                            list(seg.values())[-1].astype(np.uint8), 0.75, 0)
-
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
             self.seg_queue.appendleft(np.zeros((self.height, self.width))
@@ -368,6 +364,11 @@ class FrameQueue:
             self.segment_visualization(seg, save_directory, folder_name)
 
     def segment_visualization(self, seg, save_directory, folder_name):
+        # Add roi mask to each stage for visualization.
+        for keys, key_values in seg.items():
+            seg[keys] = cv2.addWeighted(self.roi_mask, 0.25,
+                                        key_values.astype(np.uint8), 0.75, 0)
+
         # Add filler images if not enough stages to fill gaps
         mod3remainder = len(seg) % 3
         if mod3remainder > 0:
@@ -774,10 +775,10 @@ def generate_chimney_regions(bottom_corners, alpha):
     top = min(bottom_corners[0][1], bottom_corners[1][1])
     bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
-    crop_region = [(left-height, top-3*height),
-                   (right+height, bottom+height)]
-    roi_region = [(int(left - 0.15*height), int(bottom - height)),
-                  (int(left + width+0.15*height), int(bottom))]
+    crop_region = [(left - height, top - 3*height),
+                   (right + height, bottom + height)]
+    roi_region = [(int(left - 0.05*width), int(bottom - height)),
+                  (int(left + 1.05*width), int(bottom))]
 
     return roi_region, crop_region
 
