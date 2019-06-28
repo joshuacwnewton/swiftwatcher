@@ -17,6 +17,12 @@
 # algorithm-visualization:
 # -TODO: Add ground truth counts to segmentation vis.
 # -TODO: Add ground truth information to matching visualization.
+#
+# transition-to-cnl-data:
+# -TODO: Rewrite ground truth sections to accommodate for new GT formatting
+# -TODO: Modify "results" visualizations to show ENT_CHM instead of SEGMNTS
+# -TODO: Select video duration to focus on for quick etsting
+# -TODO: Run full test overnight
 # =========================================================================== #
 
 
