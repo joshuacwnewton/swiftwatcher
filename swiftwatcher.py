@@ -21,8 +21,13 @@
 # transition-to-cnl-data:
 # -TODO: Rewrite ground truth sections to accommodate for new GT formatting
 # -TODO: Modify "results" visualizations to show ENT_CHM instead of SEGMNTS
-# -TODO: Select video duration to focus on for quick etsting
+# -TODO: Select video duration to focus on for quick testing
 # -TODO: Run full test overnight
+
+# standardize-timestamps
+# -TODO: Analyze code to see which aspects are depedent on "custom timstamps"
+# -TODO: Look into differences between pandas DateTimeIndex and Python TSs
+# -TODO: Transition code from custom timestamps to standardized timestamps
 # =========================================================================== #
 
 
