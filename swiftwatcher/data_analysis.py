@@ -8,8 +8,48 @@ import pandas as pd
 
 # Data visualization libraries
 import matplotlib.pyplot as plt
+
+# Needed to fetch video parameters for generating empty groundtruth file
+from swiftwatcher.video_processing import FrameQueue
 # import seaborn
 # seaborn.set()
+
+
+def empty_gt_generator(args):
+    """Helper function for generating an empty file to store manual
+    ground truth annotations. Ensures formatting is consistent."""
+
+    # Create save directory if it does not already exist
+    gt_dir = args.groundtruth.split("/")[0]
+    save_directory = args.default_dir+gt_dir+"/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    # Create Series of DateTimeIndex indices (i.e. frame timestamps)
+    frame_queue = FrameQueue(args)
+    nano = (1/frame_queue.fps) * 1e9
+    frame_queue.stream.release()  # Not needed once fps is extracted
+    num_timestamps = args.load[1] - args.load[0]
+    duration = (num_timestamps - 1) * nano
+    indices = pd.date_range(start=args.timestamp,
+                            end=(pd.Timestamp(args.timestamp) +
+                                 pd.Timedelta(duration, 'ns')),
+                            periods=num_timestamps)
+
+    # Create a Series of frame numbers which correspond to the timestamps
+    framenumbers = np.array(range(num_timestamps))
+
+    # Create an empty DataFrame for ground truth annotations to be put into
+    df_empty = pd.DataFrame(framenumbers, index=indices)
+    df_empty.index.rename("TMSTAMP", inplace=True)
+    df_empty.columns = ["FRM_NUM"]
+
+    # Save for editing in Excel/LibreOffice Calc/etc.
+    df_empty.to_csv(save_directory+"empty-groundtruth.csv")
 
 
 def save_test_config(args, params):
