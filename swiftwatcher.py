@@ -145,7 +145,7 @@ if __name__ == "__main__":
                         "--extract",
                         help="Extract frames to HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-p",
                         "--process",

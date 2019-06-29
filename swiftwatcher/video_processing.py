@@ -98,7 +98,8 @@ class FrameQueue:
 
     def chimney_roi_segmentation(self):
         """Generate a frame with the chimney's region-of-interest from the
-        specified chimney region."""
+        specified chimney region. Called during __init__ and stored as a
+        FrameQueue property."""
 
         # Read first frame from video file, then reset index back to 0
         success, frame = self.stream.read()
@@ -151,7 +152,7 @@ class FrameQueue:
         """Insert frame from file into left side (index 0) of queue."""
         # Update frame attributes
         self.framenumbers.appendleft(frame_number)
-        timestamp = framenumber_to_timestamp(frame_number, self.fps)
+        timestamp = self.framenumber_to_timestamp(frame_number, self.fps)
         self.timestamps.appendleft(timestamp)
 
         # Set appropriate directory
@@ -645,6 +646,75 @@ class FrameQueue:
                                 frame_folder="/visualizations/matching",
                                 scale=1)
 
+    def ms_to_timestamp(self, total_ms):
+        """Helper function to convert millisecond value into timestamp."""
+        # cv2's VideoCapture class provides the position of the video in
+        # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
+        # think of video in terms of hours, minutes, and seconds, it's helpful to
+        # be able to convert back and forth.
+        total_s = int(total_ms / 1000)
+        total_m = int(total_s / 60)
+        total_h = int(total_m / 60)
+
+        ns = round(1000000 * (total_ms % 1000))
+        s = round(total_s % 60)
+        m = round(total_m % 60)
+        h = round(total_h % 24)
+
+        timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:09d}".format(h, m, s, ns)
+
+        return timestamp
+
+    def timestamp_to_ms(self, timestamp):
+        """Helper function to convert timestamps to millisecond totals."""
+        # cv2's VideoCapture class provides the position of the video in
+        # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
+        # think of video in terms of hours, minutes, and seconds, it's helpful to
+        # be able to convert back and forth.
+        time = timestamp.split(":")
+        total_ms = (float(time[0]) * 60 * 60 * 1000 +
+                    float(time[1]) * 60 * 1000 +
+                    float(time[2]) * 1000 +
+                    float(time[3]))
+
+        return total_ms
+
+    def framenumber_to_timestamp(self, args, frame_number):
+        """Helper function to convert an amount of frames into a timestamp."""
+        # cv2's VideoCapture class provides a frame count property
+        # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+        # can be easier to think of video in terms of hours, minutes, and seconds,
+        # it's helpful to be able to convert back and forth.
+        total_ms = (frame_number / self.fps) * 1000
+        total_s = int(total_ms / 1000)
+        total_m = int(total_s / 60)
+        total_h = int(total_m / 60)
+
+        ns = round(1000000 * (total_ms % 1000))
+        s = round(total_s % 60)
+        m = round(total_m % 60)
+        h = round(total_h % 24)
+
+        timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:09d}".format(h, m, s, ns)
+
+        datetime_ts = pd.to_datetime(total_ms, unit='ms')
+
+        return timestamp
+
+    def timestamp_to_framenumber(self, args, timestamp):
+        """Helper function to convert timestamp into an amount of frames."""
+        # cv2's VideoCapture class provides a frame count property
+        # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+        # can be easier to think of video in terms of hours, minutes, and seconds,
+        # it's helpful to be able to convert back and forth.
+        time = timestamp.split(":")
+        seconds = (float(time[0]) * 60 * 60 +
+                   float(time[1]) * 60 +
+                   float(time[2]) +
+                   float(time[3]) / 1000)
+        frame_number = int(round(seconds * self.fps))
+        return frame_number
+
 
 def process_extracted_frames(args, params):
     """Function which uses class methods to analyse a sequence of previously
@@ -704,14 +774,9 @@ def process_extracted_frames(args, params):
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
     # Generate pandas "DateTimeIndex" indices from custom "TMSTAMP" formatting
-    # TODO: Possible change (big) for removing custom formatting?
-    # I made my own timestamp formatting before I learned that standardized
-    # timestamps existed. There's a bit of a rift here but I'm not sure how
-    # high-priority refactoring the timestamp code is at this point. It would
-    # be a pretty large undertaking.
     num_timestamps = len(count_estimate)
-    timedelta = int(timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
-                    timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
+    timedelta = int(frame_queue.timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
+                    frame_queue.timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
     duration = timedelta * (num_timestamps - 1)
     indices = pd.date_range(start=args.timestamp,
                             end=(pd.Timestamp(args.timestamp) +
@@ -743,7 +808,7 @@ def extract_frames(args, queue_size=1, save_directory=None):
     print("[========================================================]")
     print("[*] Reading frames... (This may take a while!)")
 
-    frame_queue = FrameQueue(args.video_dir, args.filename, queue_size)
+    frame_queue = FrameQueue(args, queue_size)
     while frame_queue.frames_read < frame_queue.src_framecount:
         # Attempt to read frame from video into queue object
         success = frame_queue.load_frame_from_video()
@@ -783,62 +848,4 @@ def generate_chimney_regions(bottom_corners, alpha):
     return roi_region, crop_region
 
 
-def ms_to_timestamp(total_ms):
-    """Helper function to convert millisecond value into timestamp."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    total_s = int(total_ms/1000)
-    total_m = int(total_s/60)
-    total_h = int(total_m/60)
 
-    ns = round(1000000*(total_ms % 1000))
-    s = round(total_s % 60)
-    m = round(total_m % 60)
-    h = round(total_h % 24)
-
-    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:09d}".format(h, m, s, ns)
-    return timestamp
-
-
-def timestamp_to_ms(timestamp):
-    """Helper function to convert timestamps to millisecond totals."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    time = timestamp.split(":")
-    total_ms = (float(time[0])*60*60*1000 +
-                float(time[1])*60*1000 +
-                float(time[2])*1000 +
-                float(time[3]))
-
-    return total_ms
-
-
-def framenumber_to_timestamp(frame_number, fps):
-    """Helper function to convert an amount of frames into a timestamp."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    milliseconds = (frame_number / fps)*1000
-    timestamp = ms_to_timestamp(milliseconds)
-
-    return timestamp
-
-
-def timestamp_to_framenumber(timestamp, fps):
-    """Helper function to convert timestamp into an amount of frames."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    time = timestamp.split(":")
-    seconds = (float(time[0])*60*60 +
-               float(time[1])*60 +
-               float(time[2]) +
-               float(time[3])/1000)
-    frame_number = int(round(seconds * fps))
-    return frame_number
