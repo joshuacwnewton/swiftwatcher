@@ -57,11 +57,12 @@ def main(args, params):
         # It's called "df_estimation" because save_test_results converts from
         # dataframe to ndarray for parsing. When save_test_results() gets
         # rewritten to use dataframes, the "df_" prefix should be dropped
-    else:
-        df_estimation = pd.read_csv(args.default_dir +
-                                    args.custom_dir +
-                                    "results/estimation_full.csv",
-                                    index_col="TMSTAMP")
+    # else:
+        # df_estimation = pd.read_csv(args.default_dir +
+        #                             args.custom_dir +
+        #                             "results/estimation_full.csv",
+        #                             index_col="TMSTAMP",
+        #                             parse_dates=True)
 
     if args.analyse:
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
@@ -69,7 +70,7 @@ def main(args, params):
 
         data.save_test_results(args, df_estimation, df_groundtruth)
 
-        data.plot_segmentation_results(args, df_estimation, df_groundtruth)
+        # data.plot_segmentation_results(args, df_estimation, df_groundtruth)
 
 
 def set_parameters():
@@ -150,7 +151,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
