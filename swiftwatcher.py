@@ -125,7 +125,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument("-t",
                         "--timestamp",
-                        help="In-frame timestamp for start of video",
+                        help="Specified starting timestamp for video",
                         default="2019-06-14 00:00:00.000000000"
                         )
     # Ground truth "groundtruth.csv" only valid for ch04_20170518205849.mp4
@@ -146,7 +146,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -162,7 +162,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 50])
                         )
     parser.add_argument("-c",
                         "--custom_dir",

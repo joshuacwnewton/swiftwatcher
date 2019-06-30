@@ -69,6 +69,7 @@ class FrameQueue:
                                       (cv2.CAP_PROP_FRAME_COUNT))
             self.src_height = int(self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.src_starttime = pd.Timestamp(args.timestamp)
 
         # Initialize user-defined frame/video attributes
         self.height = self.src_height  # Separate b/c dimensions may change
@@ -98,7 +99,8 @@ class FrameQueue:
 
     def chimney_roi_segmentation(self):
         """Generate a frame with the chimney's region-of-interest from the
-        specified chimney region."""
+        specified chimney region. Called during __init__ and stored as a
+        FrameQueue property."""
 
         # Read first frame from video file, then reset index back to 0
         success, frame = self.stream.read()
@@ -134,7 +136,8 @@ class FrameQueue:
         self.framenumbers.appendleft(
             int(self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
         self.timestamps.appendleft(
-            (ms_to_timestamp(self.stream.get(cv2.CAP_PROP_POS_MSEC))))
+            self.framenumber_to_timestamp(
+                self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
         success, frame = self.stream.read()
         if success:
             self.queue.appendleft(np.array(frame))
@@ -151,22 +154,22 @@ class FrameQueue:
         """Insert frame from file into left side (index 0) of queue."""
         # Update frame attributes
         self.framenumbers.appendleft(frame_number)
-        timestamp = framenumber_to_timestamp(frame_number, self.fps)
+        timestamp = self.framenumber_to_timestamp(frame_number)
         self.timestamps.appendleft(timestamp)
 
         # Set appropriate directory
         if not folder_name:
-            time = self.timestamps[0].split(":")
-            save_directory = base_save_directory+"/frames/"+time[0]+":"+time[1]
+            t = self.timestamps[0].time()
+            save_directory = (base_save_directory+"frames/{0:02d}:{1:02d}"
+                              .format(t.hour, t.minute))
         else:
             save_directory = base_save_directory+"/"+folder_name
 
         # Load frame from file ([:11] -> limit precision to get things to work
         # because I increased precision after extracting frames)
         # TODO: Remove this precision limit when frames are re-extracted
-        file_paths = glob.glob("{0}/frame{1}_{2}*".format(save_directory,
-                                                          frame_number,
-                                                          timestamp[:11]))
+        file_paths = glob.glob("{0}/frame{1}_*".format(save_directory,
+                                                       frame_number))
         frame = cv2.imread(file_paths[0])
         self.queue.appendleft(np.array(frame))
 
@@ -180,7 +183,7 @@ class FrameQueue:
 
     def save_frame_to_file(self, base_save_directory, frame=None, index=0,
                            scale=1, single_folder=False,
-                           base_folder="", frame_folder="/frames",
+                           base_folder="", frame_folder="frames/",
                            file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
         provided, frame will be pulled from frame_queue at specified index."""
@@ -192,8 +195,9 @@ class FrameQueue:
         if single_folder:
             save_directory = base_save_directory
         else:
-            time = self.timestamps[index].split(":")
-            save_directory = base_save_directory+"/"+time[0]+":"+time[1]
+            t = self.timestamps[0].time()
+            save_directory = (base_save_directory+"{0:02d}:{1:02d}"
+                              .format(t.hour, t.minute))
 
         # Create save directory if it does not already exist
         if not os.path.isdir(save_directory):
@@ -220,7 +224,7 @@ class FrameQueue:
             cv2.imwrite("{0}/{1}frame{2}_{3}{4}.jpg"
                         .format(save_directory, file_prefix,
                                 self.framenumbers[index],
-                                self.timestamps[index],
+                                self.timestamps[index].time(),
                                 file_suffix),
                         frame)
         except Exception as e:
@@ -416,7 +420,7 @@ class FrameQueue:
                                 frame=rows[0],
                                 index=self.queue_center,
                                 base_folder=folder_name,
-                                frame_folder="/visualizations/segmentation")
+                                frame_folder="visualizations/segmentation/")
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
@@ -642,8 +646,34 @@ class FrameQueue:
                                 frame=match_comparison_color,
                                 index=self.queue_center,
                                 base_folder=folder_name,
-                                frame_folder="/visualizations/matching",
+                                frame_folder="visualizations/matching/",
                                 scale=1)
+
+    def framenumber_to_timestamp(self, frame_number):
+        """Helper function to convert an amount of frames into a timestamp."""
+        # cv2's VideoCapture class provides a frame count property
+        # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+        # can be easier to think of video in terms of hours, minutes, and seconds,
+        # it's helpful to be able to convert back and forth.
+        total_s = frame_number / self.fps
+        timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
+
+        return timestamp
+
+    def timestamp_to_framenumber(self, timestamp):
+        """Helper function to convert timestamp into an amount of frames."""
+        # cv2's VideoCapture class provides a frame count property
+        # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
+        # can be easier to think of video in terms of hours, minutes, and seconds,
+        # it's helpful to be able to convert back and forth.
+        t = timestamp.time()
+        total_s = (t.hour * 60 * 60 +
+                   t.minute * 60 +
+                   t.second +
+                   t.microsecond / 1e6)
+        frame_number = int(round(total_s * self.fps))
+
+        return frame_number
 
 
 def process_extracted_frames(args, params):
@@ -703,30 +733,17 @@ def process_extracted_frames(args, params):
     print("[-] Analysis complete. {} total frames used in counting."
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
-    # Generate pandas "DateTimeIndex" indices from custom "TMSTAMP" formatting
-    # TODO: Possible change (big) for removing custom formatting?
-    # I made my own timestamp formatting before I learned that standardized
-    # timestamps existed. There's a bit of a rift here but I'm not sure how
-    # high-priority refactoring the timestamp code is at this point. It would
-    # be a pretty large undertaking.
-    num_timestamps = len(count_estimate)
-    timedelta = int(timestamp_to_ms(count_estimate[1]["TMSTAMP"]) -
-                    timestamp_to_ms(count_estimate[0]["TMSTAMP"]))
-    duration = timedelta * (num_timestamps - 1)
-    indices = pd.date_range(start=args.timestamp,
-                            end=(pd.Timestamp(args.timestamp) +
-                                 pd.Timedelta(duration, 'ns')),
-                            periods=num_timestamps)
-
     # Specifying exactly which columns should be used for DataFrame
-    columns = ["FRM_NUM", "SEGMNTS", "MATCHES",
+    columns = ["TMSTAMP", "FRM_NUM",
+               "SEGMNTS", "MATCHES",
                "ENT_CHM", "ENT_FRM", "ENT_AMB",
                "EXT_CHM", "EXT_FRM", "EXT_AMB",
                "OUTLIER"]
 
-    # Convert list of dictionaries into Pandas DataFrame
-    df_estimation = pd.DataFrame(count_estimate, indices, columns)
-    df_estimation.index.rename("TMSTAMP", inplace=True)
+    # Convert dictionary of lists into DataFrame
+    df_estimation = pd.DataFrame(count_estimate, columns=columns)
+    df_estimation.set_index("TMSTAMP", inplace=True)
+    df_estimation.index = pd.to_datetime(df_estimation.index)
 
     return df_estimation
 
@@ -743,7 +760,7 @@ def extract_frames(args, queue_size=1, save_directory=None):
     print("[========================================================]")
     print("[*] Reading frames... (This may take a while!)")
 
-    frame_queue = FrameQueue(args.video_dir, args.filename, queue_size)
+    frame_queue = FrameQueue(args, queue_size)
     while frame_queue.frames_read < frame_queue.src_framecount:
         # Attempt to read frame from video into queue object
         success = frame_queue.load_frame_from_video()
@@ -783,62 +800,4 @@ def generate_chimney_regions(bottom_corners, alpha):
     return roi_region, crop_region
 
 
-def ms_to_timestamp(total_ms):
-    """Helper function to convert millisecond value into timestamp."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    total_s = int(total_ms/1000)
-    total_m = int(total_s/60)
-    total_h = int(total_m/60)
 
-    ns = round(1000000*(total_ms % 1000))
-    s = round(total_s % 60)
-    m = round(total_m % 60)
-    h = round(total_h % 24)
-
-    timestamp = "{0:02d}:{1:02d}:{2:02d}:{3:09d}".format(h, m, s, ns)
-    return timestamp
-
-
-def timestamp_to_ms(timestamp):
-    """Helper function to convert timestamps to millisecond totals."""
-    # cv2's VideoCapture class provides the position of the video in
-    # milliseconds (cv2.CAP_PROP_POS_MSEC). However, as it can be easier to
-    # think of video in terms of hours, minutes, and seconds, it's helpful to
-    # be able to convert back and forth.
-    time = timestamp.split(":")
-    total_ms = (float(time[0])*60*60*1000 +
-                float(time[1])*60*1000 +
-                float(time[2])*1000 +
-                float(time[3]))
-
-    return total_ms
-
-
-def framenumber_to_timestamp(frame_number, fps):
-    """Helper function to convert an amount of frames into a timestamp."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    milliseconds = (frame_number / fps)*1000
-    timestamp = ms_to_timestamp(milliseconds)
-
-    return timestamp
-
-
-def timestamp_to_framenumber(timestamp, fps):
-    """Helper function to convert timestamp into an amount of frames."""
-    # cv2's VideoCapture class provides a frame count property
-    # (cv2.CAP_PROP_FRAME_COUNT) but not a duration property. However, as it
-    # can be easier to think of video in terms of hours, minutes, and seconds,
-    # it's helpful to be able to convert back and forth.
-    time = timestamp.split(":")
-    seconds = (float(time[0])*60*60 +
-               float(time[1])*60 +
-               float(time[2]) +
-               float(time[3])/1000)
-    frame_number = int(round(seconds * fps))
-    return frame_number
