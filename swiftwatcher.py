@@ -55,11 +55,12 @@ def main(args, params):
 
     if args.analyse:
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
-                                     index_col="TMSTAMP")
+                                     index_col="TMSTAMP",
+                                     parse_dates=True)
 
         if 'df_estimation' in locals():
             data.save_test_results(args, df_groundtruth, df_estimation)
-            data.plot_segmentation_results(args, df_estimation, df_groundtruth)
+            # data.plot_segmentation_results(args, df_estimation, df_groundtruth)
 
 
 def set_parameters():
@@ -140,7 +141,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -156,7 +157,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 50])
+                        default=([56000, 56200])  # [54300, 56300]
                         )
     parser.add_argument("-c",
                         "--custom_dir",
