@@ -72,7 +72,7 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def save_test_results(args, df_estimation, df_groundtruth):
+def save_test_results(args, df_groundtruth, df_estimation):
     """Save the bird count estimations from image processing to csv files.
 
     Count labels:
@@ -101,55 +101,48 @@ def save_test_results(args, df_estimation, df_groundtruth):
     print("[========================================================]")
     print("[*] Saving results of test to files.")
 
-    # Fetching values from DataFrame
-    count_estimate = df_estimation.values
-    ground_truth = df_groundtruth.values
-    num_counts = count_estimate.shape[0]
+    # Round DateTimeArray indices to microsecond precision
+    df_groundtruth.index = df_groundtruth.index.round('us')
+    df_estimation.index = df_estimation.index.round('us')
+
+    # Keep only the estimated counts which are present in groundtruth (columns)
+    df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
+    # Keep only the groundtruth counts which are present in estimates (rows)
+    df_groundtruth = df_groundtruth.loc[df_estimation.index]
 
     # Using columns 1:10 so that the "frame number" column is excluded
-    error_full = count_estimate[:, 1:10] - ground_truth[0:num_counts, 1:10]
-
-    # Calculating when counts were overestimated
-    error_over = np.copy(error_full)
-    error_over[error_over < 0] = 0
-
-    # Calculating when counts were underestimated
-    error_under = np.copy(error_full)
-    error_under[error_under > 0] = 0
+    error_full = df_estimation.values[:, 1:] - df_groundtruth.values[:, 1:]
+    correct = np.minimum(df_estimation.values[:, 1:],
+                         df_groundtruth.values[:, 1:])
 
     # Summarizing the performance of the algorithm across all frames
     results_summary = {
-        "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
-        "count_estimated": np.sum(count_estimate[:, 1:10], axis=0),
-        "error_net": np.sum(error_full, axis=0),
-        "error_overestimate": np.sum(error_over, axis=0),
-        "error_underestimate": np.sum(error_under, axis=0),
-        "error_total": np.sum(abs(error_full), axis=0),
+        # Commented out because new ground truth does not yet have full
+        # segmentation counts.
+        # "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
+        # "count_estimated": np.sum(count_estimate[:, 1:10], axis=0),
+        "true_positives": correct.reshape((-1,)),
+        "false_positives": np.maximum(error_full, 0).reshape((-1,)),
+        "missed_detections": np.minimum(error_full, 0).reshape((-1,)),
+        "total_error": abs(error_full).reshape((-1,)),
+        "net_error": error_full.reshape((-1,))
     }
+    df_results = pd.DataFrame(results_summary, index=df_groundtruth.index)
 
-    # Writing the full estimate to a file
-    df_estimation.to_csv(save_directory+"/estimation_full.csv")
+    # Generate alternate versions for visual clarity
+    df_results_cs = df_results.cumsum()
+    df_results_sum = df_results.sum()
 
-    # Writing a summary of the results to a file
-    with open(save_directory+"/summary.csv", 'w') as csv_file:
-        filewriter = csv.writer(csv_file, delimiter=';',
-                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        filewriter.writerow([" ", "SEGMNTS", "MATCHES",
-                             "ENT_CHM", "ENT_FRM", "ENT_AMB",
-                             "EXT_CHM", "EXT_FRM", "EXT_AMB", "OUTLIER"])
-        for key in results_summary.keys():
-            filewriter.writerow(["{}".format(key),
-                                 "{}".format(results_summary[key][0]),
-                                 "{}".format(results_summary[key][1]),
-                                 "{}".format(results_summary[key][2]),
-                                 "{}".format(results_summary[key][3]),
-                                 "{}".format(results_summary[key][4]),
-                                 "{}".format(results_summary[key][5]),
-                                 "{}".format(results_summary[key][6]),
-                                 "{}".format(results_summary[key][7]),
-                                 "{}".format(results_summary[key][8])])
+    # Writing the full estimation and summary of results to files
+    df_estimation.to_csv(save_directory+"estimation.csv")
+    df_groundtruth.to_csv(save_directory+"groundtruth.csv")
+    df_results.to_csv(save_directory+"results_full.csv")
+    df_results_cs.to_csv(save_directory+"results_cumulative.csv")
+    df_results_sum.to_csv(save_directory+"results_summary.csv", header=False)
 
     print("[-] Results successfully saved to files.")
+
+    return df_results
 
 
 def plot_segmentation_results(args, df_estimation, df_groundtruth):
