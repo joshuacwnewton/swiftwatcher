@@ -25,7 +25,6 @@
 # -TODO: Run full test overnight
 # =========================================================================== #
 
-
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
 import pandas as pd
@@ -58,9 +57,13 @@ def main(args, params):
                                      index_col="TMSTAMP",
                                      parse_dates=True)
 
-        if 'df_estimation' in locals():
-            data.save_test_results(args, df_groundtruth, df_estimation)
-            # data.plot_segmentation_results(args, df_estimation, df_groundtruth)
+        if 'df_estimation' not in locals():
+            df_estimation = pd.read_csv((args.default_dir + "estimation.csv"),
+                                        index_col="TMSTAMP",
+                                        parse_dates=True)
+
+        data.save_test_results(args, df_groundtruth, df_estimation)
+        # data.plot_segmentation_results(args, df_estimation, df_groundtruth)
 
 
 def set_parameters():
@@ -141,7 +144,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -157,7 +160,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([56000, 56200])  # [54300, 56300]
+                        default=([54300, 56300])
                         )
     parser.add_argument("-c",
                         "--custom_dir",

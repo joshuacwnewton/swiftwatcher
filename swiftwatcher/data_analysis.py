@@ -105,8 +105,9 @@ def save_test_results(args, df_groundtruth, df_estimation):
     df_groundtruth.index = df_groundtruth.index.round('us')
     df_estimation.index = df_estimation.index.round('us')
 
-    # Keep only the counts which are present in both dataframes
+    # Keep only the estimated counts which are present in groundtruth (columns)
     df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
+    # Keep only the groundtruth counts which are present in estimates (rows)
     df_groundtruth = df_groundtruth.loc[df_estimation.index]
 
     # Using columns 1:10 so that the "frame number" column is excluded
@@ -120,21 +121,28 @@ def save_test_results(args, df_groundtruth, df_estimation):
         # segmentation counts.
         # "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
         # "count_estimated": np.sum(count_estimate[:, 1:10], axis=0),
-        "true_positives": np.sum(correct, axis=0),
-        "false_positives": np.sum(error_full[error_full > 0], axis=0),
-        "missed_detections": np.sum(error_full[error_full < 0], axis=0),
-        "total_error": np.sum(abs(error_full), axis=0),
-        "net_error": np.sum(error_full, axis=0)
+        "true_positives": correct.reshape((-1,)),
+        "false_positives": np.maximum(error_full, 0).reshape((-1,)),
+        "missed_detections": np.minimum(error_full, 0).reshape((-1,)),
+        "total_error": abs(error_full).reshape((-1,)),
+        "net_error": error_full.reshape((-1,))
     }
-    df_summary = pd.DataFrame(results_summary)
-    df_summary.index = ['ENT_CHM']
+    df_results = pd.DataFrame(results_summary, index=df_groundtruth.index)
+
+    # Generate alternate versions for visual clarity
+    df_results_cs = df_results.cumsum()
+    df_results_sum = df_results.sum()
 
     # Writing the full estimation and summary of results to files
     df_estimation.to_csv(save_directory+"estimation.csv")
     df_groundtruth.to_csv(save_directory+"groundtruth.csv")
-    df_summary.to_csv(save_directory+"results_summary.csv")
+    df_results.to_csv(save_directory+"results_full.csv")
+    df_results_cs.to_csv(save_directory+"results_cumulative.csv")
+    df_results_sum.to_csv(save_directory+"results_summary.csv", header=False)
 
     print("[-] Results successfully saved to files.")
+
+    return df_results
 
 
 def plot_segmentation_results(args, df_estimation, df_groundtruth):
