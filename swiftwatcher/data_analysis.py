@@ -204,7 +204,7 @@ def plot_result(args, df_groundtruth, df_estimation, key, flag):
     # Create and save plot
     for series in series_plots:
         series.plot(ax=ax)
-    ax.legend(legend)
+    ax.legend(legend, loc="upper left")
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
