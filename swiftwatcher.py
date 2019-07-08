@@ -21,8 +21,8 @@
 # -TODO: Add ground truth counts to segmentation vis.
 # -TODO: Add ground truth information to matching visualization.
 #
-# small-tweaking:
-# -TODO: Fold arguments into FrameQueue initialization
+# results-visualization:
+# -TODO: Fix legend location warning.
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
