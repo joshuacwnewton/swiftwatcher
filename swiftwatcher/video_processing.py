@@ -195,7 +195,7 @@ class FrameQueue:
         if single_folder:
             save_directory = base_save_directory
         else:
-            t = self.timestamps[0].time()
+            t = self.timestamps[self.queue_center].time()
             save_directory = (base_save_directory+"{0:02d}:{1:02d}"
                               .format(t.hour, t.minute))
 
@@ -698,8 +698,7 @@ def process_extracted_frames(args, params):
     # "frame_queue.queue_center", because a cache of frames is needed to
     # segment a frame. (Sequential context for motion estimation.)
     # See pv.FrameQueue's __init__() docstring for more information.
-    while frame_queue.frames_read < (num_frames_to_analyse +
-                                     frame_queue.queue_center):
+    while frame_queue.frames_read < num_frames_to_analyse:
 
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
