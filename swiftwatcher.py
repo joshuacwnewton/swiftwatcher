@@ -22,7 +22,7 @@
 # -TODO: Add ground truth information to matching visualization.
 #
 # results-visualization:
-# -TODO: Fix legend location warning.
+#
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
