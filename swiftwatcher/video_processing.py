@@ -79,7 +79,8 @@ class FrameQueue:
         else:
             self.fps = desired_fps
         self.delay = round(self.src_fps / self.fps) - 1  # For subsampling vid
-        self.frame_to_load_next = 0
+        self.frame_to_load_next = args.load[0]
+        self.num_frames_to_analyse = args.load[1] - args.load[0]
 
         # Generate details for regions of interest in frames
         self.roi, self.crop_region = \
@@ -698,8 +699,6 @@ def process_extracted_frames(args, params):
     #                    image processing to cached frames)
     frame_queue = FrameQueue(args, queue_size=params["queue_size"])
     frame_queue.stream.release()  # VideoCapture not needed for frame reuse
-    frame_queue.frame_to_load_next = args.load[0]
-    num_frames_to_analyse = args.load[1] - args.load[0]
 
     # Empty list. Will be filled with a dictionary of counts for each frame.
     # Then, list of dictionaries will be converted to pandas DataFrame.
@@ -712,7 +711,7 @@ def process_extracted_frames(args, params):
     # "frame_queue.queue_center", because a cache of frames is needed to
     # segment a frame. (Sequential context for motion estimation.)
     # See pv.FrameQueue's __init__() docstring for more information.
-    while frame_queue.frames_read < num_frames_to_analyse:
+    while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
 
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
@@ -738,7 +737,8 @@ def process_extracted_frames(args, params):
         # Status updates
         if frame_queue.frames_read % 25 == 0:
             print("[-] {0}/{1} frames processed."
-                  .format(frame_queue.frames_read, num_frames_to_analyse))
+                  .format(frame_queue.frames_read,
+                          frame_queue.num_frames_to_analyse))
 
         # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
