@@ -21,6 +21,7 @@ import swiftwatcher.data_analysis as data
 import pandas as pd
 import argparse as ap
 import os
+import time
 
 
 def main(args, params):
@@ -38,10 +39,13 @@ def main(args, params):
     if args.process:
         data.save_test_config(args, params)
 
+        start = time.time()
         df_estimation = vid.process_extracted_frames(args, params)
-        # It's called "df_estimation" because save_test_results converts from
-        # dataframe to ndarray for parsing. When save_test_results() gets
-        # rewritten to use dataframes, the "df_" prefix should be dropped
+        end = time.time()
+
+        elapsed_time = pd.to_timedelta((start-end), 's')
+        print("[-] Frame processing took the following time: {}"
+              .format(elapsed_time))
 
     if args.analyse:
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
@@ -151,12 +155,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([54300, 56300])
+                        default=([0, 108048])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/roi-testing/"
+                        default="tests/reuse-test"
                         )
     parser.add_argument("-v",
                         "--visual",
