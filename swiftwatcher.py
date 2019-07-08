@@ -70,9 +70,9 @@ def main(args, params):
 
         data.plot_result(args, df_groundtruth, df_estimation,
                          key="EXT_CHM", flag="cumu_comparison")
-        data.plot_result(args, df_estimation, df_groundtruth,
+        data.plot_result(args, df_groundtruth, df_estimation,
                          key="EXT_CHM", flag="false_positives")
-        data.plot_result(args, df_estimation, df_groundtruth,
+        data.plot_result(args, df_groundtruth, df_estimation,
                          key="EXT_CHM", flag="false_negatives")
 
 

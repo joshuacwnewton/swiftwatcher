@@ -164,8 +164,8 @@ def plot_result(args, df_groundtruth, df_estimation, key, flag):
 
     # Calculate the overestimate error and underestimate error
     difference = es_series.subtract(gt_series)
-    false_negatives = difference.where(difference > 0, 0)
-    false_positives = -1 * difference.where(difference < 0, 0)
+    false_positives = difference.where(difference > 0, 0)
+    false_negatives = -1 * difference.where(difference < 0, 0)
 
     # Initialize empty values
     series_plots = []
