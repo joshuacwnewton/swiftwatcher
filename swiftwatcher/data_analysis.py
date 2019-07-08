@@ -145,61 +145,73 @@ def save_test_results(args, df_groundtruth, df_estimation):
     return df_results
 
 
-def plot_segmentation_results(args, df_estimation, df_groundtruth):
+def plot_result(args, df_groundtruth, df_estimation, key, flag):
     """Plot comparisons between estimation and ground truth for segments."""
-    save_directory = args.default_dir + args.custom_dir + "results/"
+    save_directory = args.default_dir + args.custom_dir + "results/plots/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
 
     # Extract segment counts as series objects (from dataframes)
-    segments_es = df_estimation["SEGMNTS"]
-    segments_gt = df_groundtruth["SEGMNTS"]
+    es_series = df_estimation[key]
+    gt_series = df_groundtruth[key]
 
     # Replace timestamp indices with frame number indices for visual clarity
-    segments_es.index = df_estimation["FRM_NUM"]
-    segments_gt.index = df_groundtruth["FRM_NUM"]
+    es_series.index = df_estimation["FRM_NUM"]
+    gt_series.index = df_groundtruth["FRM_NUM"]
 
     # Calculate the overestimate error and underestimate error
-    difference = segments_es.subtract(segments_gt)
-    over_error = difference.where(difference > 0, 0)
-    under_error = -1 * difference.where(difference < 0, 0)
+    difference = es_series.subtract(gt_series)
+    false_negatives = difference.where(difference > 0, 0)
+    false_positives = -1 * difference.where(difference < 0, 0)
 
-    # Plot a comparison between the cumulative sums of both segment counts
-    fig1, ax1 = plt.subplots()
-    segments_es_cumu = segments_es.cumsum()
-    segments_gt_cumu = segments_gt.cumsum()
-    segments_es_cumu.plot(ax=ax1)
-    segments_gt_cumu.plot(ax=ax1)
-    ax1.legend(["ESTIMATION", "GROUND TRUTH"])
-    ax1.set_title('Comparison between Cumulative Segment Sums')
-    ax1.set_xlabel('Frame Number')
-    ax1.set_ylabel('Segment Count')
-    plt.savefig(save_directory+'segment_totals.png', bbox_inches='tight')
+    # Initialize empty values
+    series_plots = []
+    legend = ""
+    title = ""
+    xlabel = ""
+    ylabel = ""
+    fig, ax = plt.subplots()
 
-    # Plot a comparison between the cumulative sums of both error types
-    fig2, ax2 = plt.subplots()
-    over_cumu = over_error.cumsum()
-    rolling_over = over_error.rolling(50).sum()
-    ax2.text(7500, 1150, 'Total = {} Errors'.format(over_error.sum()),
-             bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
-    over_cumu.plot(ax=ax2, color="black", linestyle="--")
-    rolling_over.plot(ax=ax2, color="black")
-    ax2.legend(["Cumulative Sum", "Rolling Counts"])
-    ax2.set_title('Overestimate Error for Swift Segments')
-    ax2.set_xlabel('Frame Number')
-    ax2.set_ylabel('Error Count')
-    ax2.axis([7200, 16200, 0, 1250])
-    plt.savefig(save_directory+'error_over.png', bbox_inches='tight')
+    # Set plot variables depending on flag passed
+    if flag is "cumu_comparison":
+        series_plots.append(es_series.cumsum())
+        series_plots.append(gt_series.cumsum())
+        legend = ["Estimation", "Ground Truth"]
+        title = "Comparison between Cumulative Segment Sums"
+        xlabel = "Frame Number"
+        ylabel = "Segment Count"
 
-    # Plot a comparison between the rolling sums of both error types
-    fig3, ax3 = plt.subplots()
-    under_cumu = under_error.cumsum()
-    rolling_under = under_error.rolling(50).sum()
-    ax3.text(7500, 1150, 'Total = {} Errors'.format(under_error.sum()),
-             bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
-    under_cumu.plot(ax=ax3, color="black", linestyle="--")
-    rolling_under.plot(ax=ax3, color="black")
-    ax3.legend(["Cumulative Sum", "Rolling Counts"])
-    ax3.set_title('Underestimate Error for Swift Segments')
-    ax3.set_xlabel('Frame Number')
-    ax3.set_ylabel('Error Count')
-    ax3.axis([7200, 16200, 0, 1250])
-    plt.savefig(save_directory+'error_under.png', bbox_inches='tight')
+    if flag is "false_positives":
+        series_plots.append(false_positives.cumsum())
+        series_plots.append(false_positives.rolling(50).sum())
+        legend = ["Cumulative Sum", "Rolling Counts"]
+        title = "False Positive Error for {}".format(key)
+        xlabel = "Frame Number"
+        ylabel = "False Positives"
+
+    if flag is "false_negatives":
+        series_plots.append(false_negatives.cumsum())
+        series_plots.append(false_negatives.rolling(50).sum())
+        legend = ["Cumulative Sum", "Rolling Counts"]
+        title = "False Negative Error for {}".format(key)
+        xlabel = "Frame Number"
+        ylabel = "False Negatives"
+
+    # Create and save plot
+    for series in series_plots:
+        series.plot(ax=ax)
+    ax.legend(legend)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    # Text box with error count in corner of plot
+    # First two values refer to position from specific x-axis/y-axis values
+    # -- create something independent of data for placement?
+    # ax2.text(7500, 1150, 'Total = {} Errors'.format(over_error.sum()),
+    #          bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
+    plt.savefig(save_directory + '{0}_{1}.png'.format(key, flag),
+                bbox_inches='tight')
