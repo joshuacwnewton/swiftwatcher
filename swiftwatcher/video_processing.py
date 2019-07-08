@@ -572,8 +572,8 @@ class FrameQueue:
             j = matches[i]
             # Index condition if two segments are matching
             if (i < j) and (i < count_prev):
-                frame_prev[frame_prev == (i + 1)] = colors[color_index]
-                frame[frame == (j + 1 - count_prev)] = colors[color_index]
+                frame_prev[frame_prev == (i + 1)] = colors[color_index % 14]
+                frame[frame == (j + 1 - count_prev)] = colors[color_index % 14]
                 color_index += 1
             # Index condition for when a previous segment has disappeared
             elif (i == j) and (i < count_prev):
