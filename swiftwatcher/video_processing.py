@@ -192,7 +192,7 @@ class FrameQueue:
         if single_folder:
             save_directory = base_save_directory
         else:
-            t = self.timestamps[0].time()
+            t = self.timestamps[self.queue_center].time()
             save_directory = (base_save_directory+"{0:02d}:{1:02d}"
                               .format(t.hour, t.minute))
 
@@ -321,12 +321,29 @@ class FrameQueue:
                                 (self.height, self.width))
         }
 
+        # Hacky bit to reload output of RPCA rather than recomputing
+        t = self.timestamps[self.queue_center].time()
+        base_save_directory = (save_directory + "RPCA-frames/{0:02d}:{1:02d}"
+                               .format(t.hour, t.minute))
+
+        file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
+                                                       self.frame_to_load_next-
+                                                       self.queue_center))
+        frame = cv2.imread(file_paths[0])
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        seg["RPCA_output"] = frame
+
         # Apply Robust PCA method to isolate regions of motion
-        _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
-                                          params["ialm_tol"],
-                                          params["ialm_maxiter"],
-                                          params["ialm_darker"],
-                                          index=self.queue_center)
+        # _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
+        #                                   params["ialm_tol"],
+        #                                   params["ialm_maxiter"],
+        #                                   params["ialm_darker"],
+        #                                   index=self.queue_center)
+        #
+        # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
+        #                         frame_folder="RPCA-frames/",
+        #                         index=self.queue_center)
 
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
@@ -423,7 +440,7 @@ class FrameQueue:
                        params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames."""
-        
+
         # Assign name to commonly used properties
         count = len(self.seg_properties[0])
         count_prev = len(self.seg_properties[1])
@@ -569,8 +586,8 @@ class FrameQueue:
             j = matches[i]
             # Index condition if two segments are matching
             if (i < j) and (i < count_prev):
-                frame_prev[frame_prev == (i + 1)] = colors[color_index]
-                frame[frame == (j + 1 - count_prev)] = colors[color_index]
+                frame_prev[frame_prev == (i + 1)] = colors[color_index % 14]
+                frame[frame == (j + 1 - count_prev)] = colors[color_index % 14]
                 color_index += 1
             # Index condition for when a previous segment has disappeared
             elif (i == j) and (i < count_prev):
@@ -695,8 +712,7 @@ def process_extracted_frames(args, params):
     # "frame_queue.queue_center", because a cache of frames is needed to
     # segment a frame. (Sequential context for motion estimation.)
     # See pv.FrameQueue's __init__() docstring for more information.
-    while frame_queue.frames_read < (num_frames_to_analyse +
-                                     frame_queue.queue_center):
+    while frame_queue.frames_read < num_frames_to_analyse:
 
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
