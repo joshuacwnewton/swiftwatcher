@@ -165,9 +165,6 @@ class FrameQueue:
         else:
             save_directory = base_save_directory+"/"+folder_name
 
-        # Load frame from file ([:11] -> limit precision to get things to work
-        # because I increased precision after extracting frames)
-        # TODO: Remove this precision limit when frames are re-extracted
         file_paths = glob.glob("{0}/frame{1}_*".format(save_directory,
                                                        frame_number))
         frame = cv2.imread(file_paths[0])
