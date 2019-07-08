@@ -98,7 +98,6 @@ def save_test_results(args, df_groundtruth, df_estimation):
             print("[!] Creation of the directory {0} failed."
                   .format(save_directory))
 
-    print("[========================================================]")
     print("[*] Saving results of test to files.")
 
     # Round DateTimeArray indices to microsecond precision
@@ -108,7 +107,7 @@ def save_test_results(args, df_groundtruth, df_estimation):
     # Keep only the estimated counts which are present in groundtruth (columns)
     df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
     # Keep only the groundtruth counts which are present in estimates (rows)
-    df_groundtruth = df_groundtruth.loc[df_estimation.index]
+    df_groundtruth = df_groundtruth.reindex(df_estimation.index)
 
     # Using columns 1:10 so that the "frame number" column is excluded
     error_full = df_estimation.values[:, 1:] - df_groundtruth.values[:, 1:]
