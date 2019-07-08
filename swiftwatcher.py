@@ -4,6 +4,12 @@
 # segmentation-improvements:
 # -TODO: Brainstorm improvements for antennae overlapping.
 #
+# event-detection-improvements:
+#
+#
+# classification-improvements:
+#
+#
 # test-automation:
 # -TODO: Research differences between JSON files and other storage types.
 # -TODO: Save algorithm parameters to a JSON file.
@@ -14,6 +20,9 @@
 # algorithm-visualization:
 # -TODO: Add ground truth counts to segmentation vis.
 # -TODO: Add ground truth information to matching visualization.
+#
+# small-tweaking:
+# -TODO: Fold arguments into FrameQueue initialization
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
