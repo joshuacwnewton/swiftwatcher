@@ -746,15 +746,9 @@ def process_extracted_frames(args, params):
     print("[-] Analysis complete. {} total frames used in counting."
           .format(frame_queue.frames_read - frame_queue.queue_center))
 
-    # Specifying exactly which columns should be used for DataFrame
-    columns = ["TMSTAMP", "FRM_NUM",
-               "SEGMNTS", "MATCHES",
-               "ENT_CHM", "ENT_FRM", "ENT_AMB",
-               "EXT_CHM", "EXT_FRM", "EXT_AMB",
-               "OUTLIER"]
-
     # Convert dictionary of lists into DataFrame
-    df_estimation = pd.DataFrame(count_estimate, columns=columns)
+    df_estimation = pd.DataFrame(count_estimate,
+                                 columns=list(count_estimate[0].keys()))
     df_estimation.set_index("TMSTAMP", inplace=True)
     df_estimation.index = pd.to_datetime(df_estimation.index)
 
