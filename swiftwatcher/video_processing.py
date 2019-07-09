@@ -414,6 +414,10 @@ class FrameQueue:
             img.grey_opening(list(seg.values())[-1],
                              size=params["gry_op_SE"]).astype(np.uint8)
 
+        seg["grey_opening2"] = \
+            img.grey_opening(list(seg.values())[-1],
+                             size=(3, 3)).astype(np.uint8)
+
         # Segment using connected component labeling
         num_components, labeled_frame = eval(params["seg_func"])
 
