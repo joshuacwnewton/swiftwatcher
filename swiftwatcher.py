@@ -2,13 +2,18 @@
 # Note: Each category of TODOs represents a git branch.
 # =========================================================================== #
 # segmentation-improvements:
+# -TODO: Create single method containing all preprocessing stages
 # -TODO: Brainstorm improvements for antennae overlapping.
+# -TODO: Test smaller crop-regions to see if RPCA speed is increased.
+# -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
 #
 # event-detection-improvements:
 #
 #
 # classification-improvements:
-#
+# -TODO: Create tighter ROI to decrease false positive rate
+# -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
+# -TODO: Refactor counts for false positives.
 #
 # test-automation:
 # -TODO: Research differences between JSON files and other storage types.
