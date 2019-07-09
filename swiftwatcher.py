@@ -163,7 +163,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/subset_frame25000-35000/"
+                        default="tests/frame25000-35000_angle-80-100/"
                         )
     parser.add_argument("-v",
                         "--visual",

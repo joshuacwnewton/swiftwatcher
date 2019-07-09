@@ -601,12 +601,25 @@ class FrameQueue:
                     if edge_distance <= 10:
                         counts["EXT_FRM"] += 1
                     elif roi_value == 255:
-                        counts["EXT_CHM"] += 1
+                        for aseg in self.seg_properties[1]:
+                            if aseg.centroid == coord_pair[0]:
+                                if hasattr(aseg, 'angle'):
+                                    if -100 < aseg.angle < -80:
+                                        counts["EXT_CHM"] += 1
+                                    else:
+                                        test = None
                     else:
                         counts["EXT_FPs"] += 1
                 # Otherwise, a match was made
                 else:
+                    for aseg in self.seg_properties[0]:
+                        if aseg.centroid == coord_pair[1]:
+                            # Store angle in regionprops for that segment
+                            del_y = coord_pair[0][0] - coord_pair[1][0]
+                            del_x = coord_pair[1][1] - coord_pair[0][1]
+                            aseg.angle = math.degrees(math.atan2(del_y, del_x))
                     counts["MATCHES"] += 1
+
 
         # Create visualization of segment matches if requested
         if visual:
