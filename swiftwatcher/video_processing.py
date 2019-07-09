@@ -608,7 +608,7 @@ class FrameQueue:
                         for aseg in self.seg_properties[1]:
                             if aseg.centroid == coord_pair[0]:
                                 if hasattr(aseg, 'angle'):
-                                    if -100 < aseg.angle < -80:
+                                    if -125 < aseg.angle < -55:
                                         counts["EXT_CHM"] += 1
                                     else:
                                         counts["EXT_FPs"] += 1
