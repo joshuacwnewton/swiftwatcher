@@ -160,7 +160,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -176,12 +176,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 100])
+                        default=([25000, 35000])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/columns-test/"
+                        default="tests/subset_frame25000-35000/"
                         )
     parser.add_argument("-v",
                         "--visual",
