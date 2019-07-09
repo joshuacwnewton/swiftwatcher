@@ -117,7 +117,7 @@ def set_parameters():
         # Assignment Problem
         # Used to roughly map distances into correct regions, but very hastily
         # done. Actual functions will be chosen much more methodically.
-        "ap_func_match": "math.exp(-1 * (((dist - 10) ** 2) / 40))",
+        "ap_func_match": "math.exp(-1 * (((dist - 5) ** 2) / 40))",
         "ap_func_notmatch": "(1 / 8) * math.exp(-edge_distance / 10)"
     }
 
