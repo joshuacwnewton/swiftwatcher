@@ -72,6 +72,19 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
+def format_dataframes(df_estimation, df_groundtruth):
+    # Round DateTimeArray indices to microsecond precision
+    df_groundtruth.index = df_groundtruth.index.round('us')
+    df_estimation.index = df_estimation.index.round('us')
+
+    # Keep only the estimated counts which are present in groundtruth (columns)
+    df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
+    # Keep only the groundtruth counts which are present in estimates (rows)
+    df_groundtruth = df_groundtruth.reindex(df_estimation.index)
+
+    return df_estimation, df_groundtruth
+
+
 def save_test_results(args, df_groundtruth, df_estimation):
     """Save the bird count estimations from image processing to csv files.
 
@@ -99,15 +112,6 @@ def save_test_results(args, df_groundtruth, df_estimation):
                   .format(save_directory))
 
     print("[*] Saving results of test to files.")
-
-    # Round DateTimeArray indices to microsecond precision
-    df_groundtruth.index = df_groundtruth.index.round('us')
-    df_estimation.index = df_estimation.index.round('us')
-
-    # Keep only the estimated counts which are present in groundtruth (columns)
-    df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
-    # Keep only the groundtruth counts which are present in estimates (rows)
-    df_groundtruth = df_groundtruth.reindex(df_estimation.index)
 
     # Using columns 1:10 so that the "frame number" column is excluded
     error_full = df_estimation.values[:, 1:] - df_groundtruth.values[:, 1:]

@@ -72,6 +72,9 @@ def main(args, params):
                                         index_col="TMSTAMP",
                                         parse_dates=True)
 
+        df_estimation, df_groundtruth = \
+            data.format_dataframes(df_estimation, df_groundtruth)
+
         data.save_test_results(args, df_groundtruth, df_estimation)
 
         data.plot_result(args, df_groundtruth, df_estimation,
