@@ -607,7 +607,7 @@ class FrameQueue:
                                     if -100 < aseg.angle < -80:
                                         counts["EXT_CHM"] += 1
                                     else:
-                                        test = None
+                                        counts["EXT_FPs"] += 1
                     else:
                         counts["EXT_FPs"] += 1
                 # Otherwise, a match was made
