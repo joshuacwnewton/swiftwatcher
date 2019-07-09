@@ -98,6 +98,42 @@ class FrameQueue:
         self.seg_queue = collections.deque([], self.queue_center)
         self.seg_properties = collections.deque([], self.queue_center)
 
+    def generate_chimney_regions(self, bottom_corners, alpha):
+        """Generate rectangular regions (represented as top-left corner and
+        bottom-right corner) from two provided points ("bottom_corners").
+
+        The two points provided are of the two edges of the chimney:
+
+                     (x1, y1) *-----------------* (x2, y2)
+                              |                 |
+                              |  chimney stack  |
+                              |                 |                       """
+
+        # Recording the outer-most coordinates from the two provided points
+        # because they may not be parallel.
+        left = min(bottom_corners[0][0], bottom_corners[1][0])
+        right = max(bottom_corners[0][0], bottom_corners[1][0])
+        top = min(bottom_corners[0][1], bottom_corners[1][1])
+        bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+
+        width = right - left
+        height = round(alpha * width)  # Fixed height/width ratio
+
+        crop_region = [(left - height, top - 3 * height),
+                       (right + height, bottom + height)]
+        # NOTE: I think he "crop_region" is too large -- I believe a smaller
+        # region would produce similar results. For example:
+        # crop_region = [(left, top - height), (right, bottom + height)]
+        #
+        # Because choosing a different crop would require recomputing the
+        # RPCA step (which is a bottleneck for time), this won't be touched
+        # for a while.
+
+        roi_region = [(int(left - 0.05 * width), int(bottom - height)),
+                      (int(left + 1.05 * width), int(bottom))]
+
+        return roi_region, crop_region
+
     def chimney_roi_segmentation(self):
         """Generate a frame with the chimney's region-of-interest from the
         specified chimney region. Called during __init__ and stored as a
@@ -787,24 +823,6 @@ def extract_frames(args, queue_size=1, save_directory=None):
     print("[========================================================]")
     print("[-] Extraction complete. {} total frames extracted."
           .format(frame_queue.frames_read))
-
-
-def generate_chimney_regions(bottom_corners, alpha):
-    width = bottom_corners[1][0] - bottom_corners[0][0]
-    height = round(alpha*width)
-
-    # Outside coordinates from provided corners
-    left = min(bottom_corners[0][0], bottom_corners[1][0])
-    right = max(bottom_corners[0][0], bottom_corners[1][0])
-    top = min(bottom_corners[0][1], bottom_corners[1][1])
-    bottom = max(bottom_corners[0][1], bottom_corners[1][1])
-
-    crop_region = [(left - height, top - 3*height),
-                   (right + height, bottom + height)]
-    roi_region = [(int(left - 0.05*width), int(bottom - height)),
-                  (int(left + 1.05*width), int(bottom))]
-
-    return roi_region, crop_region
 
 
 
