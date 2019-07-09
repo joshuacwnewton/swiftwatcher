@@ -16,15 +16,15 @@
 # -TODO: Refactor counts for false positives.
 #
 # test-automation:
-# -TODO: Research differences between JSON files and other storage types.
+# -TODO: Read up on differences between JSON files and other storage types.
 # -TODO: Save algorithm parameters to a JSON file.
 # -TODO: Load algorithm parameters from a JSON file.
-# -TODO: Save command line arguments to JSON parameters.
-# -TODO: Load command line arguments from JSON parameters.
+# -TODO: Save command line arguments to JSON file.
+# -TODO: Load command line arguments from JSON file.
 #
 # algorithm-visualization:
-# -TODO: Add ground truth counts to segmentation vis.
-# -TODO: Add ground truth information to matching visualization.
+# -TODO: Add ground truth counts to segmentation visualization.
+# -TODO: Add ground truth counts to matching visualization.
 #
 # results-visualization:
 #
@@ -57,15 +57,16 @@ def main(args, params):
         df_estimation = vid.process_extracted_frames(args, params)
         end = time.time()
 
-        elapsed_time = pd.to_timedelta((start-end), 's')
-        print("[-] Frame processing took the following time: {}"
-              .format(elapsed_time))
+        elapsed_time = pd.to_timedelta((end - start), 's')
+        print("[-] Frame processing took {}.".format(elapsed_time))
 
     if args.analyse:
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
                                      index_col="TMSTAMP",
                                      parse_dates=True)
 
+        # Reloading previous count estimates so analysis can be modified
+        # independently from (slower) frame processing.
         if 'df_estimation' not in locals():
             df_estimation = pd.read_csv((args.default_dir + "estimation.csv"),
                                         index_col="TMSTAMP",
@@ -159,7 +160,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -175,12 +176,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 100])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/reuse-test"
+                        default="tests/columns-test/"
                         )
     parser.add_argument("-v",
                         "--visual",
