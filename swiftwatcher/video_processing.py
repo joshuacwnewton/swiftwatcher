@@ -513,18 +513,12 @@ class FrameQueue:
             "ENT_CHM": 0,
             "ENT_FRM": 0,
             "ENT_AMB": 0,
+            "ENT_FPs": 0,
             "EXT_CHM": 0,
             "EXT_FRM": 0,
             "EXT_AMB": 0,
-            "OUTLIER": 0,
-            "SEG_ERR": 0
+            "EXT_FPs": 0,
         }
-        frame_err = 0
-        frame_prev_err = 0
-        # NOTE: frame_err and frame_prev_err were hastily created when I
-        # realized SEG_ERR doesn't fully represent segmentation errors.
-        # All of these represent "false_positives", and should be rewritten
-        # when matching is addressed.
 
         # Compute and analyze match pairs only if segments exist
         if count_total > 0:
@@ -596,8 +590,7 @@ class FrameQueue:
                     elif roi_value == 255:
                         counts["ENT_CHM"] += 1
                     else:
-                        counts["SEG_ERR"] += 1
-                        frame_err += 1
+                        counts["ENT_FPs"] += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -610,8 +603,7 @@ class FrameQueue:
                     elif roi_value == 255:
                         counts["EXT_CHM"] += 1
                     else:
-                        counts["SEG_ERR"] += 1
-                        frame_prev_err += 1
+                        counts["EXT_FPs"] += 1
                 # Otherwise, a match was made
                 else:
                     counts["MATCHES"] += 1
@@ -620,14 +612,12 @@ class FrameQueue:
         if visual:
             self.match_visualization(count_prev, count_total,
                                      matches, counts,
-                                     frame_prev_err, frame_err,
                                      save_directory, folder_name)
 
         return counts
 
     def match_visualization(self, count_prev, count_total,
                             matches, counts,
-                            frame_prev_err, frame_err,
                             save_directory, folder_name):
         """Create visualizations from matching results and segmented frames."""
         # Colormappings for tab20 colormap.
@@ -692,11 +682,11 @@ class FrameQueue:
                     'False positive: {7}'.format(counts["FRM_NUM"] - 1,
                                                  counts["EXT_FRM"],
                                                  counts["EXT_CHM"],
-                                                 frame_prev_err,
+                                                 counts["EXT_FPs"],
                                                  counts["FRM_NUM"],
                                                  counts["ENT_FRM"],
                                                  counts["ENT_CHM"],
-                                                 frame_err),
+                                                 counts["ENT_FPs"]),
                     (10, (self.height*scale+50)-10), font, 1, 196, 2)
 
         # Combine two ROI masks into single image.
