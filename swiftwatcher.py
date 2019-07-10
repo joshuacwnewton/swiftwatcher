@@ -179,12 +179,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([25000, 35000])
+                        default=([0, 108048])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/frame25000-35000_angle-80-100/"
+                        default="tests/2019-07-09_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
