@@ -1,19 +1,15 @@
 # =========================================================================== #
 # Note: Each category of TODOs represents a git branch.
 # =========================================================================== #
-# segmentation-improvements:
-# -TODO: Create single method containing all preprocessing stages
-# -TODO: Brainstorm improvements for antennae overlapping.
+# algorithm-optimization:
 # -TODO: Test smaller crop-regions to see if RPCA speed is increased.
-# -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
-#
-# event-detection-improvements:
-#
-#
-# classification-improvements:
 # -TODO: Create tighter ROI to decrease false positive rate
 # -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
 # -TODO: Refactor counts for false positives.
+#
+# algorithm-structure
+# -TODO: Create single method containing all preprocessing stages
+# -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
 #
 # test-automation:
 # -TODO: Read up on differences between JSON files and other storage types.
@@ -25,9 +21,13 @@
 # algorithm-visualization:
 # -TODO: Add ground truth counts to segmentation visualization.
 # -TODO: Add ground truth counts to matching visualization.
+# -TODO: Save "error" visualizations to specific folder.
 #
 # results-visualization:
 #
+# results-csv-files:
+# -TODO: Add frame numbers as DataFrame index so they'll be displayed
+# -TODO: Add precision and recall to results-summary.csv
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
@@ -179,12 +179,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([55000, 56000])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-09_full-video/"
+                        default="tests/roi-testing/"
                         )
     parser.add_argument("-v",
                         "--visual",

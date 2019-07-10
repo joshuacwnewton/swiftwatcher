@@ -129,8 +129,8 @@ class FrameQueue:
         # RPCA step (which is a bottleneck for time), this won't be touched
         # for a while.
 
-        roi_region = [(int(left - 0.05 * width), int(bottom - height)),
-                      (int(left + 1.05 * width), int(bottom))]
+        roi_region = [(int(left + 0.025 * width), int(bottom - height)),
+                      (int(left + 0.975 * width), int(bottom))]
 
         return roi_region, crop_region
 
@@ -146,10 +146,13 @@ class FrameQueue:
         # Crop frame, then blur and threshold the B channel to produce mask
         cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
                         self.roi_region[0][0]:self.roi_region[1][0]]
-        blur = cv2.medianBlur(cv2.medianBlur(cropped, 7), 7)
+        blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
         a, b, c = cv2.split(blur)
         ret, thr = cv2.threshold(a, 0, 255,
                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        thr = cv2.Canny(thr, 0, 256)
+        thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8), anchor=(0, 0))
+
         # NOTE: I've chosen a rectangular ROI here but I think this isn't the
         # right approach to take. I think the ROI should be shaped like the
         # edge of the chimney to more accurately represent regions where
