@@ -612,6 +612,8 @@ class FrameQueue:
                                         counts["EXT_CHM"] += 1
                                     else:
                                         counts["EXT_FPs"] += 1
+                                else:
+                                    counts["EXT_FPs"] += 1
                     else:
                         counts["EXT_FPs"] += 1
                 # Otherwise, a match was made
