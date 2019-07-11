@@ -86,21 +86,7 @@ def format_dataframes(df_estimation, df_groundtruth):
 
 
 def save_test_results(args, df_groundtruth, df_estimation):
-    """Save the bird count estimations from image processing to csv files.
-
-    Count labels:
-        0, frame_number
-        1, total_birds
-        2, total_matches
-        3, appeared_from_chimney
-        4, appeared_from_edge
-        5, appeared_ambiguous (could be removed, future-proofing for now)
-        6, disappeared_to_chimney
-        7, disappeared_to_edge
-        8, disappeared_ambiguous (could be removed, future-proofing for now)
-        9, outlier_behavior
-
-    Estimate array contains a 10th catch-all count, "segmentation_error"."""
+    """Save the bird count estimations from image processing to csv files."""
 
     # Create save directory if it does not already exist
     save_directory = args.default_dir+args.custom_dir+"results/"
