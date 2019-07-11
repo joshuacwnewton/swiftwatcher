@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/roi-testing/"
+                        default="tests/optical-flow/"
                         )
     parser.add_argument("-v",
                         "--visual",

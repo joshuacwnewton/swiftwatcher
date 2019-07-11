@@ -368,7 +368,7 @@ class FrameQueue:
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
-    def segment_frame(self, save_directory, folder_name,
+    def segment_frame(self, args, save_directory, folder_name,
                       params, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
@@ -403,6 +403,14 @@ class FrameQueue:
         # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
         #                         frame_folder="RPCA-frames/",
         #                         index=self.queue_center)
+
+        # Testing Optical Flow
+        file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
+                                                       self.frame_to_load_next-
+                                                       self.queue_center-1))
+        prev = cv2.imread(file_paths[0])
+        prev = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
+        self.get_motion_vectors(args, frame, prev)
 
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
@@ -498,6 +506,31 @@ class FrameQueue:
                                 index=self.queue_center,
                                 base_folder=folder_name,
                                 frame_folder="visualizations/segmentation/")
+
+    def get_motion_vectors(self, args, frame, prev):
+        # frame = np.reshape(self.queue[self.queue_center],
+        #                    (self.height, self.width))
+        # prev = np.reshape(self.queue[self.queue_center+1],
+        #                  (self.height, self.width))
+        stacked_frame = np.stack((frame,)*3, axis=-1)
+        hsv = np.zeros_like(stacked_frame)
+        hsv[..., 1] = 255
+        flow = cv2.calcOpticalFlowFarneback(prev, frame, None, 0.5, 3, 15, 3, 5,
+                                            1.2, 0)
+
+        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        hsv[..., 0] = ang * 180 / np.pi / 2
+        hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+        rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        rgb = np.hstack((stacked_frame, rgb))
+        cv2.imwrite('test.png', rgb)
+        self.save_frame_to_file(args.default_dir,
+                                frame=rgb,
+                                index=self.queue_center,
+                                base_folder=args.custom_dir,
+                                frame_folder="visualizations/optical-flow/",
+                                scale=4)
+        test = None
 
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
@@ -628,7 +661,6 @@ class FrameQueue:
                             del_x = coord_pair[1][1] - coord_pair[0][1]
                             aseg.angle = math.degrees(math.atan2(del_y, del_x))
                     counts["MATCHES"] += 1
-
 
         # Create visualization of segment matches if requested
         if visual:
@@ -783,9 +815,10 @@ def process_extracted_frames(args, params):
         # single preprocess_frame() method, just so the sequence of functions
         # can be applied to other things (like the ROI mask).
 
-        if frame_queue.frames_read > frame_queue.queue_center:
+        if frame_queue.frames_read > (frame_queue.queue_center + 1):
             # Proceed only when enough frames are cached to use RPCA method
-            frame_queue.segment_frame(args.default_dir,
+            frame_queue.segment_frame(args,
+                                      args.default_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
