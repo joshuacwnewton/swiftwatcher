@@ -651,10 +651,34 @@ class FrameQueue:
                 else:
                     for aseg in self.seg_properties[0]:
                         if aseg.centroid == coord_pair[1]:
+                            aseg.angle_list = []
+                            aseg.adisp_list = []
+                            for bseg in self.seg_properties[1]:
+                                if bseg.centroid == coord_pair[0]:
+                                    try:
+                                        for angles in bseg.angle_list:
+                                            aseg.angle_list.append(angles)
+                                        for disp in bseg.adisp_list:
+                                            aseg.adisp_list.append(disp)
+                                    except:
+                                        test = None
                             # Store angle in regionprops for that segment
                             del_y = coord_pair[0][0] - coord_pair[1][0]
                             del_x = coord_pair[1][1] - coord_pair[0][1]
-                            aseg.angle = math.degrees(math.atan2(del_y, del_x))
+                            aseg.adisp_list.append((del_x, del_y))
+                            aseg.angle_list.append(
+                                math.degrees(math.atan2(del_y, del_x)))
+                            aseg.angle2 = (sum(aseg.angle_list) /
+                                          len(aseg.angle_list))
+
+                            sum_del_y = 0
+                            sum_del_x = 0
+                            for disp in aseg.adisp_list:
+                                sum_del_y += disp[1]
+                                sum_del_x += disp[0]
+                            aseg.angle = \
+                                math.degrees(math.atan2(sum_del_y, sum_del_x))
+                            test = None
                     counts["MATCHES"] += 1
 
         # Create visualization of segment matches if requested
@@ -812,8 +836,7 @@ def process_extracted_frames(args, params):
 
         if frame_queue.frames_read > (frame_queue.queue_center + 1):
             # Proceed only when enough frames are cached to use RPCA method
-            frame_queue.segment_frame(args,
-                                      args.default_dir,
+            frame_queue.segment_frame(args.default_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
