@@ -368,7 +368,7 @@ class FrameQueue:
 
         return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
 
-    def segment_frame(self, args, save_directory, folder_name,
+    def segment_frame(self, save_directory, folder_name,
                       params, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
@@ -403,14 +403,6 @@ class FrameQueue:
         # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
         #                         frame_folder="RPCA-frames/",
         #                         index=self.queue_center)
-
-        # Testing Optical Flow
-        file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
-                                                       self.frame_to_load_next-
-                                                       self.queue_center-1))
-        prev = cv2.imread(file_paths[0])
-        prev = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
-        self.get_motion_vectors(args, frame, prev)
 
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
@@ -507,11 +499,11 @@ class FrameQueue:
                                 base_folder=folder_name,
                                 frame_folder="visualizations/segmentation/")
 
-    def get_motion_vectors(self, args, frame, prev):
-        # frame = np.reshape(self.queue[self.queue_center],
-        #                    (self.height, self.width))
-        # prev = np.reshape(self.queue[self.queue_center+1],
-        #                  (self.height, self.width))
+    def get_motion_vectors(self, args):
+        frame = np.reshape(self.queue[self.queue_center],
+                           (self.height, self.width))
+        prev = np.reshape(self.queue[self.queue_center+1],
+                          (self.height, self.width))
         stacked_frame = np.stack((frame,)*3, axis=-1)
         hsv = np.zeros_like(stacked_frame)
         hsv[..., 1] = 255
@@ -522,6 +514,9 @@ class FrameQueue:
         hsv[..., 0] = ang * 180 / np.pi / 2
         hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
         rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        mask = np.stack((self.roi_mask,)*3, axis=-1)
+        stacked_frame = cv2.addWeighted(mask, 0.25, stacked_frame, 0.75, 0)
+        rgb = cv2.addWeighted(mask, 0.25, rgb, 0.75, 0)
         rgb = np.hstack((stacked_frame, rgb))
         cv2.imwrite('test.png', rgb)
         self.save_frame_to_file(args.default_dir,
@@ -822,6 +817,7 @@ def process_extracted_frames(args, params):
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
+            frame_queue.get_motion_vectors(args)
             match_counts = frame_queue.match_segments(args.default_dir,
                                                       args.custom_dir,
                                                       params,
