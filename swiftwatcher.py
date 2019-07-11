@@ -22,9 +22,13 @@
 # algorithm-visualization:
 # -TODO: Add ground truth counts to segmentation visualization.
 # -TODO: Add ground truth counts to matching visualization.
+# -TODO: Save "error" visualizations to specific folder.
 #
 # results-visualization:
 #
+# results-csv-files:
+# -TODO: Add frame numbers as DataFrame index so they'll be displayed
+# -TODO: Add precision and recall to results-summary.csv
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
@@ -69,6 +73,9 @@ def main(args, params):
                                         index_col="TMSTAMP",
                                         parse_dates=True)
 
+        df_estimation, df_groundtruth = \
+            data.format_dataframes(df_estimation, df_groundtruth)
+
         data.save_test_results(args, df_groundtruth, df_estimation)
 
         data.plot_result(args, df_groundtruth, df_estimation,
@@ -111,7 +118,7 @@ def set_parameters():
         # Assignment Problem
         # Used to roughly map distances into correct regions, but very hastily
         # done. Actual functions will be chosen much more methodically.
-        "ap_func_match": "math.exp(-1 * (((dist - 10) ** 2) / 40))",
+        "ap_func_match": "math.exp(-1 * (((dist - 5) ** 2) / 40))",
         "ap_func_notmatch": "(1 / 8) * math.exp(-edge_distance / 10)"
     }
 
@@ -173,12 +180,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 100])
+                        default=([55000, 56000])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/columns-test/"
+                        default="tests/roi-testing/"
                         )
     parser.add_argument("-v",
                         "--visual",

@@ -129,8 +129,8 @@ class FrameQueue:
         # RPCA step (which is a bottleneck for time), this won't be touched
         # for a while.
 
-        roi_region = [(int(left - 0.05 * width), int(bottom - height)),
-                      (int(left + 1.05 * width), int(bottom))]
+        roi_region = [(int(left + 0.025 * width), int(bottom - height)),
+                      (int(left + 0.975 * width), int(bottom))]
 
         return roi_region, crop_region
 
@@ -146,10 +146,13 @@ class FrameQueue:
         # Crop frame, then blur and threshold the B channel to produce mask
         cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
                         self.roi_region[0][0]:self.roi_region[1][0]]
-        blur = cv2.medianBlur(cv2.medianBlur(cropped, 7), 7)
+        blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
         a, b, c = cv2.split(blur)
         ret, thr = cv2.threshold(a, 0, 255,
                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        thr = cv2.Canny(thr, 0, 256)
+        thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8), anchor=(0, 0))
+
         # NOTE: I've chosen a rectangular ROI here but I think this isn't the
         # right approach to take. I think the ROI should be shaped like the
         # edge of the chimney to more accurately represent regions where
@@ -377,29 +380,29 @@ class FrameQueue:
                                 (self.height, self.width))
         }
 
-        # # Hacky bit to reload output of RPCA rather than recomputing
-        # t = self.timestamps[self.queue_center].time()
-        # base_save_directory = (save_directory + "RPCA-frames/{0:02d}:{1:02d}"
-        #                        .format(t.hour, t.minute))
-        #
-        # file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
-        #                                                self.frame_to_load_next-
-        #                                                self.queue_center))
-        # frame = cv2.imread(file_paths[0])
-        #
-        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # seg["RPCA_output"] = frame
+        # Hacky bit to reload output of RPCA rather than recomputing
+        t = self.timestamps[self.queue_center].time()
+        base_save_directory = (save_directory + "RPCA-frames/{0:02d}:{1:02d}"
+                               .format(t.hour, t.minute))
 
-        # Apply Robust PCA method to isolate regions of motion
-        _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
-                                          params["ialm_tol"],
-                                          params["ialm_maxiter"],
-                                          params["ialm_darker"],
-                                          index=self.queue_center)
+        file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
+                                                       self.frame_to_load_next-
+                                                       self.queue_center))
+        frame = cv2.imread(file_paths[0])
 
-        self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
-                                frame_folder="RPCA-frames/",
-                                index=self.queue_center)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        seg["RPCA_output"] = frame
+
+        # # Apply Robust PCA method to isolate regions of motion
+        # _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
+        #                                   params["ialm_tol"],
+        #                                   params["ialm_maxiter"],
+        #                                   params["ialm_darker"],
+        #                                   index=self.queue_center)
+        #
+        # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
+        #                         frame_folder="RPCA-frames/",
+        #                         index=self.queue_center)
 
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
@@ -413,6 +416,10 @@ class FrameQueue:
         seg["grey_opening"] = \
             img.grey_opening(list(seg.values())[-1],
                              size=params["gry_op_SE"]).astype(np.uint8)
+
+        seg["grey_opening2"] = \
+            img.grey_opening(list(seg.values())[-1],
+                             size=(3, 3)).astype(np.uint8)
 
         # Segment using connected component labeling
         num_components, labeled_frame = eval(params["seg_func"])
@@ -513,18 +520,12 @@ class FrameQueue:
             "ENT_CHM": 0,
             "ENT_FRM": 0,
             "ENT_AMB": 0,
+            "ENT_FPs": 0,
             "EXT_CHM": 0,
             "EXT_FRM": 0,
             "EXT_AMB": 0,
-            "OUTLIER": 0,
-            "SEG_ERR": 0
+            "EXT_FPs": 0,
         }
-        frame_err = 0
-        frame_prev_err = 0
-        # NOTE: frame_err and frame_prev_err were hastily created when I
-        # realized SEG_ERR doesn't fully represent segmentation errors.
-        # All of these represent "false_positives", and should be rewritten
-        # when matching is addressed.
 
         # Compute and analyze match pairs only if segments exist
         if count_total > 0:
@@ -596,8 +597,7 @@ class FrameQueue:
                     elif roi_value == 255:
                         counts["ENT_CHM"] += 1
                     else:
-                        counts["SEG_ERR"] += 1
-                        frame_err += 1
+                        counts["ENT_FPs"] += 1
                 # If this condition is met, pair means a segment disappeared
                 elif coord_pair[1] == (0, 0):
                     edge_distance = min(coord_pair[0][0], coord_pair[0][1],
@@ -608,26 +608,38 @@ class FrameQueue:
                     if edge_distance <= 10:
                         counts["EXT_FRM"] += 1
                     elif roi_value == 255:
-                        counts["EXT_CHM"] += 1
+                        for aseg in self.seg_properties[1]:
+                            if aseg.centroid == coord_pair[0]:
+                                if hasattr(aseg, 'angle'):
+                                    if -125 < aseg.angle < -55:
+                                        counts["EXT_CHM"] += 1
+                                    else:
+                                        counts["EXT_FPs"] += 1
+                                else:
+                                    counts["EXT_FPs"] += 1
                     else:
-                        counts["SEG_ERR"] += 1
-                        frame_prev_err += 1
+                        counts["EXT_FPs"] += 1
                 # Otherwise, a match was made
                 else:
+                    for aseg in self.seg_properties[0]:
+                        if aseg.centroid == coord_pair[1]:
+                            # Store angle in regionprops for that segment
+                            del_y = coord_pair[0][0] - coord_pair[1][0]
+                            del_x = coord_pair[1][1] - coord_pair[0][1]
+                            aseg.angle = math.degrees(math.atan2(del_y, del_x))
                     counts["MATCHES"] += 1
+
 
         # Create visualization of segment matches if requested
         if visual:
             self.match_visualization(count_prev, count_total,
                                      matches, counts,
-                                     frame_prev_err, frame_err,
                                      save_directory, folder_name)
 
         return counts
 
     def match_visualization(self, count_prev, count_total,
                             matches, counts,
-                            frame_prev_err, frame_err,
                             save_directory, folder_name):
         """Create visualizations from matching results and segmented frames."""
         # Colormappings for tab20 colormap.
@@ -692,11 +704,11 @@ class FrameQueue:
                     'False positive: {7}'.format(counts["FRM_NUM"] - 1,
                                                  counts["EXT_FRM"],
                                                  counts["EXT_CHM"],
-                                                 frame_prev_err,
+                                                 counts["EXT_FPs"],
                                                  counts["FRM_NUM"],
                                                  counts["ENT_FRM"],
                                                  counts["ENT_CHM"],
-                                                 frame_err),
+                                                 counts["ENT_FPs"]),
                     (10, (self.height*scale+50)-10), font, 1, 196, 2)
 
         # Combine two ROI masks into single image.
