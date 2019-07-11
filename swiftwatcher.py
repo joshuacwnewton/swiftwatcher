@@ -1,19 +1,16 @@
 # =========================================================================== #
 # Note: Each category of TODOs represents a git branch.
 # =========================================================================== #
-# segmentation-improvements:
-# -TODO: Create single method containing all preprocessing stages
+# algorithm-improvements:
 # -TODO: Brainstorm improvements for antennae overlapping.
 # -TODO: Test smaller crop-regions to see if RPCA speed is increased.
-# -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
-#
-# event-detection-improvements:
-#
-#
-# classification-improvements:
-# -TODO: Create tighter ROI to decrease false positive rate
 # -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
-# -TODO: Refactor counts for false positives.
+# -TODO: Test cv2.calcOpticalFlowFarneback to see typical motion vectors.
+# -TODO: If MVs look promising, find way to collapse MV's into single MV
+#
+# algorithm-structure:
+# -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
+# -TODO: Create single method containing all preprocessing stages
 #
 # test-automation:
 # -TODO: Read up on differences between JSON files and other storage types.
