@@ -101,17 +101,7 @@ def set_parameters():
         "thr_value": 10,
 
         # Greyscale processing
-        "gry_op_SE": (2, 2),
-
-        # Labelled segmentation
-        "seg_func": "cv2.connectedComponents(list(seg.values())[-1], "
-                    "connectivity=4)",
-
-        # Assignment Problem
-        # Used to roughly map distances into correct likelihoods, but very
-        # hastily done. Actual functions will be chosen much more methodically.
-        "ap_func_match": "math.exp(-1 * (((dist - 5) ** 2) / 40))",
-        "ap_func_notmatch": "(1 / 8) * math.exp(-edge_distance / 10)"
+        "gry_op_SE": (2, 2)
     }
 
     return params
@@ -156,7 +146,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -177,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/frame-info/"
+                        default="tests/param-refactor-test/"
                         )
     parser.add_argument("-v",
                         "--visual",

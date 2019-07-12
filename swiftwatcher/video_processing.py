@@ -422,7 +422,8 @@ class FrameQueue:
                              size=(3, 3)).astype(np.uint8)
 
         # Segment using connected component labeling
-        num_components, labeled_frame = eval(params["seg_func"])
+        num_components, labeled_frame = \
+            cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
 
         # Scale labeled image to be visible with uint8 grayscale
         if num_components > 0:
@@ -579,8 +580,8 @@ class FrameQueue:
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
                     # Map distance values using a Gaussian curve
-                    likeilihood_matrix[index_v, index_h] \
-                        = eval(params["ap_func_match"])
+                    likeilihood_matrix[index_v, index_h] = \
+                        math.exp(-1 * (((dist - 5) ** 2) / 40))
 
             # Matrix values: likelihood of segments having no match
             for i in range(count_total):
@@ -594,7 +595,8 @@ class FrameQueue:
                                      self.width - point[1]])
 
                 # Map distance values using an Exponential curve
-                likeilihood_matrix[i, i] = eval(params["ap_func_notmatch"])
+                likeilihood_matrix[i, i] = \
+                    (1 / 8) * math.exp(-edge_distance / 10)
 
             # Convert likelihood matrix into cost matrix
             # This is necessary because of scipy's default implementation
@@ -887,8 +889,6 @@ def process_extracted_frames(args, params):
     # Convert dictionary of lists into DataFrame
     df_estimation = pd.DataFrame(count_estimate,
                                  columns=list(count_estimate[0].keys()))
-    df_estimation.set_index("TMSTAMP", inplace=True)
-    df_estimation.index = pd.to_datetime(df_estimation.index)
 
     return df_estimation
 
