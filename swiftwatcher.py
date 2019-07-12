@@ -62,16 +62,13 @@ def main(args, params):
         print("[-] Frame processing took {}.".format(elapsed_time))
 
     if args.analyse:
-        df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth,
-                                     index_col="TMSTAMP",
-                                     parse_dates=True)
+        df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)
 
         # Reloading previous count estimates so analysis can be modified
-        # independently from (slower) frame processing.
+        # independently from (slower) frame processing stage.
         if 'df_estimation' not in locals():
-            df_estimation = pd.read_csv((args.default_dir + "estimation.csv"),
-                                        index_col="TMSTAMP",
-                                        parse_dates=True)
+            df_estimation = pd.read_csv((args.default_dir + args.custom_dir +
+                                         "results/estimation.csv"))
 
         df_estimation, df_groundtruth = \
             data.format_dataframes(df_estimation, df_groundtruth)
@@ -164,7 +161,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
