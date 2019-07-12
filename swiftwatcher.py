@@ -89,9 +89,6 @@ def set_parameters():
     processing and analysis parts of the algorithm instead."""
 
     params = {
-        # Grayscale conversion
-        "gs_algorithm": "cv2 default",
-
         # Robust PCA/motion estimation
         "queue_size": 21,
         "ialm_lmbda": 0.01,

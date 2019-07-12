@@ -286,13 +286,13 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, frame=None, index=0, algorithm="cv2 default"):
+    def convert_grayscale(self, frame=None, index=0):
         """Convert to grayscale a frame at specified index of FrameQueue"""
         if frame is None:
             frame = self.queue[index]
 
-        if algorithm == "cv2 default":
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # OpenCV default, may use other methods in future (single HSV channel?)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         return frame
 
@@ -848,8 +848,7 @@ def process_extracted_frames(args, params):
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
-        frame_queue.queue[0] = \
-            frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
+        frame_queue.queue[0] = frame_queue.convert_grayscale()
         frame_queue.queue[0] = frame_queue.crop_frame()
         frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
         frame_queue.queue[0] = frame_queue.frame_to_column()
