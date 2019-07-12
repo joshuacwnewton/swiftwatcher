@@ -413,13 +413,10 @@ class FrameQueue:
                           type=params["thr_type"])
 
         # Discard areas where 2x2 structuring element will not fit
-        seg["grey_opening"] = \
-            img.grey_opening(list(seg.values())[-1],
-                             size=params["gry_op_SE"]).astype(np.uint8)
-
-        seg["grey_opening2"] = \
-            img.grey_opening(list(seg.values())[-1],
-                             size=(3, 3)).astype(np.uint8)
+        for i in range(len(params["grey_op_SE"])):
+            seg["grey_opening{}".format(i+1)] = \
+                img.grey_opening(list(seg.values())[-1],
+                                 size=params["grey_op_SE"][i]).astype(np.uint8)
 
         # Segment using connected component labeling
         num_components, labeled_frame = \

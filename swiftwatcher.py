@@ -101,7 +101,7 @@ def set_parameters():
         "thr_value": 10,
 
         # Greyscale processing
-        "gry_op_SE": (2, 2)
+        "grey_op_SE": [(2, 2), (3, 3)]
     }
 
     return params
