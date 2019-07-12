@@ -5,12 +5,11 @@
 # -TODO: Brainstorm improvements for antennae overlapping.
 # -TODO: Test smaller crop-regions to see if RPCA speed is increased.
 # -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
-# -TODO: Test cv2.calcOpticalFlowFarneback to see typical motion vectors.
-# -TODO: If MVs look promising, find way to collapse MV's into single MV
 #
 # algorithm-structure:
 # -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
 # -TODO: Create single method containing all preprocessing stages
+# -TODO: Split off event classification into separate method
 #
 # test-automation:
 # -TODO: Read up on differences between JSON files and other storage types.
@@ -23,11 +22,13 @@
 # -TODO: Add ground truth counts to segmentation visualization.
 # -TODO: Add ground truth counts to matching visualization.
 # -TODO: Save "error" visualizations to specific folder.
+# -TODO: Add segment info (match dist, angle, etc.) to matching visualizations
 #
 # results-visualization:
 #
 # results-csv-files:
 # -TODO: Add frame numbers as DataFrame index so they'll be displayed
+# -TODO: Add segment info (match dist, angle, etc.) to results output
 # -TODO: Add precision and recall to results-summary.csv
 # -TODO: Update empty-gt-generator for us timestamp precision.
 # =========================================================================== #
