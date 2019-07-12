@@ -500,6 +500,8 @@ class FrameQueue:
                                 frame_folder="visualizations/segmentation/")
 
     def get_motion_vectors(self, args):
+        """Rough code for testing Farneback dense optical flow. Not currently
+        used."""
         frame = np.reshape(self.queue[self.queue_center],
                            (self.height, self.width))
         prev = np.reshape(self.queue[self.queue_center+1],
@@ -530,34 +532,40 @@ class FrameQueue:
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
-        which segments match between frames."""
+        which segments match between frames.
 
-        # Assign name to commonly used properties
-        count = len(self.seg_properties[0])
+        Example: Matching 4 segments in the current frame to 3 segments in the
+                 previous frame.
+
+                                 current
+                            frame's segments
+
+                               0  1  2  3
+        previous   0 [D][ ][ ][!][!][!][!]
+         frame's   1 [ ][D][ ][!][!][!][!]
+        segments   2 [ ][ ][D][!][!][!][!]
+                     [ ][ ][ ][A][ ][ ][ ]
+                     [ ][ ][ ][ ][A][ ][ ]
+                     [ ][ ][ ][ ][ ][A][ ]
+                     [ ][ ][ ][ ][ ][ ][A]
+
+        -The "!" values in the matrix are likelihoods of two segments matching.
+        -The "D" and "A" values in the matrix are likelihoods of that segment
+         having no match. (Disappeared and appeared respectively.)
+        -The " " values are irrelevant spaces.
+
+        By using the Hungarian algorithm, this matrix is solved to give a
+        single outcome (match, no match) to each segment in both frames. The
+        total sum of likelihoods will be the maximum across all possible
+        combinations of matches, as per the Assignment Problem."""
+
+        # Assign names to commonly used properties
+        count_curr = len(self.seg_properties[0])
         count_prev = len(self.seg_properties[1])
-        count_total = count + count_prev
+        count_total = count_curr + count_prev
 
-        # Initialize coordinates and counts
-        matches = []
-        coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
-        counts = {
-            "TMSTAMP": self.timestamps[self.queue_center],
-            "FRM_NUM": self.framenumbers[self.queue_center],
-            "SEGMNTS": count,
-            "MATCHES": 0,
-            "ENT_CHM": 0,
-            "ENT_FRM": 0,
-            "ENT_AMB": 0,
-            "ENT_FPs": 0,
-            "EXT_CHM": 0,
-            "EXT_FRM": 0,
-            "EXT_AMB": 0,
-            "EXT_FPs": 0,
-        }
-
-        # Compute and analyze match pairs only if segments exist
         if count_total > 0:
-            # Initialize likelihood matrix
+            # Initialize likelihood matrix as (N+M)x(N+M)
             likeilihood_matrix = np.zeros((count_total, count_total))
 
             # Matrix values: likelihood of segments being a match
@@ -574,12 +582,12 @@ class FrameQueue:
                     likeilihood_matrix[index_v, index_h] \
                         = eval(params["ap_func_match"])
 
-            # Matrix values: likelihood of segments appearing/disappearing
+            # Matrix values: likelihood of segments having no match
             for i in range(count_total):
                 # Compute closest distance from segment to edge of frame
                 if i < count_prev:
                     point = self.seg_properties[1][i].centroid
-                if count_prev <= i < (count + count_prev):
+                if count_prev <= i < (count_curr + count_prev):
                     point = self.seg_properties[0][i - count_prev].centroid
                 edge_distance = min([point[0], point[1],
                                      self.height - point[0],
@@ -589,102 +597,118 @@ class FrameQueue:
                 likeilihood_matrix[i, i] = eval(params["ap_func_notmatch"])
 
             # Convert likelihood matrix into cost matrix
+            # This is necessary because of scipy's default implementation
             cost_matrix = -1*likeilihood_matrix
             cost_matrix -= cost_matrix.min()
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
-            _, matches = linear_sum_assignment(cost_matrix)
+            seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
-            # Convert matches (pairs of indices) into pairs of coordinates
-            for i in range(count_total):
-                j = matches[i]
-                # Index condition if two segments are matching
-                if (i < j) and (i < count_prev):
-                    coords[i][0] = self.seg_properties[1][i].centroid
-                    coords[i][1] = self.seg_properties[0][j-count_prev].centroid
-                # Index condition for when a previous segment has disappeared
-                elif (i == j) and (i < count_prev):
-                    coords[i][0] = self.seg_properties[1][i].centroid
-                # Index condition for when a new segment has appeared
-                elif (i == j) and (i >= count_prev):
-                    coords[i][1] = self.seg_properties[0][j-count_prev].centroid
+            # Assign results of matching to each segment's RegionProperties obj
+            for i in range(count_prev):
+                # Condition if segment has disappeared (assignment = "[D]")
+                if seg_labels[i] == seg_matches[i]:
+                    self.seg_properties[1][i].__match = "D"
 
-            # For each pair of coordinates, classify as certain behaviors
-            for coord_pair in coords:
-                if coord_pair[0] == (0, 0) and coord_pair[1] == (0, 0):
-                    pass
-                # If this condition is met, pair means a segment appeared
-                elif coord_pair[0] == (0, 0):
-                    edge_distance = min(coord_pair[1][0], coord_pair[1][1],
-                                        self.width - coord_pair[1][1])
-                    roi_value = self.roi_mask[int(coord_pair[1][0])] \
-                                             [int(coord_pair[1][1])]
+                # Condition if segment has match (assignment = "[!]")
+                if seg_labels[i] != seg_matches[i]:
+                    j = seg_matches[i] - count_prev  # Offset (see matrix eg.)
+                    self.seg_properties[1][i].__match = j
+                    self.seg_properties[0][j].__match = i
+            for i in range(count_curr):
+                # Condition if segment has appeared (assignment = "[A]")
+                if seg_labels[i+count_prev] == seg_matches[i+count_prev]:
+                    self.seg_properties[0][i].__match = "A"
+        else:
+            seg_matches = []  # Empty list for visuals in case count_total = 0
 
-                    if edge_distance <= 10:
-                        counts["ENT_FRM"] += 1
-                    elif roi_value == 255:
-                        counts["ENT_CHM"] += 1
-                    else:
-                        counts["ENT_FPs"] += 1
-                # If this condition is met, pair means a segment disappeared
-                elif coord_pair[1] == (0, 0):
-                    edge_distance = min(coord_pair[0][0], coord_pair[0][1],
-                                        self.width - coord_pair[0][1])
-                    roi_value = self.roi_mask[int(coord_pair[0][0])] \
-                                             [int(coord_pair[0][1])]
-
-                    if edge_distance <= 10:
-                        counts["EXT_FRM"] += 1
-                    elif roi_value == 255:
-                        for aseg in self.seg_properties[1]:
-                            if aseg.centroid == coord_pair[0]:
-                                if hasattr(aseg, 'angle'):
-                                    if -125 < aseg.angle < -55:
-                                        counts["EXT_CHM"] += 1
-                                    else:
-                                        counts["EXT_FPs"] += 1
-                                else:
-                                    counts["EXT_FPs"] += 1
-                    else:
-                        counts["EXT_FPs"] += 1
-                # Otherwise, a match was made
-                else:
-                    for aseg in self.seg_properties[0]:
-                        if aseg.centroid == coord_pair[1]:
-                            aseg.angle_list = []
-                            aseg.adisp_list = []
-                            for bseg in self.seg_properties[1]:
-                                if bseg.centroid == coord_pair[0]:
-                                    try:
-                                        for angles in bseg.angle_list:
-                                            aseg.angle_list.append(angles)
-                                        for disp in bseg.adisp_list:
-                                            aseg.adisp_list.append(disp)
-                                    except:
-                                        test = None
-                            # Store angle in regionprops for that segment
-                            del_y = coord_pair[0][0] - coord_pair[1][0]
-                            del_x = coord_pair[1][1] - coord_pair[0][1]
-                            aseg.adisp_list.append((del_x, del_y))
-                            aseg.angle_list.append(
-                                math.degrees(math.atan2(del_y, del_x)))
-                            aseg.angle2 = (sum(aseg.angle_list) /
-                                          len(aseg.angle_list))
-
-                            sum_del_y = 0
-                            sum_del_x = 0
-                            for disp in aseg.adisp_list:
-                                sum_del_y += disp[1]
-                                sum_del_x += disp[0]
-                            aseg.angle = \
-                                math.degrees(math.atan2(sum_del_y, sum_del_x))
-                    counts["MATCHES"] += 1
+        # Use coordinate pair information to classify matches
+        counts = self.analyse_matches()
 
         # Create visualization of segment matches if requested
         if visual:
             self.match_visualization(count_prev, count_total,
-                                     matches, counts,
+                                     seg_matches, counts,
                                      save_directory, folder_name)
+
+        return counts
+
+    def analyse_matches(self):
+        """Use matching results to:
+            1) store displacement history of matched segments, and
+            2) determine if no-match segments meet "enter chimney" criteria."""
+
+        # Enter frame from chimney ("ENT") no longer tracked
+        counts = {
+            "TMSTAMP": self.timestamps[self.queue_center],
+            "FRM_NUM": self.framenumbers[self.queue_center],
+            "SEGMNTS": len(self.seg_properties[0]),
+            "MATCHES": 0,
+            "ENT_CHM": 0,
+            "ENT_FRM": 0,
+            "ENT_AMB": 0,
+            "ENT_FPs": 0,
+            "EXT_CHM": 0,
+            "EXT_FRM": 0,
+            "EXT_AMB": 0,
+            "EXT_FPs": 0,
+            "FRMINFO": []
+        }
+
+        for seg_curr in self.seg_properties[0]:
+            # This condition indicates a current-frame segment has appeared
+            if seg_curr.__match == "A":
+                pass
+
+            # This condition indicates a current-frame segment has a match
+            else:
+                # Append displacement values to list (past values)
+                seg_curr.__displacements = []
+                seg_prev = self.seg_properties[1][seg_curr.__match]
+                if hasattr(seg_prev, '_FrameQueue__displacements'):
+                    for d in seg_prev.__displacements:
+                        seg_curr.__displacements.append(d)
+
+                # Append displacement values to list (current values)
+                del_x = (seg_prev.centroid[1] - seg_curr.centroid[1]) * -1
+                del_y = (seg_prev.centroid[0] - seg_curr.centroid[0])
+                seg_curr.__displacements.append((del_x, del_y))
+
+                counts["MATCHES"] += 1
+
+        for seg_prev in self.seg_properties[1]:
+            # This condition indicates a previous-frame segment has disappeared
+            if seg_prev.__match == "D":
+                roi_value = (self.roi_mask[int(seg_prev.centroid[0])]
+                                          [int(seg_prev.centroid[1])])
+
+                # "Enter Chimney" condition 1: Centroid in ROI
+                if roi_value == 255:
+
+                    # "Enter Chimney" condition 2: Has past motion vectors.
+                    if hasattr(seg_prev, '_FrameQueue__displacements'):
+                        sum_del_y = 0
+                        sum_del_x = 0
+                        for d in seg_prev.__displacements:
+                            sum_del_y += d[1]
+                            sum_del_x += d[0]
+                        angle = math.degrees(math.atan2(sum_del_y, sum_del_x))
+
+                        # "Enter Chimney" condition 3: Flight into chimney
+                        if -125 < angle < -55:
+                            counts["EXT_CHM"] += 1
+                            counts["FRMINFO"].append("TP: Angle = {0:.2f}. "
+                                                     .format(angle))
+                        else:
+                            counts["EXT_FPs"] += 1
+                            counts["FRMINFO"].append("FP: Angle = {0:.2f}. "
+                                                     .format(angle))
+                    else:
+                        counts["EXT_FPs"] += 1
+                        counts["FRMINFO"].append("FP: No previous MVs. ")
+                else:
+                    counts["EXT_FPs"] += 1
+                    counts["FRMINFO"].append("FP: Outside ROI. ")
 
         return counts
 
