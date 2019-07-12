@@ -26,8 +26,6 @@
 # results-visualization:
 #
 # results-csv-files:
-# -TODO: Add frame numbers as DataFrame index so they'll be displayed
-# -TODO: Add precision and recall to results-summary.csv
 # -TODO: Update empty-gt-generator for us timestamp precision.
 # =========================================================================== #
 
