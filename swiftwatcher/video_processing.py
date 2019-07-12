@@ -678,7 +678,6 @@ class FrameQueue:
                                 sum_del_x += disp[0]
                             aseg.angle = \
                                 math.degrees(math.atan2(sum_del_y, sum_del_x))
-                            test = None
                     counts["MATCHES"] += 1
 
         # Create visualization of segment matches if requested
@@ -840,7 +839,7 @@ def process_extracted_frames(args, params):
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
-            frame_queue.get_motion_vectors(args)
+            # frame_queue.get_motion_vectors(args)
             match_counts = frame_queue.match_segments(args.default_dir,
                                                       args.custom_dir,
                                                       params,
