@@ -77,12 +77,14 @@ def format_dataframes(df_estimation, df_groundtruth):
     df_groundtruth.index = df_groundtruth.index.round('us')
     df_estimation.index = df_estimation.index.round('us')
 
-    # Keep only the estimated counts which are present in groundtruth (columns)
-    df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
     # Keep only the groundtruth counts which are present in estimates (rows)
     df_groundtruth = df_groundtruth.reindex(df_estimation.index)
+    # Keep only the estimated counts which are present in groundtruth (columns)
+    df_estimation_i = df_estimation[[c for c in df_groundtruth.columns]].copy()
+    # Add frame information back to df_estimation
+    df_estimation_i["FRMINFO"] = df_estimation["FRMINFO"]
 
-    return df_estimation, df_groundtruth
+    return df_estimation_i, df_groundtruth
 
 
 def save_test_results(args, df_groundtruth, df_estimation):
@@ -100,8 +102,8 @@ def save_test_results(args, df_groundtruth, df_estimation):
     print("[*] Saving results of test to files.")
 
     # Using columns 1:10 so that the "frame number" column is excluded
-    error_full = df_estimation.values[:, 1:] - df_groundtruth.values[:, 1:]
-    correct = np.minimum(df_estimation.values[:, 1:],
+    error_full = df_estimation.values[:, 1:-1] - df_groundtruth.values[:, 1:]
+    correct = np.minimum(df_estimation.values[:, 1:-1],
                          df_groundtruth.values[:, 1:])
 
     # Summarizing the performance of the algorithm across all frames
@@ -120,7 +122,11 @@ def save_test_results(args, df_groundtruth, df_estimation):
 
     # Generate alternate versions for visual clarity
     df_results_cs = df_results.cumsum()
+    df_results_cs["FRMINFO"] = df_estimation["FRMINFO"]
     df_results_sum = df_results.sum()
+    df_results_err = df_results.copy()
+    df_results_err["FRMINFO"] = df_estimation["FRMINFO"]
+    df_results_err = df_results_err.loc[(df_results['total_error'] > 0)]
     df_results_tp = df_results.loc[(df_results['true_positives'] > 0)]
     df_results_md = df_results.loc[(df_results['missed_detections'] < 0)]
     df_results_fp = df_results.loc[(df_results['false_positives'] > 0)]
@@ -134,6 +140,7 @@ def save_test_results(args, df_groundtruth, df_estimation):
     df_results_md.to_csv(save_directory+"loc_missed-detections.csv")
     df_results_fp.to_csv(save_directory+"loc_false-positives.csv")
     df_results_tp.to_csv(save_directory+"loc_true-positives.csv")
+    df_results_err.to_csv(save_directory+"error_information.csv")
 
     print("[-] Results successfully saved to files.")
 

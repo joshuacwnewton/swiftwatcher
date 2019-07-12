@@ -652,6 +652,7 @@ class FrameQueue:
             "EXT_FRM": 0,
             "EXT_AMB": 0,
             "EXT_FPs": 0,
+            "FRMINFO": []
         }
 
         for seg_curr in self.seg_properties[0]:
@@ -678,23 +679,36 @@ class FrameQueue:
         for seg_prev in self.seg_properties[1]:
             # This condition indicates a previous-frame segment has disappeared
             if seg_prev.__match == "D":
-                # Use displacement history to determine angle of flight
-                if hasattr(seg_prev, '_FrameQueue__displacements'):
-                    sum_del_y = 0
-                    sum_del_x = 0
-                    for d in seg_prev.__displacements:
-                        sum_del_y += d[1]
-                        sum_del_x += d[0]
-                    angle = math.degrees(math.atan2(sum_del_y, sum_del_x))
-                    roi_value = (self.roi_mask[int(seg_prev.centroid[0])]
-                                              [int(seg_prev.centroid[1])])
+                roi_value = (self.roi_mask[int(seg_prev.centroid[0])]
+                                          [int(seg_prev.centroid[1])])
 
-                    if (roi_value == 255) and (-125 < angle < -55):
-                        counts["EXT_CHM"] += 1
+                # "Enter Chimney" condition 1: Centroid in ROI
+                if roi_value == 255:
+
+                    # "Enter Chimney" condition 2: Has past motion vectors.
+                    if hasattr(seg_prev, '_FrameQueue__displacements'):
+                        sum_del_y = 0
+                        sum_del_x = 0
+                        for d in seg_prev.__displacements:
+                            sum_del_y += d[1]
+                            sum_del_x += d[0]
+                        angle = math.degrees(math.atan2(sum_del_y, sum_del_x))
+
+                        # "Enter Chimney" condition 3: Flight into chimney
+                        if -125 < angle < -55:
+                            counts["EXT_CHM"] += 1
+                            counts["FRMINFO"].append("TP: Angle = {0:.2f}. "
+                                                     .format(angle))
+                        else:
+                            counts["EXT_FPs"] += 1
+                            counts["FRMINFO"].append("FP: Angle = {0:.2f}. "
+                                                     .format(angle))
                     else:
                         counts["EXT_FPs"] += 1
+                        counts["FRMINFO"].append("FP: No previous MVs. ")
                 else:
                     counts["EXT_FPs"] += 1
+                    counts["FRMINFO"].append("FP: Outside ROI. ")
 
         return counts
 
