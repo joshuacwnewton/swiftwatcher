@@ -546,7 +546,10 @@ class FrameQueue:
                     # Likeilihoods as a function of distance between segments
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
+
                     # Map distance values using a Gaussian curve
+                    # NOTE: This function was scrapped together in June. Needs
+                    # to be chosen more methodically if used for paper.
                     likeilihood_matrix[index_v, index_h] = \
                         math.exp(-1 * (((dist - 5) ** 2) / 40))
 
@@ -562,6 +565,8 @@ class FrameQueue:
                                      self.width - point[1]])
 
                 # Map distance values using an Exponential curve
+                # NOTE: This function was scrapped together in June. Needs to
+                # be chosen more methodically if used for paper.
                 likeilihood_matrix[i, i] = \
                     (1 / 8) * math.exp(-edge_distance / 10)
 
@@ -607,16 +612,15 @@ class FrameQueue:
             1) store displacement history of matched segments, and
             2) determine if no-match segments meet "enter chimney" criteria."""
 
-        # Enter frame from chimney ("ENT") no longer tracked
         counts = {
             "TMSTAMP": self.timestamps[self.queue_center],
             "FRM_NUM": self.framenumbers[self.queue_center],
             "SEGMNTS": len(self.seg_properties[0]),
             "MATCHES": 0,
-            "ENT_CHM": 0,
-            "ENT_FRM": 0,
-            "ENT_AMB": 0,
-            "ENT_FPs": 0,
+            # "ENT_CHM": 0, # Enter frame from chimney no longer tracked
+            # "ENT_FRM": 0,
+            # "ENT_AMB": 0,
+            # "ENT_FPs": 0,
             "EXT_CHM": 0,
             "EXT_FRM": 0,
             "EXT_AMB": 0,
