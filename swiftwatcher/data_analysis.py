@@ -73,14 +73,23 @@ def save_test_config(args, params):
 
 
 def format_dataframes(df_estimation, df_groundtruth):
+    # Parse TMSTAMP as datetime
+    df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
+    df_estimation["TMSTAMP"] = pd.to_datetime(df_estimation["TMSTAMP"])
+
     # Round DateTimeArray indices to microsecond precision
-    df_groundtruth.index = df_groundtruth.index.round('us')
-    df_estimation.index = df_estimation.index.round('us')
+    df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
+    df_estimation["TMSTAMP"] = df_estimation["TMSTAMP"].dt.round('us')
+
+    # Set MultiIndex using both timestamps and framenumbers
+    df_estimation.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    df_groundtruth.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
 
     # Keep only the groundtruth counts which are present in estimates (rows)
     df_groundtruth = df_groundtruth.reindex(df_estimation.index)
     # Keep only the estimated counts which are present in groundtruth (columns)
     df_estimation_i = df_estimation[[c for c in df_groundtruth.columns]].copy()
+
     # Add frame information back to df_estimation
     df_estimation_i["FRMINFO"] = df_estimation["FRMINFO"]
 
@@ -99,15 +108,12 @@ def save_test_results(args, df_groundtruth, df_estimation):
             print("[!] Creation of the directory {0} failed."
                   .format(save_directory))
 
-    print("[*] Saving results of test to files.")
+    # Using columns :-1 to exclude the "FRMINFO" column in df_estimation
+    error_full = df_estimation.values[:, :-1] - df_groundtruth.values[:, :]
+    correct = np.minimum(df_estimation.values[:, :-1],
+                         df_groundtruth.values[:, :])
 
-    # Using columns 1:10 so that the "frame number" column is excluded
-    error_full = df_estimation.values[:, 1:-1] - df_groundtruth.values[:, 1:]
-    correct = np.minimum(df_estimation.values[:, 1:-1],
-                         df_groundtruth.values[:, 1:])
-
-    # Summarizing the performance of the algorithm across all frames
-    results_summary = {
+    results = {
         # Commented out because new ground truth does not yet have full
         # segmentation counts.
         # "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
@@ -118,29 +124,33 @@ def save_test_results(args, df_groundtruth, df_estimation):
         "total_error": abs(error_full).reshape((-1,)),
         "net_error": error_full.reshape((-1,))
     }
-    df_results = pd.DataFrame(results_summary, index=df_groundtruth.index)
+    df_results = pd.DataFrame(results, index=df_groundtruth.index)
 
-    # Generate alternate versions for visual clarity
+    print("[*] Saving results of test to files.")
+
+    df_estimation.to_csv(save_directory+"estimation.csv")
+    df_groundtruth.to_csv(save_directory+"groundtruth.csv")
+
     df_results_cs = df_results.cumsum()
     df_results_cs["FRMINFO"] = df_estimation["FRMINFO"]
+    df_results_cs.to_csv(save_directory + "results_cumulative.csv")
+
     df_results_sum = df_results.sum()
+    df_results_sum["precision"] = (df_results_sum["true_positives"] /
+                                   (df_results_sum["true_positives"] +
+                                    df_results_sum["false_positives"]))
+    df_results_sum["recall"] = (df_results_sum["true_positives"] /
+                                (df_results_sum["true_positives"] +
+                                 -1 * df_results_sum["missed_detections"]))
+    df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
+
     df_results_err = df_results.copy()
     df_results_err["FRMINFO"] = df_estimation["FRMINFO"]
     df_results_err = df_results_err.loc[(df_results['total_error'] > 0)]
-    df_results_tp = df_results.loc[(df_results['true_positives'] > 0)]
-    df_results_md = df_results.loc[(df_results['missed_detections'] < 0)]
-    df_results_fp = df_results.loc[(df_results['false_positives'] > 0)]
+    df_results_err.to_csv(save_directory + "error_information.csv")
 
-    # Writing the full estimation and summary of results to files
-    df_estimation.to_csv(save_directory+"estimation.csv")
-    df_groundtruth.to_csv(save_directory+"groundtruth.csv")
+    df_results["FRMINFO"] = df_estimation["FRMINFO"]
     df_results.to_csv(save_directory+"results_full.csv")
-    df_results_cs.to_csv(save_directory+"results_cumulative.csv")
-    df_results_sum.to_csv(save_directory+"results_summary.csv", header=False)
-    df_results_md.to_csv(save_directory+"loc_missed-detections.csv")
-    df_results_fp.to_csv(save_directory+"loc_false-positives.csv")
-    df_results_tp.to_csv(save_directory+"loc_true-positives.csv")
-    df_results_err.to_csv(save_directory+"error_information.csv")
 
     print("[-] Results successfully saved to files.")
 
@@ -157,13 +167,13 @@ def plot_result(args, df_groundtruth, df_estimation, key, flag):
             print("[!] Creation of the directory {0} failed."
                   .format(save_directory))
 
+    # Reset index to just "FRM_NUM"
+    df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
+    df_estimation = df_estimation.reset_index("TMSTAMP")
+
     # Extract segment counts as series objects (from dataframes)
     es_series = df_estimation[key]
     gt_series = df_groundtruth[key]
-
-    # Replace timestamp indices with frame number indices for visual clarity
-    es_series.index = df_estimation["FRM_NUM"]
-    gt_series.index = df_groundtruth["FRM_NUM"]
 
     # Calculate the overestimate error and underestimate error
     difference = es_series.subtract(gt_series)
