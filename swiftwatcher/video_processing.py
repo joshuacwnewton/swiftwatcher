@@ -499,6 +499,34 @@ class FrameQueue:
                                 base_folder=folder_name,
                                 frame_folder="visualizations/segmentation/")
 
+    def get_motion_vectors(self, args):
+        frame = np.reshape(self.queue[self.queue_center],
+                           (self.height, self.width))
+        prev = np.reshape(self.queue[self.queue_center+1],
+                          (self.height, self.width))
+        stacked_frame = np.stack((frame,)*3, axis=-1)
+        hsv = np.zeros_like(stacked_frame)
+        hsv[..., 1] = 255
+        flow = cv2.calcOpticalFlowFarneback(prev, frame, None, 0.5, 3, 15, 3, 5,
+                                            1.2, 0)
+
+        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        hsv[..., 0] = ang * 180 / np.pi / 2
+        hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+        rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        mask = np.stack((self.roi_mask,)*3, axis=-1)
+        stacked_frame = cv2.addWeighted(mask, 0.25, stacked_frame, 0.75, 0)
+        rgb = cv2.addWeighted(mask, 0.25, rgb, 0.75, 0)
+        rgb = np.hstack((stacked_frame, rgb))
+        cv2.imwrite('test.png', rgb)
+        self.save_frame_to_file(args.default_dir,
+                                frame=rgb,
+                                index=self.queue_center,
+                                base_folder=args.custom_dir,
+                                frame_folder="visualizations/optical-flow/",
+                                scale=4)
+        test = None
+
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
@@ -623,12 +651,34 @@ class FrameQueue:
                 else:
                     for aseg in self.seg_properties[0]:
                         if aseg.centroid == coord_pair[1]:
+                            aseg.angle_list = []
+                            aseg.adisp_list = []
+                            for bseg in self.seg_properties[1]:
+                                if bseg.centroid == coord_pair[0]:
+                                    try:
+                                        for angles in bseg.angle_list:
+                                            aseg.angle_list.append(angles)
+                                        for disp in bseg.adisp_list:
+                                            aseg.adisp_list.append(disp)
+                                    except:
+                                        test = None
                             # Store angle in regionprops for that segment
                             del_y = coord_pair[0][0] - coord_pair[1][0]
                             del_x = coord_pair[1][1] - coord_pair[0][1]
-                            aseg.angle = math.degrees(math.atan2(del_y, del_x))
-                    counts["MATCHES"] += 1
+                            aseg.adisp_list.append((del_x, del_y))
+                            aseg.angle_list.append(
+                                math.degrees(math.atan2(del_y, del_x)))
+                            aseg.angle2 = (sum(aseg.angle_list) /
+                                          len(aseg.angle_list))
 
+                            sum_del_y = 0
+                            sum_del_x = 0
+                            for disp in aseg.adisp_list:
+                                sum_del_y += disp[1]
+                                sum_del_x += disp[0]
+                            aseg.angle = \
+                                math.degrees(math.atan2(sum_del_y, sum_del_x))
+                    counts["MATCHES"] += 1
 
         # Create visualization of segment matches if requested
         if visual:
@@ -783,12 +833,13 @@ def process_extracted_frames(args, params):
         # single preprocess_frame() method, just so the sequence of functions
         # can be applied to other things (like the ROI mask).
 
-        if frame_queue.frames_read > frame_queue.queue_center:
+        if frame_queue.frames_read > (frame_queue.queue_center + 1):
             # Proceed only when enough frames are cached to use RPCA method
             frame_queue.segment_frame(args.default_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
+            # frame_queue.get_motion_vectors(args)
             match_counts = frame_queue.match_segments(args.default_dir,
                                                       args.custom_dir,
                                                       params,
