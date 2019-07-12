@@ -118,8 +118,8 @@ def set_parameters():
                     "connectivity=4)",
 
         # Assignment Problem
-        # Used to roughly map distances into correct regions, but very hastily
-        # done. Actual functions will be chosen much more methodically.
+        # Used to roughly map distances into correct likelihoods, but very
+        # hastily done. Actual functions will be chosen much more methodically.
         "ap_func_match": "math.exp(-1 * (((dist - 5) ** 2) / 40))",
         "ap_func_notmatch": "(1 / 8) * math.exp(-edge_distance / 10)"
     }
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/matching-refactor/"
+                        default="tests/matching-refactor-3/"
                         )
     parser.add_argument("-v",
                         "--visual",
