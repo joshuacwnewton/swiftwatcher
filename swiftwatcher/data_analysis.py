@@ -136,12 +136,12 @@ def save_test_results(args, df_groundtruth, df_estimation):
     df_results_cs.to_csv(save_directory + "results_cumulative.csv")
 
     df_results_sum = df_results.sum()
-    df_results_sum["precision"] = (df_results_sum["true_positives"] /
-                                   (df_results_sum["true_positives"] +
-                                    df_results_sum["false_positives"]))
-    df_results_sum["recall"] = (df_results_sum["true_positives"] /
-                                (df_results_sum["true_positives"] +
-                                 -1 * df_results_sum["missed_detections"]))
+    df_results_sum["precision"] = 100 * (df_results_sum["true_positives"] /
+                                         (df_results_sum["true_positives"] +
+                                          df_results_sum["false_positives"]))
+    df_results_sum["recall"] = 100 * (df_results_sum["true_positives"] /
+                                      (df_results_sum["true_positives"] +
+                                       -1*df_results_sum["missed_detections"]))
     df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
 
     df_results_err = df_results.copy()
