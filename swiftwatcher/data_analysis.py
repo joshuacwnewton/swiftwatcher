@@ -141,7 +141,7 @@ def save_test_results(args, df_groundtruth, df_estimation):
                                     df_results_sum["false_positives"]))
     df_results_sum["recall"] = (df_results_sum["true_positives"] /
                                 (df_results_sum["true_positives"] +
-                                 df_results_sum["missed_detections"]))
+                                 -1 * df_results_sum["missed_detections"]))
     df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
 
     df_results_err = df_results.copy()
