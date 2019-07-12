@@ -538,24 +538,9 @@ class FrameQueue:
         count_total = count + count_prev
 
         # Initialize coordinates and counts
-        matches = []
+        seg_matches = []
         coords = [[(0, 0) for col in range(2)] for row in range(count_total)]
-        counts = {
-            "TMSTAMP": self.timestamps[self.queue_center],
-            "FRM_NUM": self.framenumbers[self.queue_center],
-            "SEGMNTS": count,
-            "MATCHES": 0,
-            "ENT_CHM": 0,
-            "ENT_FRM": 0,
-            "ENT_AMB": 0,
-            "ENT_FPs": 0,
-            "EXT_CHM": 0,
-            "EXT_FRM": 0,
-            "EXT_AMB": 0,
-            "EXT_FPs": 0,
-        }
 
-        # Compute and analyze match pairs only if segments exist
         if count_total > 0:
             # Initialize likelihood matrix
             likeilihood_matrix = np.zeros((count_total, count_total))
@@ -593,11 +578,11 @@ class FrameQueue:
             cost_matrix -= cost_matrix.min()
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
-            _, matches = linear_sum_assignment(cost_matrix)
+            seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
             # Convert matches (pairs of indices) into pairs of coordinates
-            for i in range(count_total):
-                j = matches[i]
+            for i in seg_labels:
+                j = seg_matches[i]
                 # Index condition if two segments are matching
                 if (i < j) and (i < count_prev):
                     coords[i][0] = self.seg_properties[1][i].centroid
@@ -609,82 +594,103 @@ class FrameQueue:
                 elif (i == j) and (i >= count_prev):
                     coords[i][1] = self.seg_properties[0][j-count_prev].centroid
 
-            # For each pair of coordinates, classify as certain behaviors
-            for coord_pair in coords:
-                if coord_pair[0] == (0, 0) and coord_pair[1] == (0, 0):
-                    pass
-                # If this condition is met, pair means a segment appeared
-                elif coord_pair[0] == (0, 0):
-                    edge_distance = min(coord_pair[1][0], coord_pair[1][1],
-                                        self.width - coord_pair[1][1])
-                    roi_value = self.roi_mask[int(coord_pair[1][0])] \
-                                             [int(coord_pair[1][1])]
-
-                    if edge_distance <= 10:
-                        counts["ENT_FRM"] += 1
-                    elif roi_value == 255:
-                        counts["ENT_CHM"] += 1
-                    else:
-                        counts["ENT_FPs"] += 1
-                # If this condition is met, pair means a segment disappeared
-                elif coord_pair[1] == (0, 0):
-                    edge_distance = min(coord_pair[0][0], coord_pair[0][1],
-                                        self.width - coord_pair[0][1])
-                    roi_value = self.roi_mask[int(coord_pair[0][0])] \
-                                             [int(coord_pair[0][1])]
-
-                    if edge_distance <= 10:
-                        counts["EXT_FRM"] += 1
-                    elif roi_value == 255:
-                        for aseg in self.seg_properties[1]:
-                            if aseg.centroid == coord_pair[0]:
-                                if hasattr(aseg, 'angle'):
-                                    if -125 < aseg.angle < -55:
-                                        counts["EXT_CHM"] += 1
-                                    else:
-                                        counts["EXT_FPs"] += 1
-                                else:
-                                    counts["EXT_FPs"] += 1
-                    else:
-                        counts["EXT_FPs"] += 1
-                # Otherwise, a match was made
-                else:
-                    for aseg in self.seg_properties[0]:
-                        if aseg.centroid == coord_pair[1]:
-                            aseg.angle_list = []
-                            aseg.adisp_list = []
-                            for bseg in self.seg_properties[1]:
-                                if bseg.centroid == coord_pair[0]:
-                                    try:
-                                        for angles in bseg.angle_list:
-                                            aseg.angle_list.append(angles)
-                                        for disp in bseg.adisp_list:
-                                            aseg.adisp_list.append(disp)
-                                    except:
-                                        test = None
-                            # Store angle in regionprops for that segment
-                            del_y = coord_pair[0][0] - coord_pair[1][0]
-                            del_x = coord_pair[1][1] - coord_pair[0][1]
-                            aseg.adisp_list.append((del_x, del_y))
-                            aseg.angle_list.append(
-                                math.degrees(math.atan2(del_y, del_x)))
-                            aseg.angle2 = (sum(aseg.angle_list) /
-                                          len(aseg.angle_list))
-
-                            sum_del_y = 0
-                            sum_del_x = 0
-                            for disp in aseg.adisp_list:
-                                sum_del_y += disp[1]
-                                sum_del_x += disp[0]
-                            aseg.angle = \
-                                math.degrees(math.atan2(sum_del_y, sum_del_x))
-                    counts["MATCHES"] += 1
+        # Use coordinate pair information to classify matches
+        counts = self.classify_matches(coords)
 
         # Create visualization of segment matches if requested
         if visual:
             self.match_visualization(count_prev, count_total,
-                                     matches, counts,
+                                     seg_matches, counts,
                                      save_directory, folder_name)
+
+        return counts
+
+    def classify_matches(self, coords):
+        counts = {
+            "TMSTAMP": self.timestamps[self.queue_center],
+            "FRM_NUM": self.framenumbers[self.queue_center],
+            "SEGMNTS": len(self.seg_properties[0]),
+            "MATCHES": 0,
+            "ENT_CHM": 0,
+            "ENT_FRM": 0,
+            "ENT_AMB": 0,
+            "ENT_FPs": 0,
+            "EXT_CHM": 0,
+            "EXT_FRM": 0,
+            "EXT_AMB": 0,
+            "EXT_FPs": 0,
+        }
+
+        # For each pair of coordinates, classify as certain behaviors
+        for coord_pair in coords:
+            if coord_pair[0] == (0, 0) and coord_pair[1] == (0, 0):
+                pass
+            # If this condition is met, pair means a segment appeared
+            elif coord_pair[0] == (0, 0):
+                edge_distance = min(coord_pair[1][0], coord_pair[1][1],
+                                    self.width - coord_pair[1][1])
+                roi_value = self.roi_mask[int(coord_pair[1][0])] \
+                    [int(coord_pair[1][1])]
+
+                if edge_distance <= 10:
+                    counts["ENT_FRM"] += 1
+                elif roi_value == 255:
+                    counts["ENT_CHM"] += 1
+                else:
+                    counts["ENT_FPs"] += 1
+            # If this condition is met, pair means a segment disappeared
+            elif coord_pair[1] == (0, 0):
+                edge_distance = min(coord_pair[0][0], coord_pair[0][1],
+                                    self.width - coord_pair[0][1])
+                roi_value = self.roi_mask[int(coord_pair[0][0])] \
+                    [int(coord_pair[0][1])]
+
+                if edge_distance <= 10:
+                    counts["EXT_FRM"] += 1
+                elif roi_value == 255:
+                    for aseg in self.seg_properties[1]:
+                        if aseg.centroid == coord_pair[0]:
+                            if hasattr(aseg, 'angle'):
+                                if -125 < aseg.angle < -55:
+                                    counts["EXT_CHM"] += 1
+                                else:
+                                    counts["EXT_FPs"] += 1
+                            else:
+                                counts["EXT_FPs"] += 1
+                else:
+                    counts["EXT_FPs"] += 1
+            # Otherwise, a match was made
+            else:
+                for aseg in self.seg_properties[0]:
+                    if aseg.centroid == coord_pair[1]:
+                        aseg.angle_list = []
+                        aseg.adisp_list = []
+                        for bseg in self.seg_properties[1]:
+                            if bseg.centroid == coord_pair[0]:
+                                try:
+                                    for angles in bseg.angle_list:
+                                        aseg.angle_list.append(angles)
+                                    for disp in bseg.adisp_list:
+                                        aseg.adisp_list.append(disp)
+                                except:
+                                    test = None
+                        # Store angle in regionprops for that segment
+                        del_y = coord_pair[0][0] - coord_pair[1][0]
+                        del_x = coord_pair[1][1] - coord_pair[0][1]
+                        aseg.adisp_list.append((del_x, del_y))
+                        aseg.angle_list.append(
+                            math.degrees(math.atan2(del_y, del_x)))
+                        aseg.angle2 = (sum(aseg.angle_list) /
+                                       len(aseg.angle_list))
+
+                        sum_del_y = 0
+                        sum_del_x = 0
+                        for disp in aseg.adisp_list:
+                            sum_del_y += disp[1]
+                            sum_del_x += disp[0]
+                        aseg.angle = \
+                            math.degrees(math.atan2(sum_del_y, sum_del_x))
+                counts["MATCHES"] += 1
 
         return counts
 
