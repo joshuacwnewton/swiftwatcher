@@ -5,6 +5,8 @@
 # -TODO: Brainstorm improvements for antennae overlapping.
 # -TODO: Test smaller crop-regions to see if RPCA speed is increased.
 # -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
+# -TODO: Create ground truth file for labeling detected events.
+# -TODO: Generate feature vectors for training data.
 #
 # algorithm-structure:
 # -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
