@@ -88,12 +88,9 @@ def format_dataframes(df_estimation, df_groundtruth):
     # Keep only the groundtruth counts which are present in estimates (rows)
     df_groundtruth = df_groundtruth.reindex(df_estimation.index)
     # Keep only the estimated counts which are present in groundtruth (columns)
-    df_estimation_i = df_estimation[[c for c in df_groundtruth.columns]].copy()
+    df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
 
-    # Add frame information back to df_estimation
-    df_estimation_i["FRMINFO"] = df_estimation["FRMINFO"]
-
-    return df_estimation_i, df_groundtruth
+    return df_estimation, df_groundtruth
 
 
 def save_test_results(args, df_groundtruth, df_estimation):
@@ -109,8 +106,8 @@ def save_test_results(args, df_groundtruth, df_estimation):
                   .format(save_directory))
 
     # Using columns :-1 to exclude the "FRMINFO" column in df_estimation
-    error_full = df_estimation.values[:, :-1] - df_groundtruth.values[:, :]
-    correct = np.minimum(df_estimation.values[:, :-1],
+    error_full = df_estimation.values[:, :] - df_groundtruth.values[:, :]
+    correct = np.minimum(df_estimation.values[:, :],
                          df_groundtruth.values[:, :])
 
     results = {
@@ -132,7 +129,6 @@ def save_test_results(args, df_groundtruth, df_estimation):
     df_groundtruth.to_csv(save_directory+"groundtruth.csv")
 
     df_results_cs = df_results.cumsum()
-    df_results_cs["FRMINFO"] = df_estimation["FRMINFO"]
     df_results_cs.to_csv(save_directory + "results_cumulative.csv")
 
     df_results_sum = df_results.sum()
@@ -145,11 +141,9 @@ def save_test_results(args, df_groundtruth, df_estimation):
     df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
 
     df_results_err = df_results.copy()
-    df_results_err["FRMINFO"] = df_estimation["FRMINFO"]
     df_results_err = df_results_err.loc[(df_results['total_error'] > 0)]
     df_results_err.to_csv(save_directory + "error_information.csv")
 
-    df_results["FRMINFO"] = df_estimation["FRMINFO"]
     df_results.to_csv(save_directory+"results_full.csv")
 
     print("[-] Results successfully saved to files.")
