@@ -617,10 +617,10 @@ class FrameQueue:
             "FRM_NUM": self.framenumbers[self.queue_center],
             "SEGMNTS": len(self.seg_properties[0]),
             "MATCHES": 0,
-            # "ENT_CHM": 0, # Enter frame from chimney no longer tracked
-            # "ENT_FRM": 0,
-            # "ENT_AMB": 0,
-            # "ENT_FPs": 0,
+            "ENT_CHM": 0,  # Enter frame from chimney no longer tracked
+            "ENT_FRM": 0,
+            "ENT_AMB": 0,
+            "ENT_FPs": 0,
             "EXT_CHM": 0,
             "EXT_FRM": 0,
             "EXT_AMB": 0,

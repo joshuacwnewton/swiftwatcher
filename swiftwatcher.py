@@ -162,12 +162,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([55000, 56000])
+                        default=([0, 108048])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/param-refactor-test/"
+                        default="tests/2019-07-12_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
