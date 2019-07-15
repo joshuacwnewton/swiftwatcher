@@ -286,13 +286,13 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, frame=None, index=0, algorithm="cv2 default"):
+    def convert_grayscale(self, frame=None, index=0):
         """Convert to grayscale a frame at specified index of FrameQueue"""
         if frame is None:
             frame = self.queue[index]
 
-        if algorithm == "cv2 default":
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # OpenCV default, may use other methods in future (single HSV channel?)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         return frame
 
@@ -413,16 +413,14 @@ class FrameQueue:
                           type=params["thr_type"])
 
         # Discard areas where 2x2 structuring element will not fit
-        seg["grey_opening"] = \
-            img.grey_opening(list(seg.values())[-1],
-                             size=params["gry_op_SE"]).astype(np.uint8)
-
-        seg["grey_opening2"] = \
-            img.grey_opening(list(seg.values())[-1],
-                             size=(3, 3)).astype(np.uint8)
+        for i in range(len(params["grey_op_SE"])):
+            seg["grey_opening{}".format(i+1)] = \
+                img.grey_opening(list(seg.values())[-1],
+                                 size=params["grey_op_SE"][i]).astype(np.uint8)
 
         # Segment using connected component labeling
-        num_components, labeled_frame = eval(params["seg_func"])
+        num_components, labeled_frame = \
+            cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
 
         # Scale labeled image to be visible with uint8 grayscale
         if num_components > 0:
@@ -499,36 +497,6 @@ class FrameQueue:
                                 base_folder=folder_name,
                                 frame_folder="visualizations/segmentation/")
 
-    def get_motion_vectors(self, args):
-        """Rough code for testing Farneback dense optical flow. Not currently
-        used."""
-        frame = np.reshape(self.queue[self.queue_center],
-                           (self.height, self.width))
-        prev = np.reshape(self.queue[self.queue_center+1],
-                          (self.height, self.width))
-        stacked_frame = np.stack((frame,)*3, axis=-1)
-        hsv = np.zeros_like(stacked_frame)
-        hsv[..., 1] = 255
-        flow = cv2.calcOpticalFlowFarneback(prev, frame, None, 0.5, 3, 15, 3, 5,
-                                            1.2, 0)
-
-        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-        hsv[..., 0] = ang * 180 / np.pi / 2
-        hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-        rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        mask = np.stack((self.roi_mask,)*3, axis=-1)
-        stacked_frame = cv2.addWeighted(mask, 0.25, stacked_frame, 0.75, 0)
-        rgb = cv2.addWeighted(mask, 0.25, rgb, 0.75, 0)
-        rgb = np.hstack((stacked_frame, rgb))
-        cv2.imwrite('test.png', rgb)
-        self.save_frame_to_file(args.default_dir,
-                                frame=rgb,
-                                index=self.queue_center,
-                                base_folder=args.custom_dir,
-                                frame_folder="visualizations/optical-flow/",
-                                scale=4)
-        test = None
-
     def match_segments(self, save_directory, folder_name,
                        params, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
@@ -578,9 +546,12 @@ class FrameQueue:
                     # Likeilihoods as a function of distance between segments
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
+
                     # Map distance values using a Gaussian curve
-                    likeilihood_matrix[index_v, index_h] \
-                        = eval(params["ap_func_match"])
+                    # NOTE: This function was scrapped together in June. Needs
+                    # to be chosen more methodically if used for paper.
+                    likeilihood_matrix[index_v, index_h] = \
+                        math.exp(-1 * (((dist - 5) ** 2) / 40))
 
             # Matrix values: likelihood of segments having no match
             for i in range(count_total):
@@ -594,7 +565,10 @@ class FrameQueue:
                                      self.width - point[1]])
 
                 # Map distance values using an Exponential curve
-                likeilihood_matrix[i, i] = eval(params["ap_func_notmatch"])
+                # NOTE: This function was scrapped together in June. Needs to
+                # be chosen more methodically if used for paper.
+                likeilihood_matrix[i, i] = \
+                    (1 / 8) * math.exp(-edge_distance / 10)
 
             # Convert likelihood matrix into cost matrix
             # This is necessary because of scipy's default implementation
@@ -638,13 +612,12 @@ class FrameQueue:
             1) store displacement history of matched segments, and
             2) determine if no-match segments meet "enter chimney" criteria."""
 
-        # Enter frame from chimney ("ENT") no longer tracked
         counts = {
             "TMSTAMP": self.timestamps[self.queue_center],
             "FRM_NUM": self.framenumbers[self.queue_center],
             "SEGMNTS": len(self.seg_properties[0]),
             "MATCHES": 0,
-            "ENT_CHM": 0,
+            "ENT_CHM": 0,  # Enter frame from chimney no longer tracked
             "ENT_FRM": 0,
             "ENT_AMB": 0,
             "ENT_FPs": 0,
@@ -848,8 +821,7 @@ def process_extracted_frames(args, params):
         # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir,
                                          frame_queue.frame_to_load_next)
-        frame_queue.queue[0] = \
-            frame_queue.convert_grayscale(algorithm=params["gs_algorithm"])
+        frame_queue.queue[0] = frame_queue.convert_grayscale()
         frame_queue.queue[0] = frame_queue.crop_frame()
         frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
         frame_queue.queue[0] = frame_queue.frame_to_column()
@@ -888,8 +860,6 @@ def process_extracted_frames(args, params):
     # Convert dictionary of lists into DataFrame
     df_estimation = pd.DataFrame(count_estimate,
                                  columns=list(count_estimate[0].keys()))
-    df_estimation.set_index("TMSTAMP", inplace=True)
-    df_estimation.index = pd.to_datetime(df_estimation.index)
 
     return df_estimation
 
