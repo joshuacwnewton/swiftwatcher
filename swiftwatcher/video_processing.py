@@ -663,51 +663,51 @@ class FrameQueue:
                 # Valid "possible swift entering" event conditions:
                 # 1: Centroid in ROI, 2: present for at least 2 frames
                 if roi_value == 255 and len(seg_prev.__centroids) > 1:
-                    # Compute angle of MV between first and last centroids
-                    del_y = (seg_prev.__centroids[0][0] -
-                             seg_prev.__centroids[-1][0])
-                    del_x = (seg_prev.__centroids[0][1] -
-                             seg_prev.__centroids[-1][1]) * -1
-                    angle = math.degrees(math.atan2(del_y, del_x))
-
-                    if len(seg_prev.__centroids) > 2:
-                        del_y = (seg_prev.__centroids[0][0] -
-                                 seg_prev.__centroids[-2][0])
-                        del_x = (seg_prev.__centroids[0][1] -
-                                 seg_prev.__centroids[-2][1]) * -1
-                        angle_shorter = math.degrees(math.atan2(del_y, del_x))
-                    else:
-                        angle_shorter = angle
-
-                    if len(seg_prev.__centroids) > 3:
-                        del_y = (seg_prev.__centroids[-4][0] -
-                                 seg_prev.__centroids[-2][0])
-                        del_x = (seg_prev.__centroids[-4][1] -
-                                 seg_prev.__centroids[-2][1]) * -1
-                        angle_3 = math.degrees(math.atan2(del_y, del_x))
-                    else:
-                        angle_3 = angle_shorter
+                    # # Compute angle of MV between first and last centroids
+                    # del_y = (seg_prev.__centroids[0][0] -
+                    #          seg_prev.__centroids[-1][0])
+                    # del_x = (seg_prev.__centroids[0][1] -
+                    #          seg_prev.__centroids[-1][1]) * -1
+                    # angle = math.degrees(math.atan2(del_y, del_x))
+                    #
+                    # if len(seg_prev.__centroids) > 2:
+                    #     del_y = (seg_prev.__centroids[0][0] -
+                    #              seg_prev.__centroids[-2][0])
+                    #     del_x = (seg_prev.__centroids[0][1] -
+                    #              seg_prev.__centroids[-2][1]) * -1
+                    #     angle_shorter = math.degrees(math.atan2(del_y, del_x))
+                    # else:
+                    #     angle_shorter = angle
+                    #
+                    # if len(seg_prev.__centroids) > 3:
+                    #     del_y = (seg_prev.__centroids[-4][0] -
+                    #              seg_prev.__centroids[-2][0])
+                    #     del_x = (seg_prev.__centroids[-4][1] -
+                    #              seg_prev.__centroids[-2][1]) * -1
+                    #     angle_3 = math.degrees(math.atan2(del_y, del_x))
+                    # else:
+                    #     angle_3 = angle_shorter
 
                     # Storing information about event for further analysis
                     event_info = {
                         "TMSTAMP": self.timestamps[self.queue_center],
                         "FRM_NUM": self.framenumbers[self.queue_center],
-                        "GTLABEL": 0,
-                        "ESLABEL": 0,
-                        "ANGLE_1": round(angle, 3),
-                        "ANGLE_2": round(angle_shorter, 3),
-                        "ANGLE_3": round(angle_3, 3),
+                        # "GTLABEL": 0,
+                        # "ESLABEL": 0,
+                        # "ANGLE_1": round(angle, 3),
+                        # "ANGLE_2": round(angle_shorter, 3),
+                        # "ANGLE_3": round(angle_3, 3),
                         "CENTRDS": seg_prev.__centroids,
                     }
                     self.event_list.append(event_info)
 
-                    # "Enter Chimney" condition: Flight angle within range
-                    # TODO: Replace with proper ML classifier
-                    if -125 < angle < -55:
-                        counts["EXT_CHM"] += 1
-                        event_info["ESLABEL"] = 1
-                    else:
-                        counts["EXT_FPs"] += 1
+                    # # "Enter Chimney" condition: Flight angle within range
+                    # # TODO: Replace with proper ML classifier
+                    # if -125 < angle < -55:
+                    #     counts["EXT_CHM"] += 1
+                    #     # event_info["ESLABEL"] = 1
+                    # else:
+                    #     counts["EXT_FPs"] += 1
 
         return counts
 
@@ -885,14 +885,14 @@ def process_extracted_frames(args, params):
 
     # Convert dictionary of lists into DataFrame
     df_events = pd.DataFrame(frame_queue.event_list,
-                             columns=list(frame_queue.event_list[0].keys()))
-    df_events.to_csv(args.default_dir + args.custom_dir +
-                     "segment-info.csv")
+                             columns=list(frame_queue.event_list[0].keys())).astype('object')
+    # df_events.to_csv(args.default_dir + args.custom_dir +
+    #                  "segment-info.csv")
 
     df_estimation = pd.DataFrame(count_estimate,
                                  columns=list(count_estimate[0].keys()))
 
-    return df_estimation
+    return df_estimation, df_events
 
 
 def extract_frames(args, queue_size=1, save_directory=None):
