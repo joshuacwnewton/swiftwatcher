@@ -74,26 +74,28 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def format_dataframes(df_groundtruth, df_events):
+def format_dataframes(args, df_groundtruth, df_events):
+    # Cap groundtruth to specified frame range
+    index_less = df_groundtruth[df_groundtruth['FRM_NUM'] < args.load[0]].index
+    index_more = df_groundtruth[df_groundtruth['FRM_NUM'] > args.load[1]].index
+    df_groundtruth.drop(index_less, inplace=True)
+    df_groundtruth.drop(index_more, inplace=True)
+
+    # Remove ground truth rows with no instances of swifts entering
+    index_zero = df_groundtruth[df_groundtruth['EXT_CHM'] == 0].index
+    df_groundtruth.drop(index_zero, inplace=True)
+
     # Parse TMSTAMP as datetime
     df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
-    # df_estimation["TMSTAMP"] = pd.to_datetime(df_estimation["TMSTAMP"])
     df_events["TMSTAMP"] = pd.to_datetime(df_events["TMSTAMP"])
 
     # Round DateTimeArray indices to microsecond precision
     df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
-    # df_estimation["TMSTAMP"] = df_estimation["TMSTAMP"].dt.round('us')
     df_events["TMSTAMP"] = df_events["TMSTAMP"].dt.round('us')
 
     # Set MultiIndex using both timestamps and framenumbers
-    # df_estimation.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
     df_groundtruth.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
     df_events.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-
-    # Keep only the groundtruth counts which are present in estimates (rows)
-    # df_groundtruth = df_groundtruth.reindex(df_estimation.index)
-    # Keep only the estimated counts which are present in groundtruth (columns)
-    # df_estimation = df_estimation[[c for c in df_groundtruth.columns]].copy()
 
     return df_groundtruth, df_events
 
@@ -132,7 +134,8 @@ def classify_feature_vectors(df_features):
 
 
 def generate_counts(df_labels):
-    df_counts = df_labels.groupby(df_labels.index).sum()
+    df_counts = df_labels.reset_index().groupby(['TMSTAMP', 'FRM_NUM']).sum()
+    df_counts = df_counts.loc[(df_counts['LABEL'] > 0)]
     df_counts.columns = ["EXT_CHM"]
 
     return df_counts
@@ -140,6 +143,8 @@ def generate_counts(df_labels):
 
 def save_test_results(args, df_groundtruth, df_estimation):
     """Save the bird count estimations from image processing to csv files."""
+
+    print("[*] Saving results of test to files.")
 
     # Create save directory if it does not already exist
     save_directory = args.default_dir+args.custom_dir+"results/"
@@ -167,31 +172,10 @@ def save_test_results(args, df_groundtruth, df_estimation):
         "net_error": error_full.reshape((-1,))
     }
     df_results = pd.DataFrame(results, index=df_groundtruth.index)
-
-    print("[*] Saving results of test to files.")
+    df_results.to_csv(save_directory+"results_full.csv")
 
     df_estimation.to_csv(save_directory+"estimation.csv")
     df_groundtruth.to_csv(save_directory+"groundtruth.csv")
-
-    df_groundtruth_loc = df_groundtruth.loc[(df_groundtruth['EXT_CHM'] > 0)]
-    df_groundtruth_loc.to_csv(save_directory+"groundtruth-locations.csv")
-
-    df_events = pd.read_csv(args.default_dir + args.custom_dir +
-                            "segment-info.csv")
-    df_events["TMSTAMP"] = pd.to_datetime(df_events["TMSTAMP"])
-    df_events["TMSTAMP"] = df_events["TMSTAMP"].dt.round('us')
-    df_events.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-    df_events.drop(df_events.columns[
-                   df_events.columns.str.contains('unnamed', case=False)],
-                   axis=1, inplace=True)
-    df_events["GTLABEL"] = 0
-    df_events["GTLABEL"].replace(to_replace=0, value=np.nan, inplace=True)
-    df_groundtruth_loc = df_groundtruth_loc.rename({"EXT_CHM": "GTLABEL"}, axis='columns')
-    df_events = df_events.combine_first(df_groundtruth_loc)
-    cols = df_events.columns.tolist()
-    cols = cols[-2:] + cols[:-2]
-    df_events = df_events[cols]
-    df_events.to_csv(args.default_dir + args.custom_dir + "segment-info-fixed.csv")
 
     df_results_cs = df_results.cumsum()
     df_results_cs.to_csv(save_directory + "results_cumulative.csv")
@@ -204,12 +188,6 @@ def save_test_results(args, df_groundtruth, df_estimation):
                                       (df_results_sum["true_positives"] +
                                        -1*df_results_sum["missed_detections"]))
     df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
-
-    df_results_err = df_results.copy()
-    df_results_err = df_results_err.loc[(df_results['total_error'] > 0)]
-    df_results_err.to_csv(save_directory + "error_information.csv")
-
-    df_results.to_csv(save_directory+"results_full.csv")
 
     print("[-] Results successfully saved to files.")
 

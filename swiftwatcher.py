@@ -55,7 +55,7 @@ def main(args, params):
         data.save_test_config(args, params)
 
         start = time.time()
-        df_estimation, df_events = vid.process_extracted_frames(args, params)
+        df_events = vid.process_extracted_frames(args, params)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
@@ -66,21 +66,24 @@ def main(args, params):
 
         # Reloading previous count estimates so analysis can be modified
         # independently from (slower) frame processing stage.
-        # if 'df_estimation' not in locals():
-        #     df_estimation = pd.read_csv((args.default_dir + args.custom_dir +
-        #                                  "results/estimation.csv"))
         if 'df_events' not in locals():
             df_events = pd.read_csv(args.default_dir + args.custom_dir +
                                     "results/segment-info.csv")
 
         df_groundtruth, df_events = \
-            data.format_dataframes(df_groundtruth, df_events)
+            data.format_dataframes(args, df_groundtruth, df_events)
 
         df_features = data.generate_feature_vectors(df_events)
 
         df_labels = data.classify_feature_vectors(df_features)
 
         df_estimation = data.generate_counts(df_labels)
+
+        # Force groundtruth and estimation to have same set of indexes
+        union_index = df_estimation.index.union(df_groundtruth.index)
+        df_groundtruth = df_groundtruth.reindex(index=union_index,
+                                                fill_value=0)
+        df_estimation = df_estimation.reindex(index=union_index, fill_value=0)
 
         data.save_test_results(args, df_groundtruth, df_estimation)
 
@@ -173,7 +176,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([35000, 37000])
+                        default=([35000, 38000])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
