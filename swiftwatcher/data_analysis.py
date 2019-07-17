@@ -347,8 +347,10 @@ def feature_engineering(args):
 
         return avg_distance
 
+    save_directory = args.default_dir+args.custom_dir+"classification/"
+
     import matplotlib.pyplot as plt
-    df_class = pd.read_csv(args.default_dir+"/groundtruth/classifier-xy.csv")
+    df_class = pd.read_csv(save_directory+"classifier-xy.csv")
     df_class["AVGDIST"] = df_class.apply(
         lambda row: compute_avg_distance(row["CENTRDS"]),
         axis=1
@@ -359,28 +361,28 @@ def feature_engineering(args):
     ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
     ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
     fig = ax.get_figure()
-    fig.savefig('hist_angle1.png')
+    fig.savefig(save_directory+'hist_angle1.png')
 
     plt.cla()
 
     ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
     ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
     fig = ax.get_figure()
-    fig.savefig('hist_angle2.png')
+    fig.savefig(save_directory+'hist_angle2.png')
 
     plt.cla()
 
     ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
     ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
     fig = ax.get_figure()
-    fig.savefig('hist_angle3.png')
+    fig.savefig(save_directory+'hist_angle3.png')
 
     plt.cla()
 
     ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
     ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
     fig = ax.get_figure()
-    fig.savefig('avgdist.png')
+    fig.savefig(save_directory+'avgdist.png')
 
     plt.cla()
 

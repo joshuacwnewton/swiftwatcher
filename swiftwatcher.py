@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/classification-test/"
+                        default="tests/2019-07-17_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
