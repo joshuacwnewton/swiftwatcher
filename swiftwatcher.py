@@ -62,13 +62,26 @@ def main(args, params):
         print("[-] Frame processing took {}.".format(elapsed_time))
 
     if args.analyse:
+        data.train_classifier(args)
+
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)
 
         # Reloading previous count estimates so analysis can be modified
         # independently from (slower) frame processing stage.
+
         if 'df_events' not in locals():
             df_events = pd.read_csv(args.default_dir + args.custom_dir +
                                     "results/segment-info.csv")
+        # Create save directory if it does not already exist
+        save_directory = args.default_dir + args.custom_dir + "results/"
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+        df_events.to_csv(args.default_dir + args.custom_dir +
+                         "results/segment-info.csv")
 
         df_groundtruth, df_events = \
             data.format_dataframes(args, df_groundtruth, df_events)
@@ -176,12 +189,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([35000, 38000])
+                        default=([0, 108048])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/df-object-type/"
+                        default="tests/2019-07-17_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",

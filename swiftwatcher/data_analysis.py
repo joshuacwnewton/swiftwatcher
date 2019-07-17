@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 
 # Needed to fetch video parameters for generating empty groundtruth file
 from swiftwatcher.video_processing import FrameQueue
+
+# Classifier modules
+from sklearn import svm
 # import seaborn
 # seaborn.set()
 
@@ -100,27 +103,97 @@ def format_dataframes(args, df_groundtruth, df_events):
     return df_groundtruth, df_events
 
 
-def compute_angle(centroid_list):
-    # If loading from csv, convert from str to list
-    if type(centroid_list) is str:
-        centroid_list = literal_eval(centroid_list)
-
-    del_y = centroid_list[0][0] - centroid_list[-1][0]
-    del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
-    angle = math.degrees(math.atan2(del_y, del_x))
-
-    return angle
-
-
 def generate_feature_vectors(df_events):
-    df_features = pd.DataFrame(index=df_events.index)
+    """Use segment information to generate feature vectors for each event."""
 
+    def compute_angle(centroid_list):
+        # If loading from csv, convert from str to list
+        if type(centroid_list) is str:
+            centroid_list = literal_eval(centroid_list)
+
+        del_y = centroid_list[0][0] - centroid_list[-1][0]
+        del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
+        angle = math.degrees(math.atan2(del_y, del_x))
+
+        return angle
+
+    df_features = pd.DataFrame(index=df_events.index)
     df_features["ANGLE"] = df_events.apply(
         lambda row: compute_angle(row["CENTRDS"]),
         axis=1
     )
 
     return df_features
+
+
+def train_classifier(args):
+
+    def compute_avg_distance(centroid_list):
+        # If loading from csv, convert from str to list
+        if type(centroid_list) is str:
+            centroid_list = literal_eval(centroid_list)
+
+        dist_sum = 0
+        for i in range(len(centroid_list) - 2):
+            c1 = centroid_list[i+1]
+            c2 = centroid_list[i+2]
+            dist_sum += math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c2[1])**2)
+            avg_distance = dist_sum / (len(centroid_list) - 2)
+
+        if dist_sum == 0:
+            for i in range(len(centroid_list) - 1):
+                c1 = centroid_list[i]
+                c2 = centroid_list[i + 1]
+                dist_sum += math.sqrt(
+                    (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
+            avg_distance = dist_sum / (len(centroid_list) - 1)
+
+        return avg_distance
+
+
+    import matplotlib.pyplot as plt
+    df_class = pd.read_csv(args.default_dir+"/groundtruth/classifier-xy.csv")
+    df_class["AVGDIST"] = df_class.apply(
+        lambda row: compute_avg_distance(row["CENTRDS"]),
+        axis=1
+    )
+    positives = df_class.loc[df_class["GTLABEL"].isin([1])]
+    negatives = df_class.loc[df_class["GTLABEL"].isin([0])]
+
+    ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle1.png')
+
+    plt.cla()
+
+    ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle2.png')
+
+    plt.cla()
+
+    ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle3.png')
+
+    plt.cla()
+
+    ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
+    ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('avgdist.png')
+
+    plt.cla()
+
+    ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
+    negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
+    fig = ax.get_figure()
+    fig.savefig('scatter.png')
+
+    # model = svm.SCV(gamma='auto')
 
 
 def classify_feature_vectors(df_features):
