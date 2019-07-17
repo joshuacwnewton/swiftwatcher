@@ -77,33 +77,29 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def format_dataframes(args, df_groundtruth, df_events):
+def format_dataframes(args, df_groundtruth, df_eventinfo):
     # Cap groundtruth to specified frame range
     index_less = df_groundtruth[df_groundtruth['FRM_NUM'] < args.load[0]].index
     index_more = df_groundtruth[df_groundtruth['FRM_NUM'] > args.load[1]].index
     df_groundtruth.drop(index_less, inplace=True)
     df_groundtruth.drop(index_more, inplace=True)
 
-    # Remove ground truth rows with no instances of swifts entering
-    index_zero = df_groundtruth[df_groundtruth['EXT_CHM'] == 0].index
-    df_groundtruth.drop(index_zero, inplace=True)
-
     # Parse TMSTAMP as datetime
     df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
-    df_events["TMSTAMP"] = pd.to_datetime(df_events["TMSTAMP"])
+    df_eventinfo["TMSTAMP"] = pd.to_datetime(df_eventinfo["TMSTAMP"])
 
     # Round DateTimeArray indices to microsecond precision
     df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
-    df_events["TMSTAMP"] = df_events["TMSTAMP"].dt.round('us')
+    df_eventinfo["TMSTAMP"] = df_eventinfo["TMSTAMP"].dt.round('us')
 
     # Set MultiIndex using both timestamps and framenumbers
     df_groundtruth.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-    df_events.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    df_eventinfo.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
 
-    return df_groundtruth, df_events
+    return df_groundtruth, df_eventinfo
 
 
-def generate_feature_vectors(df_events):
+def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
     def compute_angle(centroid_list):
@@ -117,8 +113,8 @@ def generate_feature_vectors(df_events):
 
         return angle
 
-    df_features = pd.DataFrame(index=df_events.index)
-    df_features["ANGLE"] = df_events.apply(
+    df_features = pd.DataFrame(index=df_eventinfo.index)
+    df_features["ANGLE"] = df_eventinfo.apply(
         lambda row: compute_angle(row["CENTRDS"]),
         axis=1
     )
@@ -126,101 +122,19 @@ def generate_feature_vectors(df_events):
     return df_features
 
 
-def train_classifier(args):
-
-    def compute_avg_distance(centroid_list):
-        # If loading from csv, convert from str to list
-        if type(centroid_list) is str:
-            centroid_list = literal_eval(centroid_list)
-
-        dist_sum = 0
-        for i in range(len(centroid_list) - 2):
-            c1 = centroid_list[i+1]
-            c2 = centroid_list[i+2]
-            dist_sum += math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c2[1])**2)
-            avg_distance = dist_sum / (len(centroid_list) - 2)
-
-        if dist_sum == 0:
-            for i in range(len(centroid_list) - 1):
-                c1 = centroid_list[i]
-                c2 = centroid_list[i + 1]
-                dist_sum += math.sqrt(
-                    (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
-            avg_distance = dist_sum / (len(centroid_list) - 1)
-
-        return avg_distance
-
-
-    import matplotlib.pyplot as plt
-    df_class = pd.read_csv(args.default_dir+"/groundtruth/classifier-xy.csv")
-    df_class["AVGDIST"] = df_class.apply(
-        lambda row: compute_avg_distance(row["CENTRDS"]),
-        axis=1
-    )
-    positives = df_class.loc[df_class["GTLABEL"].isin([1])]
-    negatives = df_class.loc[df_class["GTLABEL"].isin([0])]
-
-    ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig('hist_angle1.png')
-
-    plt.cla()
-
-    ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig('hist_angle2.png')
-
-    plt.cla()
-
-    ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig('hist_angle3.png')
-
-    plt.cla()
-
-    ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
-    ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig('avgdist.png')
-
-    plt.cla()
-
-    ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
-    negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
-    fig = ax.get_figure()
-    fig.savefig('scatter.png')
-
-    # model = svm.SCV(gamma='auto')
-
-
 def classify_feature_vectors(df_features):
     df_labels = pd.DataFrame(index=df_features.index)
 
-    df_labels["LABEL"] = np.array([0,1,0])[pd.cut(df_features["ANGLE"],
-                                                  bins=[-180, -125, -55, 180],
-                                                  labels=False)]
+    df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
+                                               bins=[-180, -120, -35, 180],
+                                               labels=False)]
 
     return df_labels
 
 
-def generate_counts(df_labels):
-    df_counts = df_labels.reset_index().groupby(['TMSTAMP', 'FRM_NUM']).sum()
-    df_counts = df_counts.loc[(df_counts['LABEL'] > 0)]
-    df_counts.columns = ["EXT_CHM"]
-
-    return df_counts
-
-
-def save_test_results(args, df_groundtruth, df_estimation):
-    """Save the bird count estimations from image processing to csv files."""
-
-    print("[*] Saving results of test to files.")
-
+def export_dataframes(args, dataframe_dict):
     # Create save directory if it does not already exist
-    save_directory = args.default_dir+args.custom_dir+"results/"
+    save_directory = args.default_dir+args.custom_dir+"results/df-export/"
     if not os.path.isdir(save_directory):
         try:
             os.makedirs(save_directory)
@@ -228,46 +142,115 @@ def save_test_results(args, df_groundtruth, df_estimation):
             print("[!] Creation of the directory {0} failed."
                   .format(save_directory))
 
-    # Using columns :-1 to exclude the "FRMINFO" column in df_estimation
-    error_full = df_estimation.values[:, :] - df_groundtruth.values[:, :]
-    correct = np.minimum(df_estimation.values[:, :],
-                         df_groundtruth.values[:, :])
-
-    results = {
-        # Commented out because new ground truth does not yet have full
-        # segmentation counts.
-        # "count_true": np.sum(ground_truth[0:num_counts, 1:10], axis=0),
-        # "count_estimated": np.sum(count_estimate[:, 1:10], axis=0),
-        "true_positives": correct.reshape((-1,)),
-        "false_positives": np.maximum(error_full, 0).reshape((-1,)),
-        "missed_detections": np.minimum(error_full, 0).reshape((-1,)),
-        "total_error": abs(error_full).reshape((-1,)),
-        "net_error": error_full.reshape((-1,))
-    }
-    df_results = pd.DataFrame(results, index=df_groundtruth.index)
-    df_results.to_csv(save_directory+"results_full.csv")
-
-    df_estimation.to_csv(save_directory+"estimation.csv")
-    df_groundtruth.to_csv(save_directory+"groundtruth.csv")
-
-    df_results_cs = df_results.cumsum()
-    df_results_cs.to_csv(save_directory + "results_cumulative.csv")
-
-    df_results_sum = df_results.sum()
-    df_results_sum["precision"] = 100 * (df_results_sum["true_positives"] /
-                                         (df_results_sum["true_positives"] +
-                                          df_results_sum["false_positives"]))
-    df_results_sum["recall"] = 100 * (df_results_sum["true_positives"] /
-                                      (df_results_sum["true_positives"] +
-                                       -1*df_results_sum["missed_detections"]))
-    df_results_sum.to_csv(save_directory + "results_summary.csv", header=False)
-
-    print("[-] Results successfully saved to files.")
-
-    return df_results
+    for key, value in dataframe_dict.items():
+        value.to_csv(save_directory+"{}.csv".format(key))
 
 
-def plot_result(args, df_groundtruth, df_estimation, key, flag):
+def evaluate_results(args, df_groundtruth, df_prediction):
+    """Save the bird count estimations from image processing to csv files."""
+
+    def prepare_dataframes(pred_unprocessed, gt_unprocessed):
+        # Merge multiple predicted events from same frame into single row
+        pred_merged = pred_unprocessed.reset_index().groupby(['TMSTAMP',
+                                                              'FRM_NUM']).sum()
+        pred_nonzero = pred_merged.loc[(pred_merged['EXT_CHM'] > 0)]
+
+        # Re-index groundtruth and predictions to have shared set of indexes
+        union_index = pred_nonzero.index.union(gt_unprocessed.index)
+        gt_processed = gt_unprocessed.reindex(index=union_index, fill_value=0)
+        pred_processed = pred_nonzero.reindex(index=union_index, fill_value=0)
+
+        return pred_processed, gt_processed
+
+    def calculate_metrics(pred, pred_full, gt, gt_full):
+        missed_event_loc = gt.index.difference(pred.index)
+        missed_events = gt.loc[missed_event_loc, :]["EXT_CHM"].sum()
+        error_full = np.subtract(pred_full.values, gt_full.values)
+        correct = np.minimum(pred_full.values, gt_full.values)
+
+        metrics = {
+            "true_positives": correct.reshape((-1,)),
+            "false_positives": np.maximum(error_full, 0).reshape((-1,)),
+            "false_negatives": np.minimum(error_full, 0).reshape((-1,)),
+            "abs_error": abs(error_full).reshape((-1,)),
+            "net_error": error_full.reshape((-1,))
+        }
+
+        metrics = pd.DataFrame(metrics, index=gt_full.index)
+        metric_totals = {
+            "te": pred["EXT_CHM"].size,
+            "pp": pred["EXT_CHM"].sum(),
+            "pn": pred["EXT_CHM"].size - pred["EXT_CHM"].sum(),
+            "ap": gt["EXT_CHM"].sum(),
+            "me": missed_events,
+            "tp": metrics["true_positives"].sum(),
+            "fp": metrics["false_positives"].sum(),
+            "tn": pred["EXT_CHM"].size-(metrics["true_positives"].sum() +
+                                        metrics["false_positives"].sum() +
+                                        (-1*metrics["false_negatives"].sum()
+                                         - missed_events)),
+            "fn": -1*metrics["false_negatives"].sum() - missed_events,
+            "md": -1*metrics["false_negatives"].sum(),
+            "ae": metrics["abs_error"].sum(),
+            "ne": metrics["net_error"].sum(),
+        }
+
+        return metric_totals
+
+    def save_evaluation(save_directory, totals):
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+
+        results = [
+            "EVENT DETECTION\n",
+            "   -{} possible swifts to detect.\n".format(totals["ap"]),
+            "   -{}/{} swifts were detected.\n".format(totals["ap"] -
+                                                       totals["me"],
+                                                       totals["ap"]),
+            "   -{}/{} swifts were missed entirely.".format(totals["me"],
+                                                            totals["ap"]),
+            " (Due to poor matching, overlapping, etc.)\n"
+            "EVENT CLASSIFICATION\n",
+            "   -{} events were detected by"
+            " segmentation/matching.\n".format(totals["te"]),
+            "   -{}/{} events labeled as positives.\n".format(totals["pp"],
+                                                              totals["te"]),
+            "       -{}/{} labeled positives were TPs.\n".format(totals["tp"],
+                                                                 totals["pp"]),
+            "       -{}/{} labeled positives were FPs.\n".format(totals["fp"],
+                                                                 totals["pp"]),
+            "   -{}/{} events were labeled negatives.\n".format(totals["pn"],
+                                                                totals["te"]),
+            "       -{}/{} labeled negatives were TNs.\n".format(totals["tn"],
+                                                                 totals["pn"]),
+            "       -{}/{} labeled negatives were FNs.\n".format(totals["fn"],
+                                                                 totals["pn"]),
+            "FINAL EVALUATION\n",
+            "   -Precision: {}\n".format(round(totals["tp"] /
+                                         (totals["tp"] + totals["fp"]), 4)),
+            "   -Recall: {}\n".format(round(totals["tp"] /
+                                      (totals["tp"] + totals["md"]), 4)),
+            "   -Accuracy: {}\n".format(round((totals["tp"] + totals["tn"]) /
+                                        (totals["tp"] + totals["tn"] +
+                                         totals["fp"] + totals["md"]), 4))
+        ]
+
+        file = open(save_directory+'results.txt', 'w')
+        file.writelines(results)
+        file.close()
+
+    df_prediction_full, df_groundtruth_full = prepare_dataframes(df_prediction,
+                                                                 df_groundtruth)
+    dict_totals = calculate_metrics(df_prediction, df_prediction_full,
+                                    df_groundtruth, df_groundtruth_full)
+    save_evaluation(args.default_dir+args.custom_dir+"results/", dict_totals)
+
+
+def plot_result(args, df_groundtruth, df_prediction, key, flag):
     """Plot comparisons between estimation and ground truth for segments."""
     save_directory = args.default_dir + args.custom_dir + "results/plots/"
     if not os.path.isdir(save_directory):
@@ -279,10 +262,10 @@ def plot_result(args, df_groundtruth, df_estimation, key, flag):
 
     # Reset index to just "FRM_NUM"
     df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
-    df_estimation = df_estimation.reset_index("TMSTAMP")
+    df_prediction = df_prediction.reset_index("TMSTAMP")
 
     # Extract segment counts as series objects (from dataframes)
-    es_series = df_estimation[key]
+    es_series = df_prediction[key]
     gt_series = df_groundtruth[key]
 
     # Calculate the overestimate error and underestimate error
@@ -337,3 +320,71 @@ def plot_result(args, df_groundtruth, df_estimation, key, flag):
     #          bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
     plt.savefig(save_directory + '{0}_{1}.png'.format(key, flag),
                 bbox_inches='tight')
+
+
+def feature_engineering(args):
+    """Testing function for exploring different features."""
+
+    def compute_avg_distance(centroid_list):
+        # If loading from csv, convert from str to list
+        if type(centroid_list) is str:
+            centroid_list = literal_eval(centroid_list)
+
+        dist_sum = 0
+        for i in range(len(centroid_list) - 2):
+            c1 = centroid_list[i+1]
+            c2 = centroid_list[i+2]
+            dist_sum += math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c2[1])**2)
+            avg_distance = dist_sum / (len(centroid_list) - 2)
+
+        if dist_sum == 0:
+            for i in range(len(centroid_list) - 1):
+                c1 = centroid_list[i]
+                c2 = centroid_list[i + 1]
+                dist_sum += math.sqrt(
+                    (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
+            avg_distance = dist_sum / (len(centroid_list) - 1)
+
+        return avg_distance
+
+    import matplotlib.pyplot as plt
+    df_class = pd.read_csv(args.default_dir+"/groundtruth/classifier-xy.csv")
+    df_class["AVGDIST"] = df_class.apply(
+        lambda row: compute_avg_distance(row["CENTRDS"]),
+        axis=1
+    )
+    positives = df_class.loc[df_class["GTLABEL"].isin([1])]
+    negatives = df_class.loc[df_class["GTLABEL"].isin([0])]
+
+    ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle1.png')
+
+    plt.cla()
+
+    ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle2.png')
+
+    plt.cla()
+
+    ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
+    ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('hist_angle3.png')
+
+    plt.cla()
+
+    ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
+    ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
+    fig = ax.get_figure()
+    fig.savefig('avgdist.png')
+
+    plt.cla()
+
+    ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
+    negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
+    fig = ax.get_figure()
+    fig.savefig('scatter.png')

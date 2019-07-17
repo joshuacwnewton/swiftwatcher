@@ -48,63 +48,45 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
+    # Testing function for looking into alternate features to classify on
+    data.feature_engineering(args)
+
     if args.extract:
         vid.extract_frames(args)
-
+        pass
     if args.process:
         data.save_test_config(args, params)
 
         start = time.time()
-        df_events = vid.process_extracted_frames(args, params)
+        df_eventinfo = vid.process_extracted_frames(args, params)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
         print("[-] Frame processing took {}.".format(elapsed_time))
-
+    else:
+        df_eventinfo = pd.read_csv(args.default_dir + args.custom_dir +
+                                   "results/df-export/df_eventinfo.csv")
     if args.analyse:
-        data.train_classifier(args)
-
+        # Loading and preparing DataFrames
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)
+        df_groundtruth, df_eventinfo = \
+            data.format_dataframes(args, df_groundtruth, df_eventinfo)
 
-        # Reloading previous count estimates so analysis can be modified
-        # independently from (slower) frame processing stage.
+        # Classification functions
+        df_features = data.generate_feature_vectors(df_eventinfo)
+        df_prediction = data.classify_feature_vectors(df_features)
 
-        if 'df_events' not in locals():
-            df_events = pd.read_csv(args.default_dir + args.custom_dir +
-                                    "results/segment-info.csv")
-        # Create save directory if it does not already exist
-        save_directory = args.default_dir + args.custom_dir + "results/"
-        if not os.path.isdir(save_directory):
-            try:
-                os.makedirs(save_directory)
-            except OSError:
-                print("[!] Creation of the directory {0} failed."
-                      .format(save_directory))
-        df_events.to_csv(args.default_dir + args.custom_dir +
-                         "results/segment-info.csv")
-
-        df_groundtruth, df_events = \
-            data.format_dataframes(args, df_groundtruth, df_events)
-
-        df_features = data.generate_feature_vectors(df_events)
-
-        df_labels = data.classify_feature_vectors(df_features)
-
-        df_estimation = data.generate_counts(df_labels)
-
-        # Force groundtruth and estimation to have same set of indexes
-        union_index = df_estimation.index.union(df_groundtruth.index)
-        df_groundtruth = df_groundtruth.reindex(index=union_index,
-                                                fill_value=0)
-        df_estimation = df_estimation.reindex(index=union_index, fill_value=0)
-
-        data.save_test_results(args, df_groundtruth, df_estimation)
-
-        data.plot_result(args, df_groundtruth, df_estimation,
+        # Evaluation and export functions
+        data.export_dataframes(args, {"df_eventinfo": df_eventinfo,
+                                      "df_features": df_features,
+                                      "df_prediction": df_prediction,
+                                      "df_groundtruth": df_groundtruth})
+        data.evaluate_results(args, df_groundtruth, df_prediction)
+        data.plot_result(args, df_groundtruth, df_prediction,
                          key="EXT_CHM", flag="cumu_comparison")
-        data.plot_result(args, df_groundtruth, df_estimation,
+        data.plot_result(args, df_groundtruth, df_prediction,
                          key="EXT_CHM", flag="false_positives")
-        data.plot_result(args, df_groundtruth, df_estimation,
+        data.plot_result(args, df_groundtruth, df_prediction,
                          key="EXT_CHM", flag="false_negatives")
 
 
@@ -173,7 +155,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -194,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-17_full-video/"
+                        default="tests/classification-test/"
                         )
     parser.add_argument("-v",
                         "--visual",
