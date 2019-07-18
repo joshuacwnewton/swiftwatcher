@@ -20,43 +20,6 @@ from sklearn import svm
 # seaborn.set()
 
 
-def empty_gt_generator(args):
-    """Helper function for generating an empty file to store manual
-    ground truth annotations. Ensures formatting is consistent."""
-
-    # Create save directory if it does not already exist
-    gt_dir = args.groundtruth.split("/")[0]
-    save_directory = args.default_dir+gt_dir+"/"
-    if not os.path.isdir(save_directory):
-        try:
-            os.makedirs(save_directory)
-        except OSError:
-            print("[!] Creation of the directory {0} failed."
-                  .format(save_directory))
-
-    # Create Series of DateTimeIndex indices (i.e. frame timestamps)
-    frame_queue = FrameQueue(args)
-    nano = (1/frame_queue.fps) * 1e9
-    frame_queue.stream.release()  # Not needed once fps is extracted
-    num_timestamps = args.load[1] - args.load[0]
-    duration = (num_timestamps - 1) * nano
-    indices = pd.date_range(start=args.timestamp,
-                            end=(pd.Timestamp(args.timestamp) +
-                                 pd.Timedelta(duration, 'ns')),
-                            periods=num_timestamps)
-
-    # Create a Series of frame numbers which correspond to the timestamps
-    framenumbers = np.array(range(num_timestamps))
-
-    # Create an empty DataFrame for ground truth annotations to be put into
-    df_empty = pd.DataFrame(framenumbers, index=indices)
-    df_empty.index.rename("TMSTAMP", inplace=True)
-    df_empty.columns = ["FRM_NUM"]
-
-    # Save for editing in Excel/LibreOffice Calc/etc.
-    df_empty.to_csv(save_directory+"empty-groundtruth.csv")
-
-
 def save_test_config(args, params):
     """Save the parameters chosen for the given test of the algorithm. Some
     parameters include commas, so files are delimited with semicolons."""
@@ -78,7 +41,8 @@ def save_test_config(args, params):
 
 
 def format_dataframes(args, df_groundtruth, df_eventinfo):
-    # Cap groundtruth to specified frame range
+    # Cap groundtruth to specified frame range (done because sometimes I've
+    # tested with a subset of frames, rather than the entire video.)
     index_less = df_groundtruth[df_groundtruth['FRM_NUM'] < args.load[0]].index
     index_more = df_groundtruth[df_groundtruth['FRM_NUM'] > args.load[1]].index
     df_groundtruth.drop(index_less, inplace=True)
@@ -88,7 +52,8 @@ def format_dataframes(args, df_groundtruth, df_eventinfo):
     df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
     df_eventinfo["TMSTAMP"] = pd.to_datetime(df_eventinfo["TMSTAMP"])
 
-    # Round DateTimeArray indices to microsecond precision
+    # Round DateTimeArray indices to microsecond precision (to prevent rounding
+    # errors from the (default) nanosecond precision, which isn't necessary.)
     df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
     df_eventinfo["TMSTAMP"] = df_eventinfo["TMSTAMP"].dt.round('us')
 
@@ -114,6 +79,7 @@ def generate_feature_vectors(df_eventinfo):
         return angle
 
     df_features = pd.DataFrame(index=df_eventinfo.index)
+
     df_features["ANGLE"] = df_eventinfo.apply(
         lambda row: compute_angle(row["CENTRDS"]),
         axis=1
@@ -123,6 +89,12 @@ def generate_feature_vectors(df_eventinfo):
 
 
 def classify_feature_vectors(df_features):
+    """Classify "segment disappeared" events based on associated feature
+    vectors.
+
+    Note: currently this is done using a hard-coded values, but
+    if time permits I would like to transition to a ML classifier."""
+
     df_labels = pd.DataFrame(index=df_features.index)
 
     df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
@@ -177,6 +149,10 @@ def evaluate_results(args, df_groundtruth, df_prediction):
         }
 
         metrics = pd.DataFrame(metrics, index=gt_full.index)
+        # These "metrics_totals" calculates are a bit messy, and I would like
+        # to take some time to make it a bit clearer. Having different counts
+        # at different stages of the algorithm (segmentation, classification)
+        # can be a bit hard to track.
         metric_totals = {
             "te": pred["EXT_CHM"].size,
             "pp": pred["EXT_CHM"].sum(),
@@ -322,6 +298,43 @@ def plot_result(args, df_groundtruth, df_prediction, key, flag):
                 bbox_inches='tight')
 
 
+def empty_gt_generator(args):
+    """Helper function for generating an empty file to store manual
+    ground truth annotations. Ensures formatting is consistent."""
+
+    # Create save directory if it does not already exist
+    gt_dir = args.groundtruth.split("/")[0]
+    save_directory = args.default_dir+gt_dir+"/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    # Create Series of DateTimeIndex indices (i.e. frame timestamps)
+    frame_queue = FrameQueue(args)
+    nano = (1/frame_queue.fps) * 1e9
+    frame_queue.stream.release()  # Not needed once fps is extracted
+    num_timestamps = args.load[1] - args.load[0]
+    duration = (num_timestamps - 1) * nano
+    indices = pd.date_range(start=args.timestamp,
+                            end=(pd.Timestamp(args.timestamp) +
+                                 pd.Timedelta(duration, 'ns')),
+                            periods=num_timestamps)
+
+    # Create a Series of frame numbers which correspond to the timestamps
+    framenumbers = np.array(range(num_timestamps))
+
+    # Create an empty DataFrame for ground truth annotations to be put into
+    df_empty = pd.DataFrame(framenumbers, index=indices)
+    df_empty.index.rename("TMSTAMP", inplace=True)
+    df_empty.columns = ["FRM_NUM"]
+
+    # Save for editing in Excel/LibreOffice Calc/etc.
+    df_empty.to_csv(save_directory+"empty-groundtruth.csv")
+
+
 def feature_engineering(args):
     """Testing function for exploring different features."""
 
@@ -349,7 +362,6 @@ def feature_engineering(args):
 
     save_directory = args.default_dir+args.custom_dir+"classification/"
 
-    import matplotlib.pyplot as plt
     df_class = pd.read_csv(save_directory+"classifier-xy.csv")
     df_class["AVGDIST"] = df_class.apply(
         lambda row: compute_avg_distance(row["CENTRDS"]),
@@ -358,35 +370,40 @@ def feature_engineering(args):
     positives = df_class.loc[df_class["GTLABEL"].isin([1])]
     negatives = df_class.loc[df_class["GTLABEL"].isin([0])]
 
-    ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig(save_directory+'hist_angle1.png')
-
-    plt.cla()
-
     ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
     ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
+    ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
+              loc="upper right")
+    ax.set_title("Comparison in Flight Path Angle for Detected Segments")
+    ax.set_xlabel("Angle (Degrees)")
+    ax.set_ylabel("Total Segments")
     fig = ax.get_figure()
-    fig.savefig(save_directory+'hist_angle2.png')
+    fig.savefig(save_directory+'hist_angle.png')
 
-    plt.cla()
+    # import matplotlib.pyplot as plt
+    # ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
+    # ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
+    # fig = ax.get_figure()
+    # fig.savefig(save_directory+'hist_angle1.png')
+    #
+    # plt.cla()
+    #
+    # ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
+    # ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
+    # fig = ax.get_figure()
+    # fig.savefig(save_directory+'hist_angle3.png')
+    #
+    # plt.cla()
+    #
+    # ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
+    # ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
+    # fig = ax.get_figure()
+    # fig.savefig(save_directory+'avgdist.png')
+    #
+    # plt.cla()
+    #
+    # ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
+    # negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
+    # fig = ax.get_figure()
+    # fig.savefig('scatter.png')
 
-    ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig(save_directory+'hist_angle3.png')
-
-    plt.cla()
-
-    ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
-    ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
-    fig = ax.get_figure()
-    fig.savefig(save_directory+'avgdist.png')
-
-    plt.cla()
-
-    ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
-    negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
-    fig = ax.get_figure()
-    fig.savefig('scatter.png')

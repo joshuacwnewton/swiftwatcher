@@ -64,8 +64,13 @@ def main(args, params):
         elapsed_time = pd.to_timedelta((end - start), 's')
         print("[-] Frame processing took {}.".format(elapsed_time))
     else:
-        df_eventinfo = pd.read_csv(args.default_dir + args.custom_dir +
-                                   "results/df-export/df_eventinfo.csv")
+        try:
+            df_eventinfo = pd.read_csv(args.default_dir + args.custom_dir +
+                                       "results/df-export/df_eventinfo.csv")
+        except FileNotFoundError:
+            print("[!] Frame processing has not been run yet! "
+                  "Nothing to analyse.")
+            args.analyse = False
     if args.analyse:
         # Loading and preparing DataFrames
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)

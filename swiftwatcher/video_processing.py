@@ -8,7 +8,6 @@ from time import sleep
 # Imports used in numerous stages
 import cv2
 import numpy as np
-import utils.cm as cm  # Used for visualization, not entirely necessary
 
 # Necessary imports for segmentation stage
 from scipy import ndimage as img
@@ -18,14 +17,8 @@ from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
-
-# Data structure to store final results
+import utils.cm as cm
 import pandas as pd
-
-# Data visualization libraries
-import matplotlib.pyplot as plt
-import seaborn
-seaborn.set()
 
 
 class FrameQueue:
