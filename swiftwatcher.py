@@ -2,11 +2,7 @@
 # Note: Each category of TODOs represents a git branch.
 # =========================================================================== #
 # algorithm-improvements:
-# -TODO: Brainstorm improvements for antennae overlapping.
 # -TODO: Test smaller crop-regions to see if RPCA speed is increased.
-# -TODO: Change ROI cond. to be "segment overlaps ROI" not "centroid in ROI"
-# -TODO: Create ground truth file for labeling detected events.
-# -TODO: Generate feature vectors for training data.
 #
 # algorithm-structure:
 # -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
@@ -20,15 +16,12 @@
 # -TODO: Load command line arguments from JSON file.
 #
 # algorithm-visualization:
-# -TODO: Add ground truth counts to segmentation visualization.
-# -TODO: Add ground truth counts to matching visualization.
-# -TODO: Save "error" visualizations to specific folder.
-# -TODO: Add segment info (match dist, angle, etc.) to matching visualizations
 #
 # results-visualization:
 #
 # results-csv-files:
 # -TODO: Update empty-gt-generator for us timestamp precision.
+#
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
