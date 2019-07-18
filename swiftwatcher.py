@@ -2,7 +2,10 @@
 # Note: Each category of TODOs represents a git branch.
 # =========================================================================== #
 # algorithm-improvements:
-# -TODO: Test smaller crop-regions to see if RPCA speed is increased.
+# -TODO: Test smaller crop-regions for RPCA speed increase.
+# -TODO: Test smaller scaled image (pyramid-down?) for RPCA speed increase.
+# -TODO: Test smaller frame_queue for RPCA speed increase.
+# -TODO: Test batch RPCA for RPCA speed increase.
 #
 # algorithm-structure:
 # -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
@@ -28,6 +31,9 @@
 #
 # results-csv-files:
 # -TODO: Update empty-gt-generator for us timestamp precision.
+#
+# running tests:
+# -TODO: Run timed processing test with updated RPCA configuration.
 #
 # =========================================================================== #
 
