@@ -8,7 +8,6 @@ from time import sleep
 # Imports used in numerous stages
 import cv2
 import numpy as np
-import utils.cm as cm  # Used for visualization, not entirely necessary
 
 # Necessary imports for segmentation stage
 from scipy import ndimage as img
@@ -18,14 +17,8 @@ from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
-
-# Data structure to store final results
+import utils.cm as cm
 import pandas as pd
-
-# Data visualization libraries
-import matplotlib.pyplot as plt
-import seaborn
-seaborn.set()
 
 
 class FrameQueue:
@@ -97,6 +90,9 @@ class FrameQueue:
         self.queue_center = int((queue_size - 1) / 2)
         self.seg_queue = collections.deque([], self.queue_center)
         self.seg_properties = collections.deque([], self.queue_center)
+
+        # Initialize "disappeared segment" event tracking properties
+        self.event_list = []
 
     def generate_chimney_regions(self, bottom_corners, alpha):
         """Generate rectangular regions (represented as top-left corner and
@@ -596,97 +592,12 @@ class FrameQueue:
         else:
             seg_matches = []  # Empty list for visuals in case count_total = 0
 
-        # Use coordinate pair information to classify matches
-        counts = self.analyse_matches()
-
         # Create visualization of segment matches if requested
         if visual:
-            self.match_visualization(count_prev, count_total,
-                                     seg_matches, counts,
+            self.match_visualization(count_prev, count_total, seg_matches,
                                      save_directory, folder_name)
 
-        return counts
-
-    def analyse_matches(self):
-        """Use matching results to:
-            1) store displacement history of matched segments, and
-            2) determine if no-match segments meet "enter chimney" criteria."""
-
-        counts = {
-            "TMSTAMP": self.timestamps[self.queue_center],
-            "FRM_NUM": self.framenumbers[self.queue_center],
-            "SEGMNTS": len(self.seg_properties[0]),
-            "MATCHES": 0,
-            "ENT_CHM": 0,  # Enter frame from chimney no longer tracked
-            "ENT_FRM": 0,
-            "ENT_AMB": 0,
-            "ENT_FPs": 0,
-            "EXT_CHM": 0,
-            "EXT_FRM": 0,
-            "EXT_AMB": 0,
-            "EXT_FPs": 0,
-            "FRMINFO": []
-        }
-
-        for seg_curr in self.seg_properties[0]:
-            # This condition indicates a current-frame segment has appeared
-            if seg_curr.__match == "A":
-                pass
-
-            # This condition indicates a current-frame segment has a match
-            else:
-                # Append displacement values to list (past values)
-                seg_curr.__displacements = []
-                seg_prev = self.seg_properties[1][seg_curr.__match]
-                if hasattr(seg_prev, '_FrameQueue__displacements'):
-                    for d in seg_prev.__displacements:
-                        seg_curr.__displacements.append(d)
-
-                # Append displacement values to list (current values)
-                del_x = (seg_prev.centroid[1] - seg_curr.centroid[1]) * -1
-                del_y = (seg_prev.centroid[0] - seg_curr.centroid[0])
-                seg_curr.__displacements.append((del_x, del_y))
-
-                counts["MATCHES"] += 1
-
-        for seg_prev in self.seg_properties[1]:
-            # This condition indicates a previous-frame segment has disappeared
-            if seg_prev.__match == "D":
-                roi_value = (self.roi_mask[int(seg_prev.centroid[0])]
-                                          [int(seg_prev.centroid[1])])
-
-                # "Enter Chimney" condition 1: Centroid in ROI
-                if roi_value == 255:
-
-                    # "Enter Chimney" condition 2: Has past motion vectors.
-                    if hasattr(seg_prev, '_FrameQueue__displacements'):
-                        sum_del_y = 0
-                        sum_del_x = 0
-                        for d in seg_prev.__displacements:
-                            sum_del_y += d[1]
-                            sum_del_x += d[0]
-                        angle = math.degrees(math.atan2(sum_del_y, sum_del_x))
-
-                        # "Enter Chimney" condition 3: Flight into chimney
-                        if -125 < angle < -55:
-                            counts["EXT_CHM"] += 1
-                            counts["FRMINFO"].append("TP: Angle = {0:.2f}. "
-                                                     .format(angle))
-                        else:
-                            counts["EXT_FPs"] += 1
-                            counts["FRMINFO"].append("FP: Angle = {0:.2f}. "
-                                                     .format(angle))
-                    else:
-                        counts["EXT_FPs"] += 1
-                        counts["FRMINFO"].append("FP: No previous MVs. ")
-                else:
-                    counts["EXT_FPs"] += 1
-                    counts["FRMINFO"].append("FP: Outside ROI. ")
-
-        return counts
-
-    def match_visualization(self, count_prev, count_total,
-                            matches, counts,
+    def match_visualization(self, count_prev, count_total, matches,
                             save_directory, folder_name):
         """Create visualizations from matching results and segmented frames."""
         # Colormappings for tab20 colormap.
@@ -737,27 +648,6 @@ class FrameQueue:
                                     dtype=np.uint8)
         match_comparison = np.hstack((frame_prev, separator_v, frame))
 
-        # Adding horizontal bar to display frame information
-        horizontal_bg = 183 * np.ones(shape=(50, match_comparison.shape[1]),
-                                      dtype=np.uint8)
-        match_comparison = np.vstack((match_comparison, horizontal_bg))
-
-        # Write text in horizontal bar
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(match_comparison,
-                    'Frame{0} - Ext, edge: {1} | Ext, chimn: {2} | '
-                    'False positive: {3}    '
-                    'Frame{4} - Ent, edge: {5} | Ent, chimn: {6} | '
-                    'False positive: {7}'.format(counts["FRM_NUM"] - 1,
-                                                 counts["EXT_FRM"],
-                                                 counts["EXT_CHM"],
-                                                 counts["EXT_FPs"],
-                                                 counts["FRM_NUM"],
-                                                 counts["ENT_FRM"],
-                                                 counts["ENT_CHM"],
-                                                 counts["ENT_FPs"]),
-                    (10, (self.height*scale+50)-10), font, 1, 196, 2)
-
         # Combine two ROI masks into single image.
         roi_mask = cv2.resize(self.roi_mask,
                               (round(self.roi_mask.shape[1] * scale),
@@ -765,10 +655,6 @@ class FrameQueue:
                               interpolation=cv2.INTER_AREA)
         separator_v = np.zeros(shape=(self.height*scale, 1), dtype=np.uint8)
         roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
-
-        # Adding horizontal bar to match dimensions of annotated frame
-        bar = np.zeros(shape=(50, roi_masks.shape[1]), dtype=np.uint8)
-        roi_masks = np.vstack((roi_masks, bar))
         roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
 
         # Apply color mapping, then apply mask to colormapped image
@@ -785,6 +671,48 @@ class FrameQueue:
                                 base_folder=folder_name,
                                 frame_folder="visualizations/matching/",
                                 scale=1)
+
+    def analyse_matches(self):
+        """Use matching results to store history of RegionProperties through
+        chain of matches."""
+
+        for seg_curr in self.seg_properties[0]:
+            # Create an empty list to be filled with centroid history
+            seg_curr.__centroids = []
+
+            # This condition indicates a current-frame segment has appeared
+            if seg_curr.__match == "A":
+                # Append centroid value to end of list
+                rounded_c = tuple([round(x, 3) for x in seg_curr.centroid])
+                seg_curr.__centroids.append(rounded_c)
+
+            # This condition indicates a current-frame segment has a match
+            else:
+                # Append past centroid values to list first
+                seg_prev = self.seg_properties[1][seg_curr.__match]
+                for c in seg_prev.__centroids:
+                    seg_curr.__centroids.append(c)
+
+                # Then append centroid value to end of list
+                rounded_c = tuple([round(x, 3) for x in seg_curr.centroid])
+                seg_curr.__centroids.append(rounded_c)
+
+        for seg_prev in self.seg_properties[1]:
+            # This condition indicates a previous-frame segment has disappeared
+            if seg_prev.__match == "D":
+                roi_value = (self.roi_mask[int(seg_prev.centroid[0])]
+                                          [int(seg_prev.centroid[1])])
+
+                # Valid "possible swift entering" event conditions:
+                # 1: Centroid in ROI, 2: present for at least 2 frames
+                if roi_value == 255 and len(seg_prev.__centroids) > 1:
+                    # Storing information about event for further analysis
+                    event_info = {
+                        "TMSTAMP": self.timestamps[self.queue_center],
+                        "FRM_NUM": self.framenumbers[self.queue_center],
+                        "CENTRDS": seg_prev.__centroids,
+                    }
+                    self.event_list.append(event_info)
 
     def framenumber_to_timestamp(self, frame_number):
         """Helper function to convert an amount of frames into a timestamp."""
@@ -803,65 +731,6 @@ class FrameQueue:
         frame_number = int(round(total_s * self.fps))
 
         return frame_number
-
-
-def process_extracted_frames(args, params):
-    """Function which uses object methods to analyse a sequence of previously
-    extracted frames and determine bird counts for that sequence."""
-
-    frame_queue = FrameQueue(args, queue_size=params["queue_size"])
-    frame_queue.stream.release()  # VideoCapture not needed if frames reused
-
-    # Empty list. Will be filled with a dictionary of counts for each frame.
-    # Then, list of dictionaries will be converted to pandas DataFrame.
-    count_estimate = []
-
-    print("[*] Analysing frames... (This may take a while!)")
-    while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
-        # Load frame into index 0 and apply preprocessing
-        frame_queue.load_frame_from_file(args.default_dir,
-                                         frame_queue.frame_to_load_next)
-        frame_queue.queue[0] = frame_queue.convert_grayscale()
-        frame_queue.queue[0] = frame_queue.crop_frame()
-        frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
-        frame_queue.queue[0] = frame_queue.frame_to_column()
-        # NOTE: I'm considering wrapping these preprocessing stages into a
-        # single preprocess_frame() method, just so the sequence of functions
-        # can be applied to other things (like the ROI mask).
-
-        if frame_queue.frames_read > (frame_queue.queue_center + 1):
-            # Proceed only when enough frames are cached to use RPCA method
-            frame_queue.segment_frame(args.default_dir,
-                                      args.custom_dir,
-                                      params,
-                                      visual=args.visual)
-            # frame_queue.get_motion_vectors(args)
-            match_counts = frame_queue.match_segments(args.default_dir,
-                                                      args.custom_dir,
-                                                      params,
-                                                      visual=args.visual)
-            count_estimate.append(match_counts)
-
-        if frame_queue.frames_read % 25 == 0:
-            print("[-] {0}/{1} frames processed."
-                  .format(frame_queue.frames_read,
-                          frame_queue.num_frames_to_analyse))
-        # NOTE: Should probably have some sort of "verbose" flag, or utilize
-        # logging. This seems like a naive way to do this.
-
-        # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
-        frame_queue.frame_to_load_next += (1 + frame_queue.delay)
-        # NOTE: Delay is also handled in load_frame_from_video(), so there's
-        # probably redundancy in keeping track of the next frame to load.
-    print("[-] Analysis complete. {0}/{1} frames were used in counting."
-          .format((frame_queue.frames_read-frame_queue.queue_center),
-                  frame_queue.frames_read))
-
-    # Convert dictionary of lists into DataFrame
-    df_estimation = pd.DataFrame(count_estimate,
-                                 columns=list(count_estimate[0].keys()))
-
-    return df_estimation
 
 
 def extract_frames(args, queue_size=1, save_directory=None):
@@ -893,4 +762,55 @@ def extract_frames(args, queue_size=1, save_directory=None):
           .format(frame_queue.frames_read))
 
 
+def process_extracted_frames(args, params):
+    """Function which uses object methods to analyse a sequence of previously
+    extracted frames and determine bird counts for that sequence."""
 
+    frame_queue = FrameQueue(args, queue_size=params["queue_size"])
+    frame_queue.stream.release()  # VideoCapture not needed if frames reused
+
+    print("[*] Analysing frames... (This may take a while!)")
+    while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
+        # Load frame into index 0 and apply preprocessing
+        frame_queue.load_frame_from_file(args.default_dir,
+                                         frame_queue.frame_to_load_next)
+        frame_queue.queue[0] = frame_queue.convert_grayscale()
+        frame_queue.queue[0] = frame_queue.crop_frame()
+        frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
+        frame_queue.queue[0] = frame_queue.frame_to_column()
+        # NOTE: I'm considering wrapping these preprocessing stages into a
+        # single preprocess_frame() method, just so the sequence of functions
+        # can be applied to other things (like the ROI mask).
+
+        if frame_queue.frames_read > (frame_queue.queue_center + 1):
+            # Proceed only when enough frames are cached to use RPCA method
+            frame_queue.segment_frame(args.default_dir,
+                                      args.custom_dir,
+                                      params,
+                                      visual=args.visual)
+            frame_queue.match_segments(args.default_dir,
+                                       args.custom_dir,
+                                       params,
+                                       visual=args.visual)
+            frame_queue.analyse_matches()
+
+        if frame_queue.frames_read % 25 == 0:
+            print("[-] {0}/{1} frames processed."
+                  .format(frame_queue.frames_read,
+                          frame_queue.num_frames_to_analyse))
+        # NOTE: Should probably have some sort of "verbose" flag, or utilize
+        # logging. This seems like a naive way to do this.
+
+        # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
+        frame_queue.frame_to_load_next += (1 + frame_queue.delay)
+        # NOTE: Delay is also handled in load_frame_from_video(), so there's
+        # probably redundancy in keeping track of the next frame to load.
+    print("[-] Analysis complete. {0}/{1} frames were used in counting."
+          .format((frame_queue.frames_read-frame_queue.queue_center),
+                  frame_queue.frames_read))
+
+    # Convert dictionary of lists into DataFrame
+    df_events = pd.DataFrame(frame_queue.event_list,
+                             columns=list(frame_queue.event_list[0].keys())).astype('object')
+
+    return df_events
