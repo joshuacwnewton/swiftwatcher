@@ -7,6 +7,13 @@
 # algorithm-structure:
 # -TODO: Make a less hacky way of saving/reloading RPCA-processed frames
 # -TODO: Create single method containing all preprocessing stages
+# -TODO: Move frame_to_column() inside RPCA().
+# -TODO: Move RPCA + vis to nested functions in segment_frame()
+# -TODO: Move grayscale/crop/pyramid inside new "preprocess_frame()" method.
+# -TODO: Merge both load_frame methods inside single method.
+# -TODO: Move framenumber conversion functions inside load_frame() method.
+# -TODO: Move match vis inside match_segments() method.
+# -TODO: Reorganize __init__() to include nested functions.
 #
 # test-automation:
 # -TODO: Read up on differences between JSON files and other storage types.
