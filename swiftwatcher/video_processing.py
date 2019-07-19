@@ -43,140 +43,152 @@ class FrameQueue:
     frames 565-571 are necessary, and are taken from the primary queue."""
 
     def __init__(self, args, queue_size=1, desired_fps=False):
-        # Check validity of filepath
-        video_filepath = args.video_dir + args.filename
-        if not os.path.isfile(video_filepath):
-            raise Exception("[!] Filepath does not point to valid video file.")
 
-        # Open source video file and initialize its immutable attributes
-        self.src_filename = args.filename
-        self.src_directory = args.video_dir
-        self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
-                                                      self.src_filename))
-        if not self.stream.isOpened():
-            raise Exception("[!] Video file could not be opened to read"
-                            " frames. Check file path.")
-        else:
-            self.src_fps = self.stream.get(cv2.CAP_PROP_FPS)
-            self.src_framecount = int(self.stream.get
-                                      (cv2.CAP_PROP_FRAME_COUNT))
-            self.src_height = int(self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self.src_starttime = pd.Timestamp(args.timestamp)
+        def assign_file_properties():
+            # Check validity of filepath
+            video_filepath = args.video_dir + args.filename
+            if not os.path.isfile(video_filepath):
+                raise Exception(
+                    "[!] Filepath does not point to valid video file.")
 
-        # Initialize user-defined frame/video attributes
-        self.height = self.src_height  # Separate from src in case of cropping
-        self.width = self.src_width    # Separate from src in case of cropping
-        if not desired_fps:
-            self.fps = self.src_fps
-        else:
-            self.fps = desired_fps
-        self.delay = round(self.src_fps / self.fps) - 1  # For subsampling vid
-        self.frame_to_load_next = args.load[0]
-        self.num_frames_to_analyse = args.load[1] - args.load[0]
+            # Open source video file and initialize its immutable attributes
+            self.src_filename = args.filename
+            self.src_directory = args.video_dir
+            self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
+                                                          self.src_filename))
+            if not self.stream.isOpened():
+                raise Exception("[!] Video file could not be opened to read"
+                                " frames. Check file path.")
+            else:
+                self.src_fps = self.stream.get(cv2.CAP_PROP_FPS)
+                self.src_framecount = int(self.stream.get
+                                          (cv2.CAP_PROP_FRAME_COUNT))
+                self.src_height = int(
+                    self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.src_starttime = pd.Timestamp(args.timestamp)
 
-        # Generate properties for regions of interest in frames
-        self.roi_region, self.crop_region = \
-            self.generate_chimney_regions(args.chimney, 0.25)
-        self.roi_mask = self.chimney_roi_segmentation()
+        def assign_processing_properties():
+            # Separate from src in case of cropping
+            self.height = self.src_height
+            self.width = self.src_width
 
-        # Initialize primary queue for unaltered frames
-        self.queue = collections.deque([], queue_size)
-        self.framenumbers = collections.deque([], queue_size)
-        self.timestamps = collections.deque([], queue_size)
-        self.frames_read = 0
+            if not desired_fps:
+                self.fps = self.src_fps
+            else:
+                self.fps = desired_fps
+            self.delay = round(
+                self.src_fps / self.fps) - 1  # For subsampling vid
 
-        # Initialize secondary queue for segmented frames
-        self.queue_center = int((queue_size - 1) / 2)
-        self.seg_queue = collections.deque([], self.queue_center)
-        self.seg_properties = collections.deque([], self.queue_center)
+            self.frame_to_load_next = args.load[0]
+            self.num_frames_to_analyse = args.load[1] - args.load[0]
 
-        # Initialize "disappeared segment" event tracking properties
-        self.event_list = []
+            # Initialize "disappeared segment" event tracking list
+            self.event_list = []
 
-    def generate_chimney_regions(self, bottom_corners, alpha):
-        """Generate rectangular regions (represented as top-left corner and
-        bottom-right corner) from two provided points ("bottom_corners").
+        def assign_queue_properties():
+            # Initialize primary queue for unaltered frames
+            self.queue = collections.deque([], queue_size)
+            self.framenumbers = collections.deque([], queue_size)
+            self.timestamps = collections.deque([], queue_size)
+            self.frames_read = 0
 
-        The two points provided are of the two edges of the chimney:
+            # Initialize secondary queue for segmented frames
+            self.queue_center = int((queue_size - 1) / 2)
+            self.seg_queue = collections.deque([], self.queue_center)
+            self.seg_properties = collections.deque([], self.queue_center)
 
-                     (x1, y1) *-----------------* (x2, y2)
-                              |                 |
-                              |  chimney stack  |
-                              |                 |                       """
+        def generate_chimney_regions(alpha):
+            """Generate rectangular regions (represented as top-left corner and
+            bottom-right corner) from two provided points ("bottom_corners").
 
-        # Recording the outer-most coordinates from the two provided points
-        # because they may not be parallel.
-        left = min(bottom_corners[0][0], bottom_corners[1][0])
-        right = max(bottom_corners[0][0], bottom_corners[1][0])
-        top = min(bottom_corners[0][1], bottom_corners[1][1])
-        bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+            The two points provided are of the two edges of the chimney:
 
-        width = right - left
-        height = round(alpha * width)  # Fixed height/width ratio
+                         (x1, y1) *-----------------* (x2, y2)
+                                  |                 |
+                                  |  chimney stack  |
+                                  |                 |                       """
 
-        crop_region = [(left - height, top - 3 * height),
-                       (right + height, bottom + height)]
-        # NOTE: I think he "crop_region" is too large -- I believe a smaller
-        # region would produce similar results. For example:
-        # crop_region = [(left, top - height), (right, bottom + height)]
-        #
-        # Because choosing a different crop would require recomputing the
-        # RPCA step (which is a bottleneck for time), this won't be touched
-        # for a while.
+            # Recording the outer-most coordinates from the two provided points
+            # because they may not be parallel.
+            bottom_corners = args.chimney
+            left = min(bottom_corners[0][0], bottom_corners[1][0])
+            right = max(bottom_corners[0][0], bottom_corners[1][0])
+            top = min(bottom_corners[0][1], bottom_corners[1][1])
+            bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
-        roi_region = [(int(left + 0.025 * width), int(bottom - height)),
-                      (int(left + 0.975 * width), int(bottom))]
+            width = right - left
+            height = round(alpha * width)  # Fixed height/width ratio
+            self.crop_region = [(left - height, top - 3 * height),
+                                (right + height, bottom + height)]
+            # NOTE: I think he "crop_region" is too large -- I believe a
+            # smaller region would produce similar results. For example:
+            # crop_region = [(left, top - height), (right, bottom + height)]
+            #
+            # Because choosing a different crop would require recomputing the
+            # RPCA step (which is a bottleneck for time), this won't be touched
+            # for a while.
 
-        return roi_region, crop_region
+            self.roi_region = [(int(left + 0.025 * width),
+                                int(bottom - height)),
+                               (int(left + 0.975 * width),
+                                int(bottom))]
 
-    def chimney_roi_segmentation(self):
-        """Generate a mask with the chimney's region-of-interest from the
-        specified chimney region. Mask will be the same dimensions as
-        "crop_region". Func called during __init__ and stored as a property."""
+        def generate_roi_mask():
+            """Generate a mask with the chimney's region-of-interest from the
+            specified chimney region. Mask will be the same dimensions as
+            "crop_region". Func called during __init__ and stored as a property."""
 
-        # Read first frame from video file, then reset index back to 0
-        success, frame = self.stream.read()
-        self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            # Read first frame from video file, then reset index back to 0
+            success, frame = self.stream.read()
+            self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-        # Crop frame, then blur and threshold the B channel to produce mask
-        cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
-                        self.roi_region[0][0]:self.roi_region[1][0]]
-        blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
-        a, b, c = cv2.split(blur)
-        ret, thr = cv2.threshold(a, 0, 255,
-                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        thr = cv2.Canny(thr, 0, 256)
-        thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8), anchor=(0, 0))
+            # Crop frame, then blur and threshold the B channel to produce mask
+            cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
+                      self.roi_region[0][0]:self.roi_region[1][0]]
+            blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
+            a, b, c = cv2.split(blur)
+            ret, thr = cv2.threshold(a, 0, 255,
+                                     cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            thr = cv2.Canny(thr, 0, 256)
+            thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8),
+                             anchor=(0, 0))
 
-        # NOTE: I've chosen a rectangular ROI here but I think this isn't the
-        # right approach to take. I think the ROI should be shaped like the
-        # edge of the chimney to more accurately represent regions where
-        # swifts exist right before entering the chimney.
-        #    ______________________              ________________
-        #   |X   ______________   X|           ,' ______________ ',
-        #   |  ,'              ',  |          / ,'              ', \
-        #   | /                  \ |         | /    potential     \ |
-        #   |/      current       \|         |/    alternative     \|
-        #
-        # X's represent area in the current ROI where false positives occur.
+            # NOTE: I've chosen a rectangular ROI here but I think this isn't the
+            # right approach to take. I think the ROI should be shaped like the
+            # edge of the chimney to more accurately represent regions where
+            # swifts exist right before entering the chimney.
+            #    ______________________              ________________
+            #   |X   ______________   X|           ,' ______________ ',
+            #   |  ,'              ',  |          / ,'              ', \
+            #   | /                  \ |         | /    potential     \ |
+            #   |/      current       \|         |/    alternative     \|
+            #
+            # X's represent area in the current ROI where false positives occur.
 
-        # Add roi to empty image of the same size as the frame
-        frame_with_thr = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
-        frame_with_thr[self.roi_region[0][1]:self.roi_region[1][1],
-                       self.roi_region[0][0]:self.roi_region[1][0]] = thr
+            # Add roi to empty image of the same size as the frame
+            frame_with_thr = np.zeros_like(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+            frame_with_thr[self.roi_region[0][1]:self.roi_region[1][1],
+                           self.roi_region[0][0]:self.roi_region[1][0]] = thr
 
-        # Crop/resample mask (identical preprocessing to the actual frames).
-        frame_with_thr = self.crop_frame(frame=frame_with_thr)
-        frame_with_thr = self.pyramid_down(frame=frame_with_thr, iterations=1)
-        _, frame_with_thr = cv2.threshold(frame_with_thr, 0, 255,
-                                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # NOTE: This is a hacky way to do this -- there's probably a nicer way
-        # to ensure that the ROI gets the same preprocessing as the frames
-        # themselves. I could probably wrap the preprocessing stages in a
-        # single function rather than having them separate. Time concerns, etc
+            # Crop/resample mask (identical preprocessing to the actual frames).
+            frame_with_thr = self.preprocess_frame(frame_with_thr)
+            _, self.roi_mask = cv2.threshold(frame_with_thr, 0, 255,
+                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            # NOTE: This is a hacky way to do this -- there's probably a nicer way
+            # to ensure that the ROI gets the same preprocessing as the frames
+            # themselves. I could probably wrap the preprocessing stages in a
+            # single function rather than having them separate. Time concerns, etc
 
-        return frame_with_thr
+        assign_file_properties()
+        assign_processing_properties()
+        assign_queue_properties()
+        generate_chimney_regions(alpha=0.25)
+        generate_roi_mask()
+
+        if not args.extract:
+            self.stream.release()
 
     def load_frame_from_video(self):
         """Insert next frame from stream into left side (index 0) of queue."""
@@ -204,9 +216,10 @@ class FrameQueue:
 
         return success
 
-    def load_frame_from_file(self, base_save_directory, frame_number,
-                             folder_name=None):
+    def load_frame_from_file(self, base_save_directory, folder_name=None):
         """Insert frame from file into left side (index 0) of queue."""
+        frame_number = self.frame_to_load_next
+
         # Update frame attributes
         self.framenumbers.appendleft(frame_number)
         timestamp = self.framenumber_to_timestamp(frame_number)
@@ -282,46 +295,59 @@ class FrameQueue:
         except Exception as e:
             print("[!] Image saving failed due to: {0}".format(str(e)))
 
-    def convert_grayscale(self, frame=None, index=0):
-        """Convert to grayscale a frame at specified index of FrameQueue"""
+    def preprocess_frame(self, frame=None, index=0, iterations=1):
+
         if frame is None:
+            passed_frame = False
+        else:
+            passed_frame = True
+
+        def convert_grayscale():
+            """Convert to grayscale a frame at specified index of FrameQueue"""
+
+            nonlocal frame
+
+            # OpenCV default, may use other methods in future (single HSV channel?)
+            if len(frame.shape) is 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        def crop_frame():
+            """Crop frame at specified index of FrameQueue."""
+
+            nonlocal frame
+            corners = self.crop_region
+
+            try:
+                frame = frame[corners[0][1]:corners[1][1],
+                              corners[0][0]:corners[1][0]]
+            except Exception as e:
+                print("[!] Frame cropping failed due to: {0}".format(str(e)))
+
+            # Update frame attributes
+            self.height = frame.shape[0]
+            self.width = frame.shape[1]
+
+        def pyramid_down():
+            nonlocal frame
+
+            for i in range(iterations):
+                frame = cv2.pyrDown(frame)
+
+            # Update frame attributes
+            self.height = frame.shape[0]
+            self.width = frame.shape[1]
+
+        if not passed_frame:
             frame = self.queue[index]
 
-        # OpenCV default, may use other methods in future (single HSV channel?)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        convert_grayscale()
+        crop_frame()
+        pyramid_down()
 
-        return frame
-
-    def crop_frame(self, frame=None, index=0):
-        """Crop frame at specified index of FrameQueue."""
-        if frame is None:
-            frame = self.queue[index]
-        corners = self.crop_region
-
-        try:
-            frame = frame[corners[0][1]:corners[1][1],
-                          corners[0][0]:corners[1][0]]
-        except Exception as e:
-            print("[!] Frame cropping failed due to: {0}".format(str(e)))
-
-        # Update frame attributes
-        self.height = frame.shape[0]
-        self.width = frame.shape[1]
-
-        return frame
-
-    def pyramid_down(self, frame=None, iterations=1, index=0):
-        if frame is None:
-            frame = self.queue[index]
-
-        for i in range(iterations):
-            frame = cv2.pyrDown(frame)
-
-        # Update frame attributes
-        self.height = frame.shape[0]
-        self.width = frame.shape[1]
-
-        return frame
+        if not passed_frame:
+            self.queue[index] = frame
+        else:
+            return frame
 
     def frame_to_column(self, frame=None, index=0):
         """Reshapes an NxM frame into an (N*M)x1 column vector."""
@@ -332,43 +358,102 @@ class FrameQueue:
 
         return frame
 
-    def rpca(self, lmbda, tol, maxiter, darker, index=0):
-        """Decompose set of images into corresponding low-rank and sparse
-        images. Method expects images to have been reshaped to matrix of
-        column vectors.
-
-        Note: frame = lowrank + sparse
-                      lowrank = "background" image
-                      sparse  = "foreground" errors corrupting
-                                the "background" image
-
-        The size of the queue will determine the tradeoff between efficiency
-        and accuracy."""
-
-        # np.array alone would give an (#)x(N*M)x1 matrix. Adding transpose
-        # and squeeze yields (N*M)x(#). (i.e. a matrix of column vectors)
-        matrix = np.squeeze(np.transpose(np.array(self.queue)))
-
-        # Algorithm for the IALM approximation of Robust PCA method.
-        lr_columns, s_columns = \
-            inexact_augmented_lagrange_multiplier(matrix, lmbda, tol, maxiter)
-
-        # Slice frame from low rank and sparse and reshape back into image
-        lr_image = np.reshape(lr_columns[:, index], (self.height, self.width))
-        s_image = np.reshape(s_columns[:, index], (self.height, self.width))
-
-        # Bring pixels that are darker than the background into [0, 255] range
-        if darker:
-            s_image = -1 * s_image  # Darker=negative -> mirror into positive
-            np.clip(s_image, 0, 255, s_image)
-
-        return lr_image.astype(dtype=np.uint8), s_image.astype(dtype=np.uint8)
-
-    def segment_frame(self, save_directory, folder_name,
-                      params, visual=False):
+    def segment_frame(self, save_directory, folder_name, params, visual=False):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
+
+        def rpca(lmbda, tol, maxiter, darker, index=0):
+            """Decompose set of images into corresponding low-rank and sparse
+            images. Method expects images to have been reshaped to matrix of
+            column vectors.
+
+            Note: frame = lowrank + sparse
+                          lowrank = "background" image
+                          sparse  = "foreground" errors corrupting
+                                    the "background" image
+
+            The size of the queue will determine the tradeoff between efficiency
+            and accuracy."""
+
+            # np.array alone would give an (#)x(N*M)x1 matrix. Adding transpose
+            # and squeeze yields (N*M)x(#). (i.e. a matrix of column vectors)
+            matrix = np.squeeze(np.transpose(np.array(self.queue)))
+
+            # Algorithm for the IALM approximation of Robust PCA method.
+            lr_columns, s_columns = \
+                inexact_augmented_lagrange_multiplier(matrix, lmbda, tol,
+                                                      maxiter)
+
+            # Slice frame from low rank and sparse and reshape back into image
+            lr_image = np.reshape(lr_columns[:, index],
+                                  (self.height, self.width))
+            s_image = np.reshape(s_columns[:, index],
+                                 (self.height, self.width))
+
+            # Bring pixels that are darker than the background into [0, 255] range
+            if darker:
+                s_image = -1 * s_image  # Darker=negative -> mirror into positive
+                np.clip(s_image, 0, 255, s_image)
+
+            return lr_image.astype(dtype=np.uint8), s_image.astype(
+                dtype=np.uint8)
+
+        def segment_visualization():
+            # Add roi mask to each stage for visualization.
+            for keys, key_values in seg.items():
+                seg[keys] = cv2.addWeighted(self.roi_mask, 0.25,
+                                            key_values.astype(np.uint8), 0.75,
+                                            0)
+
+            # Add filler images if not enough stages to fill Nx3 grid
+            mod3remainder = len(seg) % 3
+            if mod3remainder > 0:
+                for i in range(3 - mod3remainder):
+                    seg["filler_{}".format(i + 1)] = np.zeros((self.height,
+                                                               self.width),
+                                                              dtype=np.int)
+
+            for keys, key_values in seg.items():
+                # Resize frame for visual clarity
+                scale = 4  # 400%
+                key_values = cv2.resize(key_values.astype(np.uint8),
+                                        (round(key_values.shape[1] * scale),
+                                         round(key_values.shape[0] * scale)),
+                                        interpolation=cv2.INTER_AREA)
+
+                # Apply label to frame
+                horizontal_bg = 183 * np.ones(
+                    shape=(40, key_values.shape[1]),
+                    dtype=np.uint8)
+                seg[keys] = np.vstack((key_values, horizontal_bg))
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.putText(seg[keys], keys,
+                            (5, seg[keys].shape[0] - 10),  # Bottom-left corner
+                            font, 1, 0, 2)
+
+            # Concatenate images into Nx3 grid
+            rows = [None] * math.ceil((len(seg) / 3))
+            sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 2),
+                                 dtype=np.uint8)
+            for i in range(len(rows)):
+                # Concatenate 3 images into 1x3 row
+                rows[i] = np.hstack((list(seg.values())[0 + (i * 3)], sep_h,
+                                     list(seg.values())[1 + (i * 3)], sep_h,
+                                     list(seg.values())[2 + (i * 3)]))
+                # If more than one row, stack rows together
+                if i > 0:
+                    sep_v = 64 * np.ones(shape=(2, rows[0].shape[1]),
+                                         dtype=np.uint8)
+                    rows[0] = np.vstack((rows[0], sep_v,
+                                         rows[i])).astype(np.uint8)
+
+            # Save to file
+            self.save_frame_to_file(save_directory,
+                                    frame=rows[0],
+                                    index=self.queue_center,
+                                    base_folder=folder_name,
+                                    frame_folder="visualizations/segmentation/")
 
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
@@ -376,7 +461,7 @@ class FrameQueue:
                                 (self.height, self.width))
         }
 
-        # Hacky bit to reload output of RPCA rather than recomputing
+        # # Hacky bit to reload output of RPCA rather than recomputing
         t = self.timestamps[self.queue_center].time()
         base_save_directory = (save_directory + "RPCA-frames/{0:02d}:{1:02d}"
                                .format(t.hour, t.minute))
@@ -389,12 +474,12 @@ class FrameQueue:
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         seg["RPCA_output"] = frame
 
-        # # Apply Robust PCA method to isolate regions of motion
-        # _, seg["RPCA_output"] = self.rpca(params["ialm_lmbda"],
-        #                                   params["ialm_tol"],
-        #                                   params["ialm_maxiter"],
-        #                                   params["ialm_darker"],
-        #                                   index=self.queue_center)
+        # Apply Robust PCA method to isolate regions of motion
+        # _, seg["RPCA_output"] = rpca(params["ialm_lmbda"],
+        #                              params["ialm_tol"],
+        #                              params["ialm_maxiter"],
+        #                              params["ialm_darker"],
+        #                              index=self.queue_center)
         #
         # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
         #                         frame_folder="RPCA-frames/",
@@ -436,65 +521,9 @@ class FrameQueue:
         self.seg_properties.appendleft(measure.regionprops(labeled_frame))
 
         if visual:
-            self.segment_visualization(seg, save_directory, folder_name)
+            segment_visualization()
 
-    def segment_visualization(self, seg, save_directory, folder_name):
-        # Add roi mask to each stage for visualization.
-        for keys, key_values in seg.items():
-            seg[keys] = cv2.addWeighted(self.roi_mask, 0.25,
-                                        key_values.astype(np.uint8), 0.75, 0)
-
-        # Add filler images if not enough stages to fill Nx3 grid
-        mod3remainder = len(seg) % 3
-        if mod3remainder > 0:
-            for i in range(3 - mod3remainder):
-                seg["filler_{}".format(i + 1)] = np.zeros((self.height,
-                                                           self.width),
-                                                          dtype=np.int)
-
-        for keys, key_values in seg.items():
-            # Resize frame for visual clarity
-            scale = 4  # 400%
-            key_values = cv2.resize(key_values.astype(np.uint8),
-                                    (round(key_values.shape[1] * scale),
-                                    round(key_values.shape[0] * scale)),
-                                    interpolation=cv2.INTER_AREA)
-
-            # Apply label to frame
-            horizontal_bg = 183 * np.ones(
-                shape=(40, key_values.shape[1]),
-                dtype=np.uint8)
-            seg[keys] = np.vstack((key_values, horizontal_bg))
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(seg[keys], keys,
-                        (5, seg[keys].shape[0]-10),  # Bottom-left corner
-                        font, 1, 0, 2)
-
-        # Concatenate images into Nx3 grid
-        rows = [None] * math.ceil((len(seg) / 3))
-        sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 2),
-                             dtype=np.uint8)
-        for i in range(len(rows)):
-            # Concatenate 3 images into 1x3 row
-            rows[i] = np.hstack((list(seg.values())[0 + (i*3)], sep_h,
-                                 list(seg.values())[1 + (i*3)], sep_h,
-                                 list(seg.values())[2 + (i*3)]))
-            # If more than one row, stack rows together
-            if i > 0:
-                sep_v = 64 * np.ones(shape=(2, rows[0].shape[1]),
-                                     dtype=np.uint8)
-                rows[0] = np.vstack((rows[0], sep_v,
-                                     rows[i])).astype(np.uint8)
-
-        # Save to file
-        self.save_frame_to_file(save_directory,
-                                frame=rows[0],
-                                index=self.queue_center,
-                                base_folder=folder_name,
-                                frame_folder="visualizations/segmentation/")
-
-    def match_segments(self, save_directory, folder_name,
-                       params, visual=False):
+    def match_segments(self, save_directory, folder_name, visual=False):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames.
 
@@ -522,6 +551,85 @@ class FrameQueue:
         single outcome (match, no match) to each segment in both frames. The
         total sum of likelihoods will be the maximum across all possible
         combinations of matches, as per the Assignment Problem."""
+
+        def match_visualization():
+            """Create visualizations from matching results and segmented frames."""
+            # Colormappings for tab20 colormap.
+            # See: https://matplotlib.org/examples/color/colormaps_reference.html
+            colors = [14, 40, 118, 144, 170, 222, 248,
+                      # non-G/R colors (pastel)
+                      1, 27, 105, 131, 157, 209,
+                      235]  # non-G/R colors (normal)
+            appeared_color = 53  # Green
+            fp_appeared_color = 66  # Pastel green
+            disappeared_color = 79  # Red
+            fp_disappeared_color = 82  # Pastel red
+            background_color = 196  # Light grey
+
+            # Replacing connected component labeling output (0 for background,
+            # 1, 2, 3... for segments) with matched colormapping. Grayscale values
+            # (0-255) correspond to colors in tab20 qualitative colormap.
+            frame = np.copy(self.seg_queue[0])
+            frame_prev = np.copy(self.seg_queue[1])
+            frame_prev[frame_prev == 0] = background_color
+            frame[frame == 0] = background_color
+            color_index = 0
+            for i in range(count_total):
+                j = seg_matches[i]
+                # Index condition if two segments are matching
+                if (i < j) and (i < count_prev):
+                    frame_prev[frame_prev == (i + 1)] = colors[
+                        color_index % 14]
+                    frame[frame == (j + 1 - count_prev)] = colors[
+                        color_index % 14]
+                    color_index += 1
+                # Index condition for when a previous segment has disappeared
+                elif (i == j) and (i < count_prev):
+                    frame_prev[frame_prev == (i + 1)] = disappeared_color
+                # Index condition for when a new segment has appeared
+                elif (i == j) and (i >= count_prev):
+                    frame[frame == (j + 1 - count_prev)] = appeared_color
+
+            # Resize frames for visual convenience
+            scale = 4
+            frame = cv2.resize(frame,
+                               (round(frame.shape[1] * scale),
+                                round(frame.shape[0] * scale)),
+                               interpolation=cv2.INTER_AREA)
+            frame_prev = cv2.resize(frame_prev,
+                                    (round(frame_prev.shape[1] * scale),
+                                     round(frame_prev.shape[0] * scale)),
+                                    interpolation=cv2.INTER_AREA)
+
+            # Combine both frames into single image
+            separator_v = 183 * np.ones(shape=(self.height * scale, 1),
+                                        dtype=np.uint8)
+            match_comparison = np.hstack((frame_prev, separator_v, frame))
+
+            # Combine two ROI masks into single image.
+            roi_mask = cv2.resize(self.roi_mask,
+                                  (round(self.roi_mask.shape[1] * scale),
+                                   round(self.roi_mask.shape[0] * scale)),
+                                  interpolation=cv2.INTER_AREA)
+            separator_v = np.zeros(shape=(self.height * scale, 1),
+                                   dtype=np.uint8)
+            roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
+            roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
+
+            # Apply color mapping, then apply mask to colormapped image
+            match_comparison_color = cm.apply_custom_colormap(match_comparison,
+                                                              cmap="tab20")
+            match_comparison_color = \
+                cv2.addWeighted(roi_stacked, 0.10,
+                                match_comparison_color, 0.90, 0)
+
+            # Save completed visualization to folder
+            self.save_frame_to_file(save_directory,
+                                    frame=match_comparison_color,
+                                    index=self.queue_center,
+                                    base_folder=folder_name,
+                                    frame_folder="visualizations/matching/",
+                                    scale=1)
 
         # Assign names to commonly used properties
         count_curr = len(self.seg_properties[0])
@@ -594,83 +702,7 @@ class FrameQueue:
 
         # Create visualization of segment matches if requested
         if visual:
-            self.match_visualization(count_prev, count_total, seg_matches,
-                                     save_directory, folder_name)
-
-    def match_visualization(self, count_prev, count_total, matches,
-                            save_directory, folder_name):
-        """Create visualizations from matching results and segmented frames."""
-        # Colormappings for tab20 colormap.
-        # See: https://matplotlib.org/examples/color/colormaps_reference.html
-        colors = [14, 40, 118, 144, 170, 222, 248,  # non-G/R colors (pastel)
-                  1, 27, 105, 131, 157, 209, 235]   # non-G/R colors (normal)
-        appeared_color = 53        # Green
-        fp_appeared_color = 66     # Pastel green
-        disappeared_color = 79     # Red
-        fp_disappeared_color = 82  # Pastel red
-        background_color = 196     # Light grey
-
-        # Replacing connected component labeling output (0 for background,
-        # 1, 2, 3... for segments) with matched colormapping. Grayscale values
-        # (0-255) correspond to colors in tab20 qualitative colormap.
-        frame = np.copy(self.seg_queue[0])
-        frame_prev = np.copy(self.seg_queue[1])
-        frame_prev[frame_prev == 0] = background_color
-        frame[frame == 0] = background_color
-        color_index = 0
-        for i in range(count_total):
-            j = matches[i]
-            # Index condition if two segments are matching
-            if (i < j) and (i < count_prev):
-                frame_prev[frame_prev == (i + 1)] = colors[color_index % 14]
-                frame[frame == (j + 1 - count_prev)] = colors[color_index % 14]
-                color_index += 1
-            # Index condition for when a previous segment has disappeared
-            elif (i == j) and (i < count_prev):
-                frame_prev[frame_prev == (i + 1)] = disappeared_color
-            # Index condition for when a new segment has appeared
-            elif (i == j) and (i >= count_prev):
-                frame[frame == (j + 1 - count_prev)] = appeared_color
-
-        # Resize frames for visual convenience
-        scale = 4
-        frame = cv2.resize(frame,
-                           (round(frame.shape[1] * scale),
-                            round(frame.shape[0] * scale)),
-                           interpolation=cv2.INTER_AREA)
-        frame_prev = cv2.resize(frame_prev,
-                                (round(frame_prev.shape[1] * scale),
-                                 round(frame_prev.shape[0] * scale)),
-                                interpolation=cv2.INTER_AREA)
-
-        # Combine both frames into single image
-        separator_v = 183 * np.ones(shape=(self.height * scale, 1),
-                                    dtype=np.uint8)
-        match_comparison = np.hstack((frame_prev, separator_v, frame))
-
-        # Combine two ROI masks into single image.
-        roi_mask = cv2.resize(self.roi_mask,
-                              (round(self.roi_mask.shape[1] * scale),
-                               round(self.roi_mask.shape[0] * scale)),
-                              interpolation=cv2.INTER_AREA)
-        separator_v = np.zeros(shape=(self.height*scale, 1), dtype=np.uint8)
-        roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
-        roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
-
-        # Apply color mapping, then apply mask to colormapped image
-        match_comparison_color = cm.apply_custom_colormap(match_comparison,
-                                                          cmap="tab20")
-        match_comparison_color = \
-            cv2.addWeighted(roi_stacked, 0.10,
-                            match_comparison_color, 0.90, 0)
-
-        # Save completed visualization to folder
-        self.save_frame_to_file(save_directory,
-                                frame=match_comparison_color,
-                                index=self.queue_center,
-                                base_folder=folder_name,
-                                frame_folder="visualizations/matching/",
-                                scale=1)
+            match_visualization()
 
     def analyse_matches(self):
         """Use matching results to store history of RegionProperties through
@@ -767,30 +799,23 @@ def process_extracted_frames(args, params):
     extracted frames and determine bird counts for that sequence."""
 
     frame_queue = FrameQueue(args, queue_size=params["queue_size"])
-    frame_queue.stream.release()  # VideoCapture not needed if frames reused
 
     print("[*] Analysing frames... (This may take a while!)")
+
     while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
         # Load frame into index 0 and apply preprocessing
-        frame_queue.load_frame_from_file(args.default_dir,
-                                         frame_queue.frame_to_load_next)
-        frame_queue.queue[0] = frame_queue.convert_grayscale()
-        frame_queue.queue[0] = frame_queue.crop_frame()
-        frame_queue.queue[0] = frame_queue.pyramid_down(iterations=1)
+        frame_queue.load_frame_from_file(args.default_dir)
+        frame_queue.preprocess_frame()
         frame_queue.queue[0] = frame_queue.frame_to_column()
-        # NOTE: I'm considering wrapping these preprocessing stages into a
-        # single preprocess_frame() method, just so the sequence of functions
-        # can be applied to other things (like the ROI mask).
 
+        # Proceed only when enough frames are cached to use RPCA method
         if frame_queue.frames_read > (frame_queue.queue_center + 1):
-            # Proceed only when enough frames are cached to use RPCA method
             frame_queue.segment_frame(args.default_dir,
                                       args.custom_dir,
                                       params,
                                       visual=args.visual)
             frame_queue.match_segments(args.default_dir,
                                        args.custom_dir,
-                                       params,
                                        visual=args.visual)
             frame_queue.analyse_matches()
 
@@ -805,12 +830,17 @@ def process_extracted_frames(args, params):
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
         # NOTE: Delay is also handled in load_frame_from_video(), so there's
         # probably redundancy in keeping track of the next frame to load.
+
     print("[-] Analysis complete. {0}/{1} frames were used in counting."
           .format((frame_queue.frames_read-frame_queue.queue_center),
                   frame_queue.frames_read))
 
     # Convert dictionary of lists into DataFrame
-    df_events = pd.DataFrame(frame_queue.event_list,
-                             columns=list(frame_queue.event_list[0].keys())).astype('object')
+    if not frame_queue.event_list:
+        df_events = pd.DataFrame(frame_queue.event_list,
+                                 columns=list(frame_queue.event_list[0].keys())
+                                 ).astype('object')
+    else:
+        df_events = pd.DataFrame(frame_queue.event_list)
 
     return df_events
