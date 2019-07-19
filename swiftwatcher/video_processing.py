@@ -358,7 +358,7 @@ class FrameQueue:
 
         return frame
 
-    def segment_frame(self, save_directory, folder_name, params, visual=False):
+    def segment_frame(self, args, params):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
@@ -455,6 +455,10 @@ class FrameQueue:
                                     base_folder=folder_name,
                                     frame_folder="visualizations/segmentation/")
 
+        save_directory = args.default_dir
+        folder_name = args.custom_dir
+        visual = args.visual
+
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
             "frame": np.reshape(self.queue[self.queue_center],
@@ -523,7 +527,7 @@ class FrameQueue:
         if visual:
             segment_visualization()
 
-    def match_segments(self, save_directory, folder_name, visual=False):
+    def match_segments(self, args, params):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames.
 
@@ -630,6 +634,10 @@ class FrameQueue:
                                     base_folder=folder_name,
                                     frame_folder="visualizations/matching/",
                                     scale=1)
+
+        save_directory = args.default_dir
+        folder_name = args.custom_dir
+        visual = args.visual
 
         # Assign names to commonly used properties
         count_curr = len(self.seg_properties[0])
@@ -803,28 +811,22 @@ def process_extracted_frames(args, params):
     print("[*] Analysing frames... (This may take a while!)")
 
     while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
-        # Load frame into index 0 and apply preprocessing
         frame_queue.load_frame_from_file(args.default_dir)
         frame_queue.preprocess_frame()
         frame_queue.queue[0] = frame_queue.frame_to_column()
 
         # Proceed only when enough frames are cached to use RPCA method
         if frame_queue.frames_read > (frame_queue.queue_center + 1):
-            frame_queue.segment_frame(args.default_dir,
-                                      args.custom_dir,
-                                      params,
-                                      visual=args.visual)
-            frame_queue.match_segments(args.default_dir,
-                                       args.custom_dir,
-                                       visual=args.visual)
+            frame_queue.segment_frame(args, params)
+            frame_queue.match_segments(args, params)
             frame_queue.analyse_matches()
 
+        # NOTE: Should probably have some sort of "verbose" flag, or utilize
+        # logging. This seems like a naive way to do this.
         if frame_queue.frames_read % 25 == 0:
             print("[-] {0}/{1} frames processed."
                   .format(frame_queue.frames_read,
                           frame_queue.num_frames_to_analyse))
-        # NOTE: Should probably have some sort of "verbose" flag, or utilize
-        # logging. This seems like a naive way to do this.
 
         # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
