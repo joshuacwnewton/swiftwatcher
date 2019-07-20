@@ -169,12 +169,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108047])
+                        default=([55000, 55100])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/load-test/"
+                        default="tests/load-frame/"
                         )
     parser.add_argument("-v",
                         "--visual",

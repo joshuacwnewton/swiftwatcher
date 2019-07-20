@@ -387,7 +387,7 @@ class FrameQueue:
             img_matrix = np.array(self.queue)
             if index:
                 img_matrix = img_matrix[:index, :, :]
-                test = None
+
             col_matrix = np.transpose(img_matrix.reshape(img_matrix.shape[0],
                                                          img_matrix.shape[1] *
                                                          img_matrix.shape[2]))
@@ -478,10 +478,10 @@ class FrameQueue:
             rpca(params["ialm_lmbda"], params["ialm_tol"],
                  params["ialm_maxiter"], params["ialm_darker"])
         if self.frames_read == self.total_frames:
-            rem = self.total_frames % params["queue_size"]
-            rpca(params["ialm_lmbda"], params["ialm_tol"],
-                 params["ialm_maxiter"], params["ialm_darker"], index=rem)
-            self.frames_read += 1
+            if self.frames_read-self.frames_processed == params["queue_size"]:
+                rem = self.total_frames % params["queue_size"]
+                rpca(params["ialm_lmbda"], params["ialm_tol"],
+                     params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
 
         # Apply thresholding to retain strongest areas and discard the rest
@@ -808,11 +808,11 @@ def process_frames(args, params):
             print("[-] {0}/{1} frames processed."
                   .format(fq.frames_processed, fq.total_frames))
 
-    print("[-] Analysis complete. {0}/{1} frames were used in counting."
-          .format(fq.frames_processed, fq.frames_read-1))
+    print("[-] Analysis complete. {0}/{1} frames were used in processing."
+          .format(fq.frames_processed, fq.frames_read))
 
     # Convert dictionary of lists into DataFrame
-    if not fq.event_list:
+    if fq.event_list:
         df_events = pd.DataFrame(fq.event_list,
                                  columns=list(fq.event_list[0].keys())
                                  ).astype('object')
