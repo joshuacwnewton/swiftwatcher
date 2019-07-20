@@ -182,12 +182,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([55000, 55100])
+                        default=([0, 108047])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/nested-functions-init/"
+                        default="tests/2019-07-19_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",

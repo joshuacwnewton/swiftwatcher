@@ -81,7 +81,7 @@ class FrameQueue:
                 self.src_fps / self.fps) - 1  # For subsampling vid
 
             self.frame_to_load_next = args.load[0]
-            self.num_frames_to_analyse = args.load[1] - args.load[0]
+            self.num_frames_to_analyse = args.load[1] - args.load[0] + 1
 
             # Initialize "disappeared segment" event tracking list
             self.event_list = []
@@ -92,6 +92,7 @@ class FrameQueue:
             self.framenumbers = collections.deque([], queue_size)
             self.timestamps = collections.deque([], queue_size)
             self.frames_read = 0
+            self.frames_processed = 0
 
             # Initialize secondary queue for segmented frames
             self.queue_center = int((queue_size - 1) / 2)
@@ -246,10 +247,10 @@ class FrameQueue:
 
         return success
 
-    def save_frame_to_file(self, base_save_directory, frame=None, index=0,
-                           scale=1, single_folder=False,
-                           base_folder="", frame_folder="frames/",
-                           file_prefix="", file_suffix=""):
+    def save_frame(self, base_save_directory, frame=None, index=0,
+                       scale=1, single_folder=False,
+                       base_folder="", frame_folder="frames/",
+                       file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
         provided, frame will be pulled from frame_queue at specified index."""
 
@@ -260,7 +261,7 @@ class FrameQueue:
         if single_folder:
             save_directory = base_save_directory
         else:
-            t = self.timestamps[self.queue_center].time()
+            t = self.timestamps[-1].time()
             save_directory = (base_save_directory+"{0:02d}:{1:02d}"
                               .format(t.hour, t.minute))
 
@@ -285,22 +286,14 @@ class FrameQueue:
                                interpolation=cv2.INTER_AREA)
 
         # Write frame to image file within save_directory
-        try:
-            cv2.imwrite("{0}/{1}frame{2}_{3}{4}.jpg"
-                        .format(save_directory, file_prefix,
-                                self.framenumbers[index],
-                                self.timestamps[index].time(),
-                                file_suffix),
-                        frame)
-        except Exception as e:
-            print("[!] Image saving failed due to: {0}".format(str(e)))
+        cv2.imwrite("{0}/{1}frame{2}_{3}{4}.jpg"
+                    .format(save_directory, file_prefix,
+                            self.framenumbers[index],
+                            self.timestamps[index].time(),
+                            file_suffix),
+                    frame)
 
     def preprocess_frame(self, frame=None, index=0, iterations=1):
-
-        if frame is None:
-            passed_frame = False
-        else:
-            passed_frame = True
 
         def convert_grayscale():
             """Convert to grayscale a frame at specified index of FrameQueue"""
@@ -337,6 +330,11 @@ class FrameQueue:
             self.height = frame.shape[0]
             self.width = frame.shape[1]
 
+        if frame is None:
+            passed_frame = False
+        else:
+            passed_frame = True
+
         if not passed_frame:
             frame = self.queue[index]
 
@@ -349,21 +347,12 @@ class FrameQueue:
         else:
             return frame
 
-    def frame_to_column(self, frame=None, index=0):
-        """Reshapes an NxM frame into an (N*M)x1 column vector."""
-        if frame is None:
-            frame = self.queue[index]
-
-        frame = np.squeeze(np.reshape(frame, (self.width*self.height, 1)))
-
-        return frame
-
     def segment_frame(self, args, params):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
-        def rpca(lmbda, tol, maxiter, darker, index=0):
+        def rpca(lmbda, tol, maxiter, darker, index=None):
             """Decompose set of images into corresponding low-rank and sparse
             images. Method expects images to have been reshaped to matrix of
             column vectors.
@@ -376,28 +365,28 @@ class FrameQueue:
             The size of the queue will determine the tradeoff between efficiency
             and accuracy."""
 
-            # np.array alone would give an (#)x(N*M)x1 matrix. Adding transpose
-            # and squeeze yields (N*M)x(#). (i.e. a matrix of column vectors)
-            matrix = np.squeeze(np.transpose(np.array(self.queue)))
+            img_matrix = np.array(self.queue)
+            if index:
+                img_matrix = img_matrix[:index, :, :]
+                test = None
+            col_matrix = np.transpose(img_matrix.reshape(img_matrix.shape[0],
+                                                         img_matrix.shape[1] *
+                                                         img_matrix.shape[2]))
 
             # Algorithm for the IALM approximation of Robust PCA method.
             lr_columns, s_columns = \
-                inexact_augmented_lagrange_multiplier(matrix, lmbda, tol,
-                                                      maxiter)
+                inexact_augmented_lagrange_multiplier(col_matrix,
+                                                      lmbda, tol, maxiter)
 
-            # Slice frame from low rank and sparse and reshape back into image
-            lr_image = np.reshape(lr_columns[:, index],
-                                  (self.height, self.width))
-            s_image = np.reshape(s_columns[:, index],
-                                 (self.height, self.width))
-
-            # Bring pixels that are darker than the background into [0, 255] range
+            # Bring pixels that are darker than background to [0, 255] range
             if darker:
-                s_image = -1 * s_image  # Darker=negative -> mirror into positive
-                np.clip(s_image, 0, 255, s_image)
+                s_columns = np.negative(s_columns)
+                s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
 
-            return lr_image.astype(dtype=np.uint8), s_image.astype(
-                dtype=np.uint8)
+            # Reshape columns back into image dimensions
+            for i in range(img_matrix.shape[0]):
+                self.queue[i] = np.reshape(s_columns[:, i],
+                                           (self.height, self.width))
 
         def segment_visualization():
             # Add roi mask to each stage for visualization.
@@ -449,9 +438,9 @@ class FrameQueue:
                                          rows[i])).astype(np.uint8)
 
             # Save to file
-            self.save_frame_to_file(save_directory,
+            self.save_frame(save_directory,
                                     frame=rows[0],
-                                    index=self.queue_center,
+                                    index=-1,
                                     base_folder=folder_name,
                                     frame_folder="visualizations/segmentation/")
 
@@ -461,33 +450,20 @@ class FrameQueue:
 
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
-            "frame": np.reshape(self.queue[self.queue_center],
+            "frame": np.reshape(self.queue[-1],
                                 (self.height, self.width))
         }
 
-        # # Hacky bit to reload output of RPCA rather than recomputing
-        t = self.timestamps[self.queue_center].time()
-        base_save_directory = (save_directory + "RPCA-frames/{0:02d}:{1:02d}"
-                               .format(t.hour, t.minute))
-
-        file_paths = glob.glob("{0}/frame{1}_*".format(base_save_directory,
-                                                       self.frame_to_load_next-
-                                                       self.queue_center))
-        frame = cv2.imread(file_paths[0])
-
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        seg["RPCA_output"] = frame
-
         # Apply Robust PCA method to isolate regions of motion
-        # _, seg["RPCA_output"] = rpca(params["ialm_lmbda"],
-        #                              params["ialm_tol"],
-        #                              params["ialm_maxiter"],
-        #                              params["ialm_darker"],
-        #                              index=self.queue_center)
-        #
-        # self.save_frame_to_file(save_directory, frame=seg["RPCA_output"],
-        #                         frame_folder="RPCA-frames/",
-        #                         index=self.queue_center)
+        if self.frames_read % params["queue_size"] == 0:
+            rpca(params["ialm_lmbda"], params["ialm_tol"],
+                 params["ialm_maxiter"], params["ialm_darker"])
+        if self.frames_read == self.num_frames_to_analyse:
+            rem = self.num_frames_to_analyse % params["queue_size"]
+            rpca(params["ialm_lmbda"], params["ialm_tol"],
+                 params["ialm_maxiter"], params["ialm_darker"], index=rem)
+            self.frames_read += 1
+        seg["RPCA_output"] = self.queue[-1]
 
         # Apply thresholding to retain strongest areas and discard the rest
         threshold_str = "thresh_{}".format(params["thr_value"])
@@ -523,6 +499,7 @@ class FrameQueue:
         # Append segmented frame (and information about frame) to queue
         self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
         self.seg_properties.appendleft(measure.regionprops(labeled_frame))
+        self.frames_processed += 1
 
         if visual:
             segment_visualization()
@@ -628,9 +605,9 @@ class FrameQueue:
                                 match_comparison_color, 0.90, 0)
 
             # Save completed visualization to folder
-            self.save_frame_to_file(save_directory,
+            self.save_frame(save_directory,
                                     frame=match_comparison_color,
-                                    index=self.queue_center,
+                                    index=-1,
                                     base_folder=folder_name,
                                     frame_folder="visualizations/matching/",
                                     scale=1)
@@ -748,8 +725,8 @@ class FrameQueue:
                 if roi_value == 255 and len(seg_prev.__centroids) > 1:
                     # Storing information about event for further analysis
                     event_info = {
-                        "TMSTAMP": self.timestamps[self.queue_center],
-                        "FRM_NUM": self.framenumbers[self.queue_center],
+                        "TMSTAMP": self.timestamps[-1],
+                        "FRM_NUM": self.framenumbers[-1],
                         "CENTRDS": seg_prev.__centroids,
                     }
                     self.event_list.append(event_info)
@@ -788,7 +765,7 @@ def extract_frames(args, queue_size=1, save_directory=None):
         success = frame_queue.load_frame_from_video()
 
         if success:
-            frame_queue.save_frame_to_file(save_directory)
+            frame_queue.save_frame(save_directory)
         else:
             raise Exception("read_frame() failed before expected end of file.")
 
@@ -810,23 +787,30 @@ def process_extracted_frames(args, params):
 
     print("[*] Analysing frames... (This may take a while!)")
 
-    while frame_queue.frames_read < frame_queue.num_frames_to_analyse:
-        frame_queue.load_frame_from_file(args.default_dir)
-        frame_queue.preprocess_frame()
-        frame_queue.queue[0] = frame_queue.frame_to_column()
+    while frame_queue.frames_processed < frame_queue.num_frames_to_analyse:
+        if frame_queue.frames_read < frame_queue.num_frames_to_analyse:
+            frame_queue.load_frame_from_file(args.default_dir)
+            frame_queue.preprocess_frame()
+        else:
+            frame_number = frame_queue.frame_to_load_next
+            frame_queue.queue.appendleft(np.array([]))
+            frame_queue.framenumbers.appendleft(frame_number)
+            timestamp = frame_queue.framenumber_to_timestamp(frame_number)
+            frame_queue.timestamps.appendleft(timestamp)
 
         # Proceed only when enough frames are cached to use RPCA method
-        if frame_queue.frames_read > (frame_queue.queue_center + 1):
+        if frame_queue.frames_read >= params["queue_size"]:
             frame_queue.segment_frame(args, params)
             frame_queue.match_segments(args, params)
             frame_queue.analyse_matches()
 
         # NOTE: Should probably have some sort of "verbose" flag, or utilize
         # logging. This seems like a naive way to do this.
-        if frame_queue.frames_read % 25 == 0:
-            print("[-] {0}/{1} frames processed."
-                  .format(frame_queue.frames_read,
-                          frame_queue.num_frames_to_analyse))
+        if frame_queue.frames_processed is not 0:
+            if frame_queue.frames_processed % 25 is 0:
+                print("[-] {0}/{1} frames processed."
+                      .format(frame_queue.frames_processed,
+                              frame_queue.num_frames_to_analyse))
 
         # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
         frame_queue.frame_to_load_next += (1 + frame_queue.delay)
@@ -834,8 +818,7 @@ def process_extracted_frames(args, params):
         # probably redundancy in keeping track of the next frame to load.
 
     print("[-] Analysis complete. {0}/{1} frames were used in counting."
-          .format((frame_queue.frames_read-frame_queue.queue_center),
-                  frame_queue.frames_read))
+          .format(frame_queue.frames_processed, frame_queue.frames_read-1))
 
     # Convert dictionary of lists into DataFrame
     if not frame_queue.event_list:
