@@ -81,7 +81,7 @@ class FrameQueue:
                 self.src_fps / self.fps) - 1  # For subsampling vid
 
             self.frame_to_load_next = args.load[0]
-            self.num_frames_to_analyse = args.load[1] - args.load[0] + 1
+            self.total_frames = args.load[1] - args.load[0] + 1
 
             # Initialize "disappeared segment" event tracking list
             self.event_list = []
@@ -191,68 +191,87 @@ class FrameQueue:
         if not args.extract:
             self.stream.release()
 
-    def load_frame_from_video(self):
-        """Insert next frame from stream into left side (index 0) of queue."""
+    def load_frame(self, load_directory=None, empty=False):
 
-        if not self.stream.isOpened():
-            raise Exception("[!] Video stream is not open."
-                            " Cannot read new frames.")
-        # NOTE: Is this even necessary? I can't imagine calling this function
-        # without first having opened the stream.
+        def fn_to_ts(frame_number):
+            """Helper function to convert an amount of frames into a timestamp."""
+            total_s = frame_number / self.fps
+            timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
-        # Fetch new frame and update its attributes
-        self.framenumbers.appendleft(
-            int(self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
-        self.timestamps.appendleft(
-            self.framenumber_to_timestamp(
-                self.stream.get(cv2.CAP_PROP_POS_FRAMES)))
-        success, frame = self.stream.read()
-        if success:
-            self.queue.appendleft(np.array(frame))
-            self.frames_read += 1
+            return timestamp
 
-        # Increments position for next read frame (for skipping frames)
-        for i in range(self.delay):
-            self.stream.grab()
+        def ts_to_fn(timestamp):
+            """Helper function to convert timestamp into an amount of frames."""
+            t = timestamp.time()
+            total_s = (t.hour * 60 * 60 +
+                       t.minute * 60 +
+                       t.second +
+                       t.microsecond / 1e6)
+            frame_number = int(round(total_s * self.fps))
 
-        return success
+            return frame_number
 
-    def load_frame_from_file(self, base_save_directory, folder_name=None):
-        """Insert frame from file into left side (index 0) of queue."""
-        frame_number = self.frame_to_load_next
+        def load_frame_from_video():
+            """Insert next frame from stream into index 0 of queue."""
+            nonlocal new_timestamp, new_framenumber, new_frame, success
 
-        # Update frame attributes
-        self.framenumbers.appendleft(frame_number)
-        timestamp = self.framenumber_to_timestamp(frame_number)
-        self.timestamps.appendleft(timestamp)
+            # Fetch new frame and update its attributes
+            new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
+            new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
+            success, frame = self.stream.read()
+            if success:
+                new_frame = np.array(frame)
+                self.frames_read += 1
 
-        # Set appropriate directory
-        if not folder_name:
-            t = self.timestamps[0].time()
-            save_directory = (base_save_directory+"frames/{0:02d}:{1:02d}"
-                              .format(t.hour, t.minute))
+            # Increments position for next read frame (for skipping frames)
+            for i in range(self.delay):
+                self.stream.grab()
+
+        def load_frame_from_file():
+            """Insert frame from file into index 0 of queue."""
+            nonlocal new_timestamp, new_framenumber, new_frame, success
+
+            new_framenumber = self.frame_to_load_next
+            new_timestamp = fn_to_ts(new_framenumber)
+
+            t = new_timestamp.time()
+            directory = (load_directory +
+                         "frames/{0:02d}:{1:02d}".format(t.hour, t.minute))
+
+            file_paths = glob.glob("{0}/frame{1}_*".format(directory,
+                                                           new_framenumber))
+            new_frame = np.array(cv2.imread(file_paths[0]))
+
+            if not new_frame.size == 0:
+                success = True
+                self.frames_read += 1
+
+            self.frame_to_load_next += (1+self.delay)
+
+        new_timestamp = ""
+        new_framenumber = ""
+        new_frame = ""
+        success = False
+
+        if load_directory:
+            load_frame_from_file()
+        elif empty:
+            pass
         else:
-            save_directory = base_save_directory+"/"+folder_name
+            load_frame_from_video()
 
-        file_paths = glob.glob("{0}/frame{1}_*".format(save_directory,
-                                                       frame_number))
-        frame = cv2.imread(file_paths[0])
-        self.queue.appendleft(np.array(frame))
-
-        if not frame.size == 0:
-            success = True
-            self.frames_read += 1
-        else:
-            success = False
+        self.timestamps.appendleft(new_timestamp)
+        self.framenumbers.appendleft(new_framenumber)
+        self.queue.appendleft(new_frame)
 
         return success
 
     def save_frame(self, base_save_directory, frame=None, index=0,
-                       scale=1, single_folder=False,
-                       base_folder="", frame_folder="frames/",
-                       file_prefix="", file_suffix=""):
+                   scale=1, single_folder=False,
+                   base_folder="", frame_folder="frames/",
+                   file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
-        provided, frame will be pulled from frame_queue at specified index."""
+        provided, frame will be pulled from frame queue at specified index."""
 
         # By default, frames will be saved in a subfolder corresponding to
         # HH:MM formatting. However, a custom subfolder can be chosen instead.
@@ -458,8 +477,8 @@ class FrameQueue:
         if self.frames_read % params["queue_size"] == 0:
             rpca(params["ialm_lmbda"], params["ialm_tol"],
                  params["ialm_maxiter"], params["ialm_darker"])
-        if self.frames_read == self.num_frames_to_analyse:
-            rem = self.num_frames_to_analyse % params["queue_size"]
+        if self.frames_read == self.total_frames:
+            rem = self.total_frames % params["queue_size"]
             rpca(params["ialm_lmbda"], params["ialm_tol"],
                  params["ialm_maxiter"], params["ialm_darker"], index=rem)
             self.frames_read += 1
@@ -731,24 +750,6 @@ class FrameQueue:
                     }
                     self.event_list.append(event_info)
 
-    def framenumber_to_timestamp(self, frame_number):
-        """Helper function to convert an amount of frames into a timestamp."""
-        total_s = frame_number / self.fps
-        timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
-
-        return timestamp
-
-    def timestamp_to_framenumber(self, timestamp):
-        """Helper function to convert timestamp into an amount of frames."""
-        t = timestamp.time()
-        total_s = (t.hour * 60 * 60 +
-                   t.minute * 60 +
-                   t.second +
-                   t.microsecond / 1e6)
-        frame_number = int(round(total_s * self.fps))
-
-        return frame_number
-
 
 def extract_frames(args, queue_size=1, save_directory=None):
     """Function which uses object methods to extract individual frames
@@ -758,74 +759,64 @@ def extract_frames(args, queue_size=1, save_directory=None):
     if not save_directory:
         save_directory = args.default_dir
 
-    frame_queue = FrameQueue(args, queue_size)
+    fq = FrameQueue(args, queue_size)
 
     print("[*] Reading frames... (This may take a while!)")
-    while frame_queue.frames_read < frame_queue.src_framecount:
-        success = frame_queue.load_frame_from_video()
+    while fq.frames_read < fq.src_framecount:
+        success = fq.load_frame()
 
         if success:
-            frame_queue.save_frame(save_directory)
+            fq.save_frame(save_directory)
         else:
             raise Exception("read_frame() failed before expected end of file.")
 
-        if frame_queue.frames_read % 1000 == 0:
+        if fq.frames_read % 1000 == 0:
             print("[-] {}/{} frames successfully processed."
-                  .format(frame_queue.frames_read, frame_queue.src_framecount))
+                  .format(fq.frames_read, fq.src_framecount))
             # NOTE: Should probably have some sort of "verbose" flag, or
             # utilize logging. This seems like a naive way to provide updates.
-    frame_queue.stream.release()
+    fq.stream.release()
     print("[-] Extraction complete. {} total frames extracted."
-          .format(frame_queue.frames_read))
+          .format(fq.frames_read))
 
 
-def process_extracted_frames(args, params):
+def process_frames(args, params):
     """Function which uses object methods to analyse a sequence of previously
     extracted frames and determine bird counts for that sequence."""
 
-    frame_queue = FrameQueue(args, queue_size=params["queue_size"])
+    fq = FrameQueue(args, queue_size=params["queue_size"])
 
     print("[*] Analysing frames... (This may take a while!)")
 
-    while frame_queue.frames_processed < frame_queue.num_frames_to_analyse:
-        if frame_queue.frames_read < frame_queue.num_frames_to_analyse:
-            frame_queue.load_frame_from_file(args.default_dir)
-            frame_queue.preprocess_frame()
-        else:
-            frame_number = frame_queue.frame_to_load_next
-            frame_queue.queue.appendleft(np.array([]))
-            frame_queue.framenumbers.appendleft(frame_number)
-            timestamp = frame_queue.framenumber_to_timestamp(frame_number)
-            frame_queue.timestamps.appendleft(timestamp)
+    while fq.frames_processed < fq.total_frames:
+        if fq.frames_read < (params["queue_size"]-1):
+            fq.load_frame(args.default_dir)
+            fq.preprocess_frame()
+        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
+            fq.load_frame(args.default_dir)
+            fq.preprocess_frame()
+            fq.segment_frame(args, params)
+            fq.match_segments(args, params)
+            fq.analyse_matches()
+        elif fq.frames_read == fq.total_frames:
+            fq.load_frame(empty=True)
+            fq.segment_frame(args, params)
+            fq.match_segments(args, params)
+            fq.analyse_matches()
 
-        # Proceed only when enough frames are cached to use RPCA method
-        if frame_queue.frames_read >= params["queue_size"]:
-            frame_queue.segment_frame(args, params)
-            frame_queue.match_segments(args, params)
-            frame_queue.analyse_matches()
-
-        # NOTE: Should probably have some sort of "verbose" flag, or utilize
-        # logging. This seems like a naive way to do this.
-        if frame_queue.frames_processed is not 0:
-            if frame_queue.frames_processed % 25 is 0:
-                print("[-] {0}/{1} frames processed."
-                      .format(frame_queue.frames_processed,
-                              frame_queue.num_frames_to_analyse))
-
-        # Delay = 0 if fps == src_fps, delay > 0 if fps < src_fps
-        frame_queue.frame_to_load_next += (1 + frame_queue.delay)
-        # NOTE: Delay is also handled in load_frame_from_video(), so there's
-        # probably redundancy in keeping track of the next frame to load.
+        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
+            print("[-] {0}/{1} frames processed."
+                  .format(fq.frames_processed, fq.total_frames))
 
     print("[-] Analysis complete. {0}/{1} frames were used in counting."
-          .format(frame_queue.frames_processed, frame_queue.frames_read-1))
+          .format(fq.frames_processed, fq.frames_read-1))
 
     # Convert dictionary of lists into DataFrame
-    if not frame_queue.event_list:
-        df_events = pd.DataFrame(frame_queue.event_list,
-                                 columns=list(frame_queue.event_list[0].keys())
+    if not fq.event_list:
+        df_events = pd.DataFrame(fq.event_list,
+                                 columns=list(fq.event_list[0].keys())
                                  ).astype('object')
     else:
-        df_events = pd.DataFrame(frame_queue.event_list)
+        df_events = pd.DataFrame(fq.event_list)
 
     return df_events

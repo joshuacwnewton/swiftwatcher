@@ -61,7 +61,7 @@ def main(args, params):
         data.save_test_config(args, params)
 
         start = time.time()
-        df_eventinfo = vid.process_extracted_frames(args, params)
+        df_eventinfo = vid.process_frames(args, params)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-19_full-video/"
+                        default="tests/load-test/"
                         )
     parser.add_argument("-v",
                         "--visual",
