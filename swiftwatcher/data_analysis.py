@@ -316,7 +316,7 @@ def empty_gt_generator(args):
     frame_queue = FrameQueue(args)
     nano = (1/frame_queue.fps) * 1e9
     frame_queue.stream.release()  # Not needed once fps is extracted
-    num_timestamps = args.load[1] - args.load[0]
+    num_timestamps = args.load[1] - args.load[0] + 1
     duration = (num_timestamps - 1) * nano
     indices = pd.date_range(start=args.timestamp,
                             end=(pd.Timestamp(args.timestamp) +

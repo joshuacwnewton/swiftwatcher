@@ -41,9 +41,6 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    # Testing function for looking into alternate features to classify on
-    data.feature_engineering(args)
-
     if args.extract:
         vid.extract_frames(args)
         pass
@@ -51,7 +48,7 @@ def main(args, params):
         data.save_test_config(args, params)
 
         start = time.time()
-        df_eventinfo = vid.process_extracted_frames(args, params)
+        df_eventinfo = vid.process_frames(args, params)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
@@ -64,7 +61,7 @@ def main(args, params):
             print("[!] Frame processing has not been run yet! "
                   "Nothing to analyse.")
             args.analyse = False
-    if args.analyse:
+    if args.analyse and not df_eventinfo.empty:
         # Loading and preparing DataFrames
         df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)
         df_groundtruth, df_eventinfo = \
@@ -86,6 +83,9 @@ def main(args, params):
                          key="EXT_CHM", flag="false_positives")
         data.plot_result(args, df_groundtruth, df_prediction,
                          key="EXT_CHM", flag="false_negatives")
+
+    # Testing function for looking into alternate features to classify on
+    # data.feature_engineering(args)
 
 
 def set_parameters():
@@ -153,7 +153,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -169,12 +169,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 108047])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-17_full-video/"
+                        default="tests/load-test/"
                         )
     parser.add_argument("-v",
                         "--visual",
