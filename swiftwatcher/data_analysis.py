@@ -409,3 +409,19 @@ def feature_engineering(args):
     # fig = ax.get_figure()
     # fig.savefig('scatter.png')
 
+
+def train_classifier(args, params, df_eventinfo, df_groundtruth):
+    fq = FrameQueue(args, queue_size=params["queue_size"])
+    width = fq.crop_region[1][0] - fq.crop_region[0][0]
+    height = fq.crop_region[1][1] - fq.crop_region[0][1]
+    blank_img = np.zeros((height, width))
+
+    df_eventinfo["EXT_CHM"] = None
+    df_eventinfo = df_eventinfo.combine_first(df_groundtruth)
+    df_eventinfo["EXT_CHM"] = df_eventinfo["EXT_CHM"].fillna(0)
+    df_eventinfo = df_eventinfo.dropna()
+
+    positives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([1, 2, 3])]
+    positives = positives.drop(columns="EXT_CHM")
+    negatives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([0])]
+    negatives = negatives.drop(columns="EXT_CHM")

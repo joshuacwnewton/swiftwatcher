@@ -69,17 +69,10 @@ def main(args, params):
             except FileNotFoundError:
                 print("[!] Dataframes not found! Try processing first?")
 
-        # Classification functions
-        df_features = data.generate_feature_vectors(df_eventinfo)
-        df_prediction = data.classify_feature_vectors(df_features)
-
-        # Evaluation and export functions
-        data.export_dataframes(args, {"df_eventinfo": df_eventinfo,
-                                      "df_features": df_features,
-                                      "df_prediction": df_prediction,
-                                      "df_groundtruth": df_groundtruth})
-        data.evaluate_results(args, df_groundtruth, df_prediction)
-        data.plot_result(args, df_groundtruth, df_prediction,
+        data.train_classifier(args, params,
+                              dfs["eventinfo"], dfs["groundtruth"])
+        data.evaluate_results(args, dfs["groundtruth"], dfs["prediction"])
+        data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="cumu_comparison")
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_positives")
@@ -168,12 +161,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([55000, 55100])
+                        default=([0, 108048])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/load-frame/"
+                        default="tests/2019-07-20_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
