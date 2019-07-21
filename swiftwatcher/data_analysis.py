@@ -40,30 +40,6 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def format_dataframes(args, df_groundtruth, df_eventinfo):
-    # Cap groundtruth to specified frame range (done because sometimes I've
-    # tested with a subset of frames, rather than the entire video.)
-    index_less = df_groundtruth[df_groundtruth['FRM_NUM'] < args.load[0]].index
-    index_more = df_groundtruth[df_groundtruth['FRM_NUM'] > args.load[1]].index
-    df_groundtruth.drop(index_less, inplace=True)
-    df_groundtruth.drop(index_more, inplace=True)
-
-    # Parse TMSTAMP as datetime
-    df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
-    df_eventinfo["TMSTAMP"] = pd.to_datetime(df_eventinfo["TMSTAMP"])
-
-    # Round DateTimeArray indices to microsecond precision (to prevent rounding
-    # errors from the (default) nanosecond precision, which isn't necessary.)
-    df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
-    df_eventinfo["TMSTAMP"] = df_eventinfo["TMSTAMP"].dt.round('us')
-
-    # Set MultiIndex using both timestamps and framenumbers
-    df_groundtruth.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-    df_eventinfo.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-
-    return df_groundtruth, df_eventinfo
-
-
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
@@ -104,6 +80,23 @@ def classify_feature_vectors(df_features):
     return df_labels
 
 
+def import_dataframes(args, df_list):
+
+    if df_list == ["groundtruth"]:
+        load_directory = args.default_dir
+    else:
+        load_directory = args.default_dir+args.custom_dir+"results/df-export/"
+
+    dfs = {}
+    for df_name in df_list:
+        dfs[df_name] = pd.read_csv(load_directory+df_name+".csv")
+        dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
+        dfs[df_name]["TMSTAMP"] = dfs[df_name]["TMSTAMP"].dt.round('us')
+        dfs[df_name].set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+
+    return dfs
+
+
 def export_dataframes(args, dataframe_dict):
     # Create save directory if it does not already exist
     save_directory = args.default_dir+args.custom_dir+"results/df-export/"
@@ -126,6 +119,15 @@ def evaluate_results(args, df_groundtruth, df_prediction):
         pred_merged = pred_unprocessed.reset_index().groupby(['TMSTAMP',
                                                               'FRM_NUM']).sum()
         pred_nonzero = pred_merged.loc[(pred_merged['EXT_CHM'] > 0)]
+
+        # Cap groundtruth to specified frame range (done because sometimes I've
+        # tested with a subset of frames, rather than the entire video.)
+        index_less = df_groundtruth[
+            df_groundtruth.index.levels[1] < args.load[0]].index
+        index_more = df_groundtruth[
+            df_groundtruth.index.levels[1] > args.load[1]].index
+        df_groundtruth.drop(index_less, inplace=True)
+        df_groundtruth.drop(index_more, inplace=True)
 
         # Re-index groundtruth and predictions to have shared set of indexes
         union_index = pred_nonzero.index.union(gt_unprocessed.index)
