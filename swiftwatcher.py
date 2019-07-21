@@ -161,7 +161,7 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108048])
+                        default=([0, 108047])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
