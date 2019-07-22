@@ -16,6 +16,7 @@ from swiftwatcher.video_processing import FrameQueue
 
 # Classifier modules
 from sklearn import svm
+import cv2
 # import seaborn
 # seaborn.set()
 
@@ -411,17 +412,67 @@ def feature_engineering(args):
 
 
 def train_classifier(args, params, df_eventinfo, df_groundtruth):
-    fq = FrameQueue(args, queue_size=params["queue_size"])
-    width = fq.crop_region[1][0] - fq.crop_region[0][0]
-    height = fq.crop_region[1][1] - fq.crop_region[0][1]
-    blank_img = np.zeros((height, width))
+    def generate_blank_img():
+        fq = FrameQueue(args, queue_size=params["queue_size"])
+        width = int(fq.nn_region[1][0] - fq.nn_region[0][0])
+        height = int(fq.nn_region[1][1] - fq.nn_region[0][1])
 
-    df_eventinfo["EXT_CHM"] = None
-    df_eventinfo = df_eventinfo.combine_first(df_groundtruth)
-    df_eventinfo["EXT_CHM"] = df_eventinfo["EXT_CHM"].fillna(0)
-    df_eventinfo = df_eventinfo.dropna()
+        return 127*np.ones((height, width))
 
-    positives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([1, 2, 3])]
-    positives = positives.drop(columns="EXT_CHM")
-    negatives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([0])]
-    negatives = negatives.drop(columns="EXT_CHM")
+    def generate_event_dfs():
+        nonlocal df_eventinfo
+
+        df_eventinfo["EXT_CHM"] = None
+        df_eventinfo = df_eventinfo.combine_first(df_groundtruth)
+        df_eventinfo["EXT_CHM"] = df_eventinfo["EXT_CHM"].fillna(0)
+        df_eventinfo = df_eventinfo.dropna()
+
+        positives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([1, 2, 3])]
+        positives = positives.drop(columns="EXT_CHM")
+        negatives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([0])]
+        negatives = negatives.drop(columns="EXT_CHM")
+
+        return positives, negatives
+
+    def draw_centroids(img, centroid_list):
+        counter = 0
+        for centroid in centroid_list:
+            centroid = (int(centroid[1]), int(centroid[0]))
+            if counter == 0:
+                prev = centroid
+                pass
+
+            cv2.line(img, centroid, prev, 255, 2)
+            prev = centroid
+            counter += 1
+
+        return img
+
+    # Create save directory if it does not already exist
+    save_directory = args.default_dir+"NN/lines/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    blank_img = generate_blank_img()
+    df_tp, df_tn = generate_event_dfs()
+
+    counter = 0
+    for index, row in df_tp.iterrows():
+        centroid_img = draw_centroids(np.copy(blank_img),
+                                      literal_eval(row["CENTRDS"]))
+        # centroid_img = cv2.resize(centroid_img, (224, 224))
+        cv2.imwrite(save_directory+"1_{}.png".format(counter), centroid_img)
+        counter += 1
+
+    counter = 0
+    for index, row in df_tn.iterrows():
+        centroid_img = draw_centroids(np.copy(blank_img),
+                                      literal_eval(row["CENTRDS"]))
+        # centroid_img = cv2.resize(centroid_img, (224, 224))
+        cv2.imwrite(save_directory+"0_{}.png".format(counter), centroid_img)
+        counter += 1
+

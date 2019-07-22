@@ -69,8 +69,6 @@ def main(args, params):
             except FileNotFoundError:
                 print("[!] Dataframes not found! Try processing first?")
 
-        data.train_classifier(args, params,
-                              dfs["eventinfo"], dfs["groundtruth"])
         data.evaluate_results(args, dfs["groundtruth"], dfs["prediction"])
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="cumu_comparison")
@@ -78,6 +76,9 @@ def main(args, params):
                          key="EXT_CHM", flag="false_positives")
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_negatives")
+
+        data.train_classifier(args, params,
+                              dfs["eventinfo"], dfs["groundtruth"])
 
 
 def set_parameters():
@@ -145,7 +146,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -171,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument("-v",
                         "--visual",
                         help="Output visualization of frame processing",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-n",
                         "--chimney",

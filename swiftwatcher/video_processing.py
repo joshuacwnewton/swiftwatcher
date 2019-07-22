@@ -124,6 +124,10 @@ class FrameQueue:
                                  top - 2*height),
                                 (right + int(0.5*height),
                                  bottom + int(0.5*height))]
+            self.nn_region = [(left - int(0.5*height),
+                                 top - height),
+                                (right + int(0.5*height),
+                                 bottom)]
             # NOTE: I think he "crop_region" is too large -- I believe a
             # smaller region would produce similar results. For example:
             # crop_region = [(left, top - height), (right, bottom + height)]
