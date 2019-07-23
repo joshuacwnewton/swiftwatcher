@@ -16,7 +16,6 @@
 # -TODO: Explore source of timestamp rounding error (off-by-one microsecond?)
 #
 # feature-engineering:
-# -TODO: Implement/test idea for histogram of MV angles
 # -TODO: Implement/test idea for relative position feature.
 #
 # =========================================================================== #
