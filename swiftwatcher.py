@@ -42,47 +42,43 @@ def main(args, params):
         vid.extract_frames(args)
         pass
     if args.process:
-        data.save_test_config(args, params)
-
         start = time.time()
         df_eventinfo = vid.process_frames(args, params)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
         print("[-] Frame processing took {}.".format(elapsed_time))
-    else:
-        try:
-            df_eventinfo = pd.read_csv(args.default_dir + args.custom_dir +
-                                       "results/df-export/df_eventinfo.csv")
-        except FileNotFoundError:
-            print("[!] Frame processing has not been run yet! "
-                  "Nothing to analyse.")
-            args.analyse = False
-    if args.analyse and not df_eventinfo.empty:
-        # Loading and preparing DataFrames
-        df_groundtruth = pd.read_csv(args.default_dir + args.groundtruth)
-        df_groundtruth, df_eventinfo = \
-            data.format_dataframes(args, df_groundtruth, df_eventinfo)
 
-        # Classification functions
-        df_features = data.generate_feature_vectors(df_eventinfo)
-        df_prediction = data.classify_feature_vectors(df_features)
+        data.save_test_config(args, params)
+    if args.analyse:
+        if args.process:
+            dfs = data.import_dataframes(args, ["groundtruth"])
+            dfs["eventinfo"] = df_eventinfo
+            dfs["comparison"] = data.event_comparison(dfs["eventinfo"],
+                                                      dfs["groundtruth"])
+            dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
+            dfs["prediction"] = data.classify_feature_vectors(dfs["features"])
+            data.export_dataframes(args, dfs)
+        else:
+            try:
+                dfs = data.import_dataframes(args, df_list=["groundtruth",
+                                                            "eventinfo",
+                                                            "comparison",
+                                                            "features",
+                                                            "prediction"])
+            except FileNotFoundError:
+                print("[!] Dataframes not found! Try processing first?")
 
-        # Evaluation and export functions
-        data.export_dataframes(args, {"df_eventinfo": df_eventinfo,
-                                      "df_features": df_features,
-                                      "df_prediction": df_prediction,
-                                      "df_groundtruth": df_groundtruth})
-        data.evaluate_results(args, df_groundtruth, df_prediction)
-        data.plot_result(args, df_groundtruth, df_prediction,
+        data.evaluate_results(args, dfs["groundtruth"], dfs["prediction"])
+        data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="cumu_comparison")
-        data.plot_result(args, df_groundtruth, df_prediction,
+        data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_positives")
-        data.plot_result(args, df_groundtruth, df_prediction,
+        data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_negatives")
 
-    # Testing function for looking into alternate features to classify on
-    # data.feature_engineering(args)
+        data.train_classifier(args, params,
+                              dfs["eventinfo"], dfs["groundtruth"])
 
 
 def set_parameters():
@@ -150,7 +146,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -166,17 +162,17 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([55000, 55100])
+                        default=([0, 108047])
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/load-frame/"
+                        default="tests/2019-07-20_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
                         help="Output visualization of frame processing",
-                        default=True
+                        default=False
                         )
     parser.add_argument("-n",
                         "--chimney",

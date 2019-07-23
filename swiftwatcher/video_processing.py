@@ -120,8 +120,14 @@ class FrameQueue:
 
             width = right - left
             height = round(alpha * width)  # Fixed height/width ratio
-            self.crop_region = [(left - height, top - 3 * height),
-                                (right + height, bottom + height)]
+            self.crop_region = [(left - int(0.5*height),
+                                 top - 2*height),
+                                (right + int(0.5*height),
+                                 bottom + int(0.5*height))]
+            self.nn_region = [(left - int(0.5*height),
+                                 top - height),
+                                (right + int(0.5*height),
+                                 bottom)]
             # NOTE: I think he "crop_region" is too large -- I believe a
             # smaller region would produce similar results. For example:
             # crop_region = [(left, top - height), (right, bottom + height)]
@@ -784,10 +790,19 @@ def process_frames(args, params):
     """Function which uses object methods to analyse a sequence of previously
     extracted frames and determine bird counts for that sequence."""
 
-    fq = FrameQueue(args, queue_size=params["queue_size"])
+    def create_dataframe(passed_list):
+        dataframe = pd.DataFrame(passed_list,
+                                 columns=list(passed_list[0].keys())
+                                 ).astype('object')
+        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+
+        return dataframe
 
     print("[*] Analysing frames... (This may take a while!)")
 
+    fq = FrameQueue(args, queue_size=params["queue_size"])
     while fq.frames_processed < fq.total_frames:
         if fq.frames_read < (params["queue_size"]-1):
             fq.load_frame(args.default_dir)
@@ -811,12 +826,6 @@ def process_frames(args, params):
     print("[-] Analysis complete. {0}/{1} frames were used in processing."
           .format(fq.frames_processed, fq.frames_read))
 
-    # Convert dictionary of lists into DataFrame
-    if fq.event_list:
-        df_events = pd.DataFrame(fq.event_list,
-                                 columns=list(fq.event_list[0].keys())
-                                 ).astype('object')
-    else:
-        df_events = pd.DataFrame(fq.event_list)
+    df_eventinfo = create_dataframe(fq.event_list)
 
-    return df_events
+    return df_eventinfo

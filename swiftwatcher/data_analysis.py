@@ -16,6 +16,7 @@ from swiftwatcher.video_processing import FrameQueue
 
 # Classifier modules
 from sklearn import svm
+import cv2
 # import seaborn
 # seaborn.set()
 
@@ -40,28 +41,16 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def format_dataframes(args, df_groundtruth, df_eventinfo):
-    # Cap groundtruth to specified frame range (done because sometimes I've
-    # tested with a subset of frames, rather than the entire video.)
-    index_less = df_groundtruth[df_groundtruth['FRM_NUM'] < args.load[0]].index
-    index_more = df_groundtruth[df_groundtruth['FRM_NUM'] > args.load[1]].index
-    df_groundtruth.drop(index_less, inplace=True)
-    df_groundtruth.drop(index_more, inplace=True)
+def event_comparison(df_eventinfo, df_groundtruth):
+    """Generate dataframe comparing events in df_eventinfo with frame
+    counts in df_groundtruth."""
+    df_groundtruth = df_groundtruth[df_groundtruth["EXT_CHM"] > 0]
+    df_eventinfo_cp = df_eventinfo.copy()
+    df_eventinfo_cp["EXT_CHM"] = None
+    df_combined = df_eventinfo.combine_first(df_groundtruth)
+    df_combined["EXT_CHM"] = df_combined["EXT_CHM"].fillna(0)
 
-    # Parse TMSTAMP as datetime
-    df_groundtruth["TMSTAMP"] = pd.to_datetime(df_groundtruth["TMSTAMP"])
-    df_eventinfo["TMSTAMP"] = pd.to_datetime(df_eventinfo["TMSTAMP"])
-
-    # Round DateTimeArray indices to microsecond precision (to prevent rounding
-    # errors from the (default) nanosecond precision, which isn't necessary.)
-    df_groundtruth["TMSTAMP"] = df_groundtruth["TMSTAMP"].dt.round('us')
-    df_eventinfo["TMSTAMP"] = df_eventinfo["TMSTAMP"].dt.round('us')
-
-    # Set MultiIndex using both timestamps and framenumbers
-    df_groundtruth.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-    df_eventinfo.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-
-    return df_groundtruth, df_eventinfo
+    return df_combined
 
 
 def generate_feature_vectors(df_eventinfo):
@@ -98,10 +87,27 @@ def classify_feature_vectors(df_features):
     df_labels = pd.DataFrame(index=df_features.index)
 
     df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                               bins=[-180, -120, -35, 180],
+                                               bins=[-180, -135, -55, 180],
                                                labels=False)]
 
     return df_labels
+
+
+def import_dataframes(args, df_list):
+
+    if df_list == ["groundtruth"]:
+        load_directory = args.default_dir
+    else:
+        load_directory = args.default_dir+args.custom_dir+"results/df-export/"
+
+    dfs = {}
+    for df_name in df_list:
+        dfs[df_name] = pd.read_csv(load_directory+df_name+".csv")
+        dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
+        dfs[df_name]["TMSTAMP"] = dfs[df_name]["TMSTAMP"].dt.round('us')
+        dfs[df_name].set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+
+    return dfs
 
 
 def export_dataframes(args, dataframe_dict):
@@ -127,9 +133,19 @@ def evaluate_results(args, df_groundtruth, df_prediction):
                                                               'FRM_NUM']).sum()
         pred_nonzero = pred_merged.loc[(pred_merged['EXT_CHM'] > 0)]
 
+        # Cap groundtruth to specified frame range (done because sometimes I've
+        # tested with a subset of frames, rather than the entire video.)
+        index_less = gt_unprocessed[
+            gt_unprocessed.index.levels[1] < args.load[0]].index
+        index_more = gt_unprocessed[
+            gt_unprocessed.index.levels[1] > args.load[1]].index
+        gt_unprocessed.drop(index_less, inplace=True)
+        gt_unprocessed.drop(index_more, inplace=True)
+        gt_nonzero = gt_unprocessed[gt_unprocessed["EXT_CHM"] > 0]
+
         # Re-index groundtruth and predictions to have shared set of indexes
-        union_index = pred_nonzero.index.union(gt_unprocessed.index)
-        gt_processed = gt_unprocessed.reindex(index=union_index, fill_value=0)
+        union_index = pred_nonzero.index.union(gt_nonzero.index)
+        gt_processed = gt_nonzero.reindex(index=union_index, fill_value=0)
         pred_processed = pred_nonzero.reindex(index=union_index, fill_value=0)
 
         return pred_processed, gt_processed
@@ -406,4 +422,76 @@ def feature_engineering(args):
     # negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
     # fig = ax.get_figure()
     # fig.savefig('scatter.png')
+
+
+def train_classifier(args, params, df_eventinfo, df_groundtruth):
+    def generate_blank_img():
+        fq = FrameQueue(args, queue_size=params["queue_size"])
+        width = int(fq.nn_region[1][0] - fq.nn_region[0][0])
+        height = int(fq.nn_region[1][1] - fq.nn_region[0][1])
+
+        return 127*np.ones((height, width))
+
+    def generate_event_dfs():
+        nonlocal df_eventinfo
+
+        df_eventinfo["EXT_CHM"] = None
+        df_eventinfo = df_eventinfo.combine_first(df_groundtruth)
+        df_eventinfo["EXT_CHM"] = df_eventinfo["EXT_CHM"].fillna(0)
+        df_eventinfo = df_eventinfo.dropna()
+
+        positives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([1, 2, 3])]
+        positives = positives.drop(columns="EXT_CHM")
+        negatives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([0])]
+        negatives = negatives.drop(columns="EXT_CHM")
+
+        return positives, negatives
+
+    def draw_centroids(img, centroid_list):
+        counter = 0
+        for centroid in centroid_list:
+            centroid = (int(centroid[1]), int(centroid[0]))
+            if counter == 0:
+                prev = centroid
+                pass
+
+            cv2.line(img, centroid, prev, 255, 2)
+            prev = centroid
+            counter += 1
+
+        return img
+
+    def save_nn_images(positives, negatives):
+        counter = 0
+        for index, row in positives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "1_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
+
+        counter = 0
+        for index, row in negatives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "0_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
+
+    # Create save directory if it does not already exist
+    save_directory = args.default_dir+"NN/lines/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    blank_img = generate_blank_img()
+    df_tp, df_tn = generate_event_dfs()
+    save_nn_images(df_tp, df_tn)
+
+
 
