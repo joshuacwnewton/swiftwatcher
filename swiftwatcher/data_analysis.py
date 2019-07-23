@@ -87,7 +87,7 @@ def classify_feature_vectors(df_features):
     df_labels = pd.DataFrame(index=df_features.index)
 
     df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                               bins=[-180, -135, -55, 180],
+                                               bins=[-180, -125, -55, 180],
                                                labels=False)]
 
     return df_labels
@@ -355,114 +355,171 @@ def empty_gt_generator(args):
 def feature_engineering(args, df_comparison):
     """Testing function for exploring different features."""
 
-    def compute_avg_distance(centroid_list):
-        # If loading from csv, convert from str to list
-        if type(centroid_list) is str:
-            centroid_list = literal_eval(centroid_list)
+    def split_data():
+        detected_events = df_comparison.dropna()
+        true_positives = detected_events[detected_events["EXT_CHM"] > 0]
+        true_negatives = detected_events[detected_events["EXT_CHM"] == 0]
 
-        dist_sum = 0
-        for i in range(len(centroid_list) - 2):
-            c1 = centroid_list[i+1]
-            c2 = centroid_list[i+2]
-            dist_sum += math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c2[1])**2)
-            avg_distance = dist_sum / (len(centroid_list) - 2)
+        return true_positives, true_negatives
 
-        if dist_sum == 0:
-            for i in range(len(centroid_list) - 1):
-                c1 = centroid_list[i]
-                c2 = centroid_list[i + 1]
+    def compute_feature_vectors(dataframe):
+        """Use centroid information to calculate row-by-row features."""
+
+        def avg_distance(centroid_list):
+            # If loading from csv, convert from str to list
+            if type(centroid_list) is str:
+                centroid_list = literal_eval(centroid_list)
+
+            dist_sum = 0
+            for i in range(len(centroid_list) - 2):
+                c1 = centroid_list[i + 1]
+                c2 = centroid_list[i + 2]
                 dist_sum += math.sqrt(
                     (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
-            avg_distance = dist_sum / (len(centroid_list) - 1)
+                avg_distance = dist_sum / (len(centroid_list) - 2)
 
-        return avg_distance
+            if dist_sum == 0:
+                for i in range(len(centroid_list) - 1):
+                    c1 = centroid_list[i]
+                    c2 = centroid_list[i + 1]
+                    dist_sum += math.sqrt(
+                        (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
+                avg_distance = dist_sum / (len(centroid_list) - 1)
 
-    save_directory = args.default_dir+args.custom_dir+"classification/"
+            return avg_distance
 
-    df_class = pd.read_csv(save_directory+"classifier-xy.csv")
-    df_class["AVGDIST"] = df_class.apply(
-        lambda row: compute_avg_distance(row["CENTRDS"]),
-        axis=1
-    )
-    positives = df_class.loc[df_class["GTLABEL"].isin([1])]
-    negatives = df_class.loc[df_class["GTLABEL"].isin([0])]
+        def angle_hist_max(centroid_list):
+            if type(centroid_list) is str:
+                centroid_list = literal_eval(centroid_list)
 
-    ax = positives["ANGLE_2"].hist(bins=72, alpha=0.8)
-    ax = negatives["ANGLE_2"].hist(bins=72, alpha=0.5)
-    ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
-              loc="upper right")
-    ax.set_title("Comparison in Flight Path Angle for Detected Segments")
-    ax.set_xlabel("Angle (Degrees)")
-    ax.set_ylabel("Total Segments")
-    fig = ax.get_figure()
-    fig.savefig(save_directory+'hist_angle.png')
+            bins = np.array([-180, -165, -150, -135, -120, -105,
+                             -90, -75, -60, -45, -30, -15,
+                             0,
+                             15, 30, 45, 60, 75, 90,
+                             105, 120, 135, 150, 165])
 
-    # import matplotlib.pyplot as plt
-    # ax = positives["ANGLE_1"].hist(bins=72, alpha=0.8)
-    # ax = negatives["ANGLE_1"].hist(bins=72, alpha=0.5)
-    # fig = ax.get_figure()
-    # fig.savefig(save_directory+'hist_angle1.png')
-    #
-    # plt.cla()
-    #
-    # ax = positives["ANGLE_3"].hist(bins=72, alpha=0.8)
-    # ax = negatives["ANGLE_3"].hist(bins=72, alpha=0.5)
-    # fig = ax.get_figure()
-    # fig.savefig(save_directory+'hist_angle3.png')
-    #
-    # plt.cla()
-    #
-    # ax = positives["AVGDIST"].hist(bins=72, alpha=0.8)
-    # ax = negatives["AVGDIST"].hist(bins=72, alpha=0.5)
-    # fig = ax.get_figure()
-    # fig.savefig(save_directory+'avgdist.png')
-    #
-    # plt.cla()
-    #
-    # ax = positives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Green', label='Positives')
-    # negatives.plot.scatter(x='ANGLE_2', y='AVGDIST', color='Red', label='Negatives', ax=ax)
-    # fig = ax.get_figure()
-    # fig.savefig('scatter.png')
+            histogram = np.zeros(bins.shape)
 
+            for p1 in range(len(centroid_list)):
+                for p2 in range(p1 + 1, len(centroid_list)):
+                    del_y = centroid_list[p1][0] - centroid_list[p2][0]
+                    del_x = -1 * (centroid_list[p1][1] - centroid_list[p2][1])
+                    mag = math.sqrt(del_x**2 + del_y**2)
+                    angle = math.degrees(math.atan2(del_y, del_x))
 
-def train_classifier(args, params, df_eventinfo, df_groundtruth):
-    def generate_blank_img():
-        fq = FrameQueue(args, queue_size=params["queue_size"])
-        width = int(fq.nn_region[1][0] - fq.nn_region[0][0])
-        height = int(fq.nn_region[1][1] - fq.nn_region[0][1])
+                    shifted_angle = angle + 180
 
-        return 127*np.ones((height, width))
+                    scaled_angle = shifted_angle / 15
+                    high_index = math.ceil(scaled_angle)
+                    if high_index == 24:
+                        high_index = 0
+                    low_index = high_index - 1
 
-    def generate_event_dfs():
-        nonlocal df_eventinfo
+                    high_ratio = scaled_angle - low_index
+                    low_ratio = 1 - high_ratio
 
-        df_eventinfo["EXT_CHM"] = None
-        df_eventinfo = df_eventinfo.combine_first(df_groundtruth)
-        df_eventinfo["EXT_CHM"] = df_eventinfo["EXT_CHM"].fillna(0)
-        df_eventinfo = df_eventinfo.dropna()
+                    histogram[high_index] = high_ratio * mag
+                    histogram[low_index] = low_ratio * mag
 
-        positives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([1, 2, 3])]
-        positives = positives.drop(columns="EXT_CHM")
-        negatives = df_eventinfo.loc[df_eventinfo["EXT_CHM"].isin([0])]
-        negatives = negatives.drop(columns="EXT_CHM")
+                    index_max = np.argmax(histogram)
+                    angle = bins[index_max]
 
-        return positives, negatives
+                    return angle
 
-    def draw_centroids(img, centroid_list):
-        counter = 0
-        for centroid in centroid_list:
-            centroid = (int(centroid[1]), int(centroid[0]))
-            if counter == 0:
+        def full_angle(centroid_list):
+            # If loading from csv, convert from str to list
+            if type(centroid_list) is str:
+                centroid_list = literal_eval(centroid_list)
+
+            del_y = centroid_list[0][0] - centroid_list[-1][0]
+            del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
+            angle = math.degrees(math.atan2(del_y, del_x))
+
+            return angle
+
+        df_features = pd.DataFrame(index=dataframe.index)
+
+        # AVGDIST didn't distinguish any more than just the ANGLE_F feature
+        # df_features["AVGDIST"] = dataframe.apply(
+        #     lambda row: avg_distance(row["CENTRDS"]),
+        #     axis=1
+        # )
+
+        # Flight paths too erratic to consider every angle in path
+        # df_features["ANGLE_H"] = dataframe.apply(
+        #     lambda row: angle_hist_max(row["CENTRDS"]),
+        #     axis=1
+        # )
+
+        df_features["ANGLE_F"] = dataframe.apply(
+            lambda row: full_angle(row["CENTRDS"]),
+            axis=1
+        )
+
+        return df_features
+
+    def plot_column_pair(tp_col, tn_col, name):
+        save_directory = args.default_dir + args.custom_dir+"feature-testing/"
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+
+        plt.cla()
+
+        ax = tp_col.hist(bins=72, alpha=0.8)
+        ax = tn_col.hist(bins=72, alpha=0.5)
+
+        ax.set_axisbelow(True)
+        ax.minorticks_on()
+        ax.grid(which='major', linestyle='-', linewidth='0.5', color='red')
+        ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+
+        ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
+                  loc="upper right")
+        ax.set_title("Comparison in {} for Detected Segments".format(name))
+        ax.set_xlabel("Angle (Degrees)")
+        ax.set_ylabel("Total Segments")
+        fig = ax.get_figure()
+        fig.savefig(save_directory+'{}.png'.format(name))
+
+    def visualize_path(positives, negatives):
+
+        def generate_blank_img():
+            fq = FrameQueue(args)
+
+            blank = 127 * np.ones((fq.height, fq.width)).astype(np.uint8)
+            blank_w_roi = cv2.addWeighted(fq.roi_mask, 0.25, blank, 0.75, 0)
+
+            return blank_w_roi
+
+        def draw_centroids(img, centroid_list):
+            counter = 0
+            for centroid in centroid_list:
+                centroid = (int(centroid[1]), int(centroid[0]))
+                if counter == 0:
+                    prev = centroid
+                    pass
+
+                cv2.line(img, centroid, prev, 255, 2)
                 prev = centroid
-                pass
+                counter += 1
 
-            cv2.line(img, centroid, prev, 255, 2)
-            prev = centroid
-            counter += 1
+            return img
 
-        return img
+        save_directory = (args.default_dir + args.custom_dir
+                         + "feature-testing/" + "centroids/")
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
 
-    def save_nn_images(positives, negatives):
+        blank_img = generate_blank_img()
+
         counter = 0
         for index, row in positives.iterrows():
             centroid_img = draw_centroids(np.copy(blank_img),
@@ -481,18 +538,10 @@ def train_classifier(args, params, df_eventinfo, df_groundtruth):
                         centroid_img)
             counter += 1
 
-    # Create save directory if it does not already exist
-    save_directory = args.default_dir+"NN/lines/"
-    if not os.path.isdir(save_directory):
-        try:
-            os.makedirs(save_directory)
-        except OSError:
-            print("[!] Creation of the directory {0} failed."
-                  .format(save_directory))
+    tp, tn = split_data()
+    visualize_path(tp, tn)
 
-    blank_img = generate_blank_img()
-    df_tp, df_tn = generate_event_dfs()
-    save_nn_images(df_tp, df_tn)
-
-
-
+    tp_features = compute_feature_vectors(tp)
+    tn_features = compute_feature_vectors(tn)
+    for column in tp_features.columns:
+        plot_column_pair(tp_features[column], tn_features[column], column)

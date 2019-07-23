@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("-f",
                         "--filename",
                         help="Name of video file",
-                        default="NPD 541 CHSW 2019 June 14.mp4"
+                        default="NPD 460 CHSW 2019 June 13.mp4"
                         )
     parser.add_argument("-t",
                         "--timestamp",
@@ -156,12 +156,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108047])
+                        default=([0, 216031])  # ([0, 216031]), ([0, 108047)]
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-20_full-video/"
+                        default="tests/2019-07-22_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
