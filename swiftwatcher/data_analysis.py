@@ -448,6 +448,25 @@ def train_classifier(args, params, df_eventinfo, df_groundtruth):
 
         return img
 
+    def save_nn_images(positives, negatives):
+        counter = 0
+        for index, row in positives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "1_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
+
+        counter = 0
+        for index, row in negatives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "0_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
+
     # Create save directory if it does not already exist
     save_directory = args.default_dir+"NN/lines/"
     if not os.path.isdir(save_directory):
@@ -459,20 +478,7 @@ def train_classifier(args, params, df_eventinfo, df_groundtruth):
 
     blank_img = generate_blank_img()
     df_tp, df_tn = generate_event_dfs()
+    save_nn_images(df_tp, df_tn)
 
-    counter = 0
-    for index, row in df_tp.iterrows():
-        centroid_img = draw_centroids(np.copy(blank_img),
-                                      literal_eval(row["CENTRDS"]))
-        # centroid_img = cv2.resize(centroid_img, (224, 224))
-        cv2.imwrite(save_directory+"1_{}.png".format(counter), centroid_img)
-        counter += 1
 
-    counter = 0
-    for index, row in df_tn.iterrows():
-        centroid_img = draw_centroids(np.copy(blank_img),
-                                      literal_eval(row["CENTRDS"]))
-        # centroid_img = cv2.resize(centroid_img, (224, 224))
-        cv2.imwrite(save_directory+"0_{}.png".format(counter), centroid_img)
-        counter += 1
 
