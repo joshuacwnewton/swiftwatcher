@@ -133,6 +133,7 @@ def evaluate_results(args, df_groundtruth, df_prediction):
                                                               'FRM_NUM']).sum()
         pred_nonzero = pred_merged.loc[(pred_merged['EXT_CHM'] > 0)]
 
+
         # Cap groundtruth to specified frame range (done because sometimes I've
         # tested with a subset of frames, rather than the entire video.)
         index_less = gt_unprocessed[
@@ -351,7 +352,7 @@ def empty_gt_generator(args):
     df_empty.to_csv(save_directory+"empty-groundtruth.csv")
 
 
-def feature_engineering(args):
+def feature_engineering(args, df_comparison):
     """Testing function for exploring different features."""
 
     def compute_avg_distance(centroid_list):

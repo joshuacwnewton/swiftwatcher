@@ -77,8 +77,8 @@ def main(args, params):
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_negatives")
 
-        data.train_classifier(args, params,
-                              dfs["eventinfo"], dfs["groundtruth"])
+    # Experimental function for testing new features/classifiers
+    data.feature_engineering(args, dfs["comparison"])
 
 
 def set_parameters():
@@ -126,13 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("-t",
                         "--timestamp",
                         help="Specified starting timestamp for video",
-                        default="2019-06-14 00:00:00.000000000"
-                        )
-    # Ground truth "groundtruth.csv" only valid for ch04_20170518205849.mp4
-    parser.add_argument("-g",
-                        "--groundtruth",
-                        help="Path to ground truth file associated with video",
-                        default="groundtruth/groundtruth.csv"
+                        default="2019-06-13 00:00:00.000000000"
                         )
 
     # Flags to determine which program functionality should be run in testing
