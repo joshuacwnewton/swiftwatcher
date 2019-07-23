@@ -41,6 +41,18 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
+def event_comparison(df_eventinfo, df_groundtruth):
+    """Generate dataframe comparing events in df_eventinfo with frame
+    counts in df_groundtruth."""
+    df_groundtruth = df_groundtruth[df_groundtruth["EXT_CHM"] > 0]
+    df_eventinfo_cp = df_eventinfo.copy()
+    df_eventinfo_cp["EXT_CHM"] = None
+    df_combined = df_eventinfo.combine_first(df_groundtruth)
+    df_combined["EXT_CHM"] = df_combined["EXT_CHM"].fillna(0)
+
+    return df_combined
+
+
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 

@@ -57,6 +57,8 @@ def main(args, params):
         if args.process:
             dfs = data.import_dataframes(args, ["groundtruth"])
             dfs["eventinfo"] = df_eventinfo
+            dfs["comparison"] = data.event_comparison(dfs["eventinfo"],
+                                                      dfs["groundtruth"])
             dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
             dfs["prediction"] = data.classify_feature_vectors(dfs["features"])
             data.export_dataframes(args, dfs)
@@ -64,6 +66,7 @@ def main(args, params):
             try:
                 dfs = data.import_dataframes(args, df_list=["groundtruth",
                                                             "eventinfo",
+                                                            "comparison",
                                                             "features",
                                                             "prediction"])
             except FileNotFoundError:
