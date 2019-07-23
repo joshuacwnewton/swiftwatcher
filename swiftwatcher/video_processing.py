@@ -81,7 +81,11 @@ class FrameQueue:
                 self.src_fps / self.fps) - 1  # For subsampling vid
 
             self.frame_to_load_next = args.load[0]
-            self.total_frames = args.load[1] - args.load[0] + 1
+            if args.load[1] == -1:
+                self.total_frames \
+                    = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
+            else:
+                self.total_frames = args.load[1] - args.load[0] + 1
 
             # Initialize "disappeared segment" event tracking list
             self.event_list = []

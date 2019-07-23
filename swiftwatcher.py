@@ -76,8 +76,8 @@ def main(args, params):
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_negatives")
 
-    # Experimental function for testing new features/classifiers
-    data.feature_engineering(args, dfs["comparison"])
+        # Experimental function for testing new features/classifiers
+        data.feature_engineering(args, dfs["comparison"])
 
 
 def set_parameters():
@@ -139,7 +139,7 @@ if __name__ == "__main__":
                         "--process",
                         help="Load and process frames from HH:MM subfolders",
                         action="store_true",
-                        default=False
+                        default=True
                         )
     parser.add_argument("-a",
                         "--analyse",
@@ -155,12 +155,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 216031])  # ([0, 216031]), ([0, 108047)]
+                        default=([0, -1])  # ([0, 216031]), ([0, 108047)]
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-22_full-video/"
+                        default="tests/2019-07-23_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
