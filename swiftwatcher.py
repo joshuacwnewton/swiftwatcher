@@ -53,10 +53,10 @@ def main(args, params):
         if args.process:
             dfs = data.import_dataframes(args, ["groundtruth"])
             dfs["eventinfo"] = df_eventinfo
-            dfs["comparison"] = data.event_comparison(dfs["eventinfo"],
-                                                      dfs["groundtruth"])
+            dfs["comparison"] = data.generate_comparison(dfs["eventinfo"],
+                                                         dfs["groundtruth"])
             dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
-            dfs["prediction"] = data.classify_feature_vectors(dfs["features"])
+            dfs["prediction"] = data.generate_classifications(dfs["features"])
             data.export_dataframes(args, dfs)
         else:
             try:
@@ -76,8 +76,8 @@ def main(args, params):
         data.plot_result(args, dfs["groundtruth"], dfs["prediction"],
                          key="EXT_CHM", flag="false_negatives")
 
-        data.train_classifier(args, params,
-                              dfs["eventinfo"], dfs["groundtruth"])
+    # Experimental function for testing new features/classifiers
+    data.feature_engineering(args, dfs["comparison"])
 
 
 def set_parameters():
@@ -120,18 +120,12 @@ if __name__ == "__main__":
     parser.add_argument("-f",
                         "--filename",
                         help="Name of video file",
-                        default="NPD 541 CHSW 2019 June 14.mp4"
+                        default="NPD 460 CHSW 2019 June 13.mp4"
                         )
     parser.add_argument("-t",
                         "--timestamp",
                         help="Specified starting timestamp for video",
-                        default="2019-06-14 00:00:00.000000000"
-                        )
-    # Ground truth "groundtruth.csv" only valid for ch04_20170518205849.mp4
-    parser.add_argument("-g",
-                        "--groundtruth",
-                        help="Path to ground truth file associated with video",
-                        default="groundtruth/groundtruth.csv"
+                        default="2019-06-13 00:00:00.000000000"
                         )
 
     # Flags to determine which program functionality should be run in testing
@@ -161,12 +155,12 @@ if __name__ == "__main__":
                         nargs=2,
                         type=int,
                         metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, 108047])
+                        default=([0, 216031])  # ([0, 216031]), ([0, 108047)]
                         )
     parser.add_argument("-c",
                         "--custom_dir",
                         help="Custom directory for saving various things",
-                        default="tests/2019-07-20_full-video/"
+                        default="tests/2019-07-22_full-video/"
                         )
     parser.add_argument("-v",
                         "--visual",
