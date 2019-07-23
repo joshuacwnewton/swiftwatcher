@@ -107,77 +107,85 @@ def set_parameters():
 
 
 if __name__ == "__main__":
-    # Command line arguments used for specifying file I/O.
-    # (NOT algorithm parameters. See set_parameters() for parameter choices.)
+    def set_program_flags():
+        """Set flags which determine which modes of functionality the program
+        should run in."""
+        parser.add_argument("-e",
+                            "--extract",
+                            help="Extract frames to HH:MM subfolders",
+                            action="store_true",
+                            default=False
+                            )
+        parser.add_argument("-p",
+                            "--process",
+                            help="Load and process frames from HH:MM subfolders",
+                            action="store_true",
+                            default=True
+                            )
+        parser.add_argument("-a",
+                            "--analyse",
+                            help="Analyse results by comparing to ground truth",
+                            action="store_true",
+                            default=True
+                            )
+
+    def set_fileio_args():
+        """Set arguments relating to video file I/O."""
+        parser.add_argument("-d",
+                            "--video_dir",
+                            help="Path to directory containing video file",
+                            default="videos/"
+                            )
+        parser.add_argument("-f",
+                            "--filename",
+                            help="Name of video file",
+                            default="NPD 460 CHSW 2019 June 13.mp4"
+                            )
+        parser.add_argument("-t",
+                            "--timestamp",
+                            help="Specified starting timestamp for video",
+                            default="2019-06-13 00:00:00.000000000"
+                            )
+
+    def set_processing_args():
+        """Set arguments which relate to testing the algorithm, but that are
+        unrelated to the functionality of the algorithm itself."""
+
+        parser.add_argument("-l",
+                            "--load",
+                            help="Specify indices to load frames",
+                            nargs=2,
+                            type=int,
+                            metavar=('START_INDEX', 'END_INDEX'),
+                            default=([0, -1])
+                            )
+        parser.add_argument("-c",
+                            "--custom_dir",
+                            help="Custom directory for saving various things",
+                            default="tests/2019-07-23_full-video/"
+                            )
+        parser.add_argument("-v",
+                            "--visual",
+                            help="Output visualization of frame processing",
+                            default=True
+                            )
+        parser.add_argument("-n",
+                            "--chimney",
+                            help="Bottom corners which define chimney edge",
+                            default=[(798, 449), (1150, 435)]
+                            )
+
     parser = ap.ArgumentParser()
-
-    # General arguments for video file I/O (should not change for testing)
-    parser.add_argument("-d",
-                        "--video_dir",
-                        help="Path to directory containing video file",
-                        default="videos/"
-                        )
-    parser.add_argument("-f",
-                        "--filename",
-                        help="Name of video file",
-                        default="NPD 460 CHSW 2019 June 13.mp4"
-                        )
-    parser.add_argument("-t",
-                        "--timestamp",
-                        help="Specified starting timestamp for video",
-                        default="2019-06-13 00:00:00.000000000"
-                        )
-
-    # Flags to determine which program functionality should be run in testing
-    parser.add_argument("-e",
-                        "--extract",
-                        help="Extract frames to HH:MM subfolders",
-                        action="store_true",
-                        default=False
-                        )
-    parser.add_argument("-p",
-                        "--process",
-                        help="Load and process frames from HH:MM subfolders",
-                        action="store_true",
-                        default=True
-                        )
-    parser.add_argument("-a",
-                        "--analyse",
-                        help="Analyse results by comparing to ground truth",
-                        action="store_true",
-                        default=True
-                        )
-
-    # Arguments for running image processing/analysis tests
-    parser.add_argument("-l",
-                        "--load",
-                        help="Specify indices to load previously saved frames",
-                        nargs=2,
-                        type=int,
-                        metavar=('START_INDEX', 'END_INDEX'),
-                        default=([0, -1])  # ([0, 216031]), ([0, 108047)]
-                        )
-    parser.add_argument("-c",
-                        "--custom_dir",
-                        help="Custom directory for saving various things",
-                        default="tests/2019-07-23_full-video/"
-                        )
-    parser.add_argument("-v",
-                        "--visual",
-                        help="Output visualization of frame processing",
-                        default=False
-                        )
-    parser.add_argument("-n",
-                        "--chimney",
-                        help="Bottom corners which define chimney edge",
-                        default=[(798, 449), (1150, 435)]
-                        )
+    set_program_flags()
+    set_fileio_args()
+    set_processing_args()
     arguments = parser.parse_args()
+
+    parameters = set_parameters()
 
     # Repeatedly used default directory to ensure standardization. Storing here
     # because it is a derived from only arguments.
     arguments.default_dir = (arguments.video_dir +
                              os.path.splitext(arguments.filename)[0] + "/")
 
-    parameters = set_parameters()
     main(arguments, parameters)
