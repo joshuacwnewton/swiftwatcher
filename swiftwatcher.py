@@ -1,7 +1,5 @@
-# =========================================================================== #
-# Note: Each category of TODOs represents a git branch.
-# =========================================================================== #
-# algorithm-improvements:
+# =================================== TODOs ================================= #
+# execution-time:
 # -TODO: Test smaller crop-regions for RPCA speed increase.
 # -TODO: Test smaller scaled image (pyramid-down?) for RPCA speed increase.
 # -TODO: Test smaller frame_queue for RPCA speed increase.
@@ -13,14 +11,13 @@
 # -TODO: Save command line arguments to JSON file.
 # -TODO: Load command line arguments from JSON file.
 #
-# algorithm-visualization:
-#
-# results-visualization:
-#
-# results-csv-files:
+# timestamp-precision:
 # -TODO: Update empty-gt-generator for us timestamp precision.
+# -TODO: Explore source of timestamp rounding error (off-by-one microsecond?)
 #
-# running tests:
+# feature-engineering:
+# -TODO: Implement/test idea for histogram of MV angles
+# -TODO: Implement/test idea for relative position feature.
 #
 # =========================================================================== #
 
