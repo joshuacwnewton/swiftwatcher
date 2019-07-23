@@ -21,6 +21,43 @@ import cv2
 # seaborn.set()
 
 
+def empty_gt_generator(args):
+    """Helper function for generating an empty file to store manual
+    ground truth annotations. Ensures formatting is consistent."""
+
+    # Create save directory if it does not already exist
+    gt_dir = args.groundtruth.split("/")[0]
+    save_directory = args.default_dir+gt_dir+"/"
+    if not os.path.isdir(save_directory):
+        try:
+            os.makedirs(save_directory)
+        except OSError:
+            print("[!] Creation of the directory {0} failed."
+                  .format(save_directory))
+
+    # Create Series of DateTimeIndex indices (i.e. frame timestamps)
+    frame_queue = FrameQueue(args)
+    nano = (1/frame_queue.fps) * 1e9
+    frame_queue.stream.release()  # Not needed once fps is extracted
+    num_timestamps = args.load[1] - args.load[0] + 1
+    duration = (num_timestamps - 1) * nano
+    indices = pd.date_range(start=args.timestamp,
+                            end=(pd.Timestamp(args.timestamp) +
+                                 pd.Timedelta(duration, 'ns')),
+                            periods=num_timestamps)
+
+    # Create a Series of frame numbers which correspond to the timestamps
+    framenumbers = np.array(range(num_timestamps))
+
+    # Create an empty DataFrame for ground truth annotations to be put into
+    df_empty = pd.DataFrame(framenumbers, index=indices)
+    df_empty.index.rename("TMSTAMP", inplace=True)
+    df_empty.columns = ["FRM_NUM"]
+
+    # Save for editing in Excel/LibreOffice Calc/etc.
+    df_empty.to_csv(save_directory+"empty-groundtruth.csv")
+
+
 def save_test_config(args, params):
     """Save the parameters chosen for the given test of the algorithm. Some
     parameters include commas, so files are delimited with semicolons."""
@@ -41,7 +78,7 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def event_comparison(df_eventinfo, df_groundtruth):
+def generate_comparison(df_eventinfo, df_groundtruth):
     """Generate dataframe comparing events in df_eventinfo with frame
     counts in df_groundtruth."""
     df_groundtruth = df_groundtruth[df_groundtruth["EXT_CHM"] > 0]
@@ -77,7 +114,7 @@ def generate_feature_vectors(df_eventinfo):
     return df_features
 
 
-def classify_feature_vectors(df_features):
+def generate_classifications(df_features):
     """Classify "segment disappeared" events based on associated feature
     vectors.
 
@@ -206,7 +243,8 @@ def evaluate_results(args, df_groundtruth, df_prediction):
                                                        totals["ap"]),
             "   -{}/{} swifts were missed entirely.".format(totals["me"],
                                                             totals["ap"]),
-            " (Due to poor matching, overlapping, etc.)\n"
+            " (Due to poor matching, overlapping, etc.)\n",
+            "\n",
             "EVENT CLASSIFICATION\n",
             "   -{} events were detected by"
             " segmentation/matching.\n".format(totals["te"]),
@@ -222,7 +260,11 @@ def evaluate_results(args, df_groundtruth, df_prediction):
                                                                  totals["pn"]),
             "       -{}/{} labeled negatives were FNs.\n".format(totals["fn"],
                                                                  totals["pn"]),
+            "\n",
             "FINAL EVALUATION\n",
+            "   -{} missed segments + {} false negatives "
+            "= {} missed detections.\n".format(totals["me"], totals["fn"],
+                                               (totals["me"] + totals["fn"])),
             "   -Precision: {}\n".format(round(totals["tp"] /
                                          (totals["tp"] + totals["fp"]), 4)),
             "   -Recall: {}\n".format(round(totals["tp"] /
@@ -315,43 +357,6 @@ def plot_result(args, df_groundtruth, df_prediction, key, flag):
                 bbox_inches='tight')
 
 
-def empty_gt_generator(args):
-    """Helper function for generating an empty file to store manual
-    ground truth annotations. Ensures formatting is consistent."""
-
-    # Create save directory if it does not already exist
-    gt_dir = args.groundtruth.split("/")[0]
-    save_directory = args.default_dir+gt_dir+"/"
-    if not os.path.isdir(save_directory):
-        try:
-            os.makedirs(save_directory)
-        except OSError:
-            print("[!] Creation of the directory {0} failed."
-                  .format(save_directory))
-
-    # Create Series of DateTimeIndex indices (i.e. frame timestamps)
-    frame_queue = FrameQueue(args)
-    nano = (1/frame_queue.fps) * 1e9
-    frame_queue.stream.release()  # Not needed once fps is extracted
-    num_timestamps = args.load[1] - args.load[0] + 1
-    duration = (num_timestamps - 1) * nano
-    indices = pd.date_range(start=args.timestamp,
-                            end=(pd.Timestamp(args.timestamp) +
-                                 pd.Timedelta(duration, 'ns')),
-                            periods=num_timestamps)
-
-    # Create a Series of frame numbers which correspond to the timestamps
-    framenumbers = np.array(range(num_timestamps))
-
-    # Create an empty DataFrame for ground truth annotations to be put into
-    df_empty = pd.DataFrame(framenumbers, index=indices)
-    df_empty.index.rename("TMSTAMP", inplace=True)
-    df_empty.columns = ["FRM_NUM"]
-
-    # Save for editing in Excel/LibreOffice Calc/etc.
-    df_empty.to_csv(save_directory+"empty-groundtruth.csv")
-
-
 def feature_engineering(args, df_comparison):
     """Testing function for exploring different features."""
 
@@ -361,6 +366,59 @@ def feature_engineering(args, df_comparison):
         true_negatives = detected_events[detected_events["EXT_CHM"] == 0]
 
         return true_positives, true_negatives
+
+    def visualize_path(positives, negatives):
+
+        def generate_blank_img():
+            fq = FrameQueue(args)
+
+            blank = 127 * np.ones((fq.height, fq.width)).astype(np.uint8)
+            blank_w_roi = cv2.addWeighted(fq.roi_mask, 0.25, blank, 0.75, 0)
+
+            return blank_w_roi
+
+        def draw_centroids(img, centroid_list):
+            counter = 0
+            for centroid in centroid_list:
+                centroid = (int(centroid[1]), int(centroid[0]))
+                if counter == 0:
+                    prev = centroid
+                    pass
+
+                cv2.line(img, centroid, prev, 255, 2)
+                prev = centroid
+                counter += 1
+
+            return img
+
+        save_directory = (args.default_dir + args.custom_dir
+                         + "feature-testing/" + "centroids/")
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+
+        blank_img = generate_blank_img()
+
+        counter = 0
+        for index, row in positives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "1_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
+
+        counter = 0
+        for index, row in negatives.iterrows():
+            centroid_img = draw_centroids(np.copy(blank_img),
+                                          literal_eval(row["CENTRDS"]))
+            # centroid_img = cv2.resize(centroid_img, (224, 224))
+            cv2.imwrite(save_directory + "0_{}.png".format(counter),
+                        centroid_img)
+            counter += 1
 
     def compute_feature_vectors(dataframe):
         """Use centroid information to calculate row-by-row features."""
@@ -474,7 +532,7 @@ def feature_engineering(args, df_comparison):
 
         ax.set_axisbelow(True)
         ax.minorticks_on()
-        ax.grid(which='major', linestyle='-', linewidth='0.5', color='red')
+        ax.grid(which='major', linestyle='-', linewidth='0.5', color='black')
         ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
 
         ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
@@ -484,59 +542,6 @@ def feature_engineering(args, df_comparison):
         ax.set_ylabel("Total Segments")
         fig = ax.get_figure()
         fig.savefig(save_directory+'{}.png'.format(name))
-
-    def visualize_path(positives, negatives):
-
-        def generate_blank_img():
-            fq = FrameQueue(args)
-
-            blank = 127 * np.ones((fq.height, fq.width)).astype(np.uint8)
-            blank_w_roi = cv2.addWeighted(fq.roi_mask, 0.25, blank, 0.75, 0)
-
-            return blank_w_roi
-
-        def draw_centroids(img, centroid_list):
-            counter = 0
-            for centroid in centroid_list:
-                centroid = (int(centroid[1]), int(centroid[0]))
-                if counter == 0:
-                    prev = centroid
-                    pass
-
-                cv2.line(img, centroid, prev, 255, 2)
-                prev = centroid
-                counter += 1
-
-            return img
-
-        save_directory = (args.default_dir + args.custom_dir
-                         + "feature-testing/" + "centroids/")
-        if not os.path.isdir(save_directory):
-            try:
-                os.makedirs(save_directory)
-            except OSError:
-                print("[!] Creation of the directory {0} failed."
-                      .format(save_directory))
-
-        blank_img = generate_blank_img()
-
-        counter = 0
-        for index, row in positives.iterrows():
-            centroid_img = draw_centroids(np.copy(blank_img),
-                                          literal_eval(row["CENTRDS"]))
-            # centroid_img = cv2.resize(centroid_img, (224, 224))
-            cv2.imwrite(save_directory + "1_{}.png".format(counter),
-                        centroid_img)
-            counter += 1
-
-        counter = 0
-        for index, row in negatives.iterrows():
-            centroid_img = draw_centroids(np.copy(blank_img),
-                                          literal_eval(row["CENTRDS"]))
-            # centroid_img = cv2.resize(centroid_img, (224, 224))
-            cv2.imwrite(save_directory + "0_{}.png".format(counter),
-                        centroid_img)
-            counter += 1
 
     tp, tn = split_data()
     visualize_path(tp, tn)
