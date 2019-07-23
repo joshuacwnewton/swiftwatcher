@@ -87,7 +87,7 @@ def classify_feature_vectors(df_features):
     df_labels = pd.DataFrame(index=df_features.index)
 
     df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                               bins=[-180, -120, -35, 180],
+                                               bins=[-180, -135, -55, 180],
                                                labels=False)]
 
     return df_labels
