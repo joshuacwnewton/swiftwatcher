@@ -135,16 +135,17 @@ def evaluate_results(args, df_groundtruth, df_prediction):
 
         # Cap groundtruth to specified frame range (done because sometimes I've
         # tested with a subset of frames, rather than the entire video.)
-        index_less = df_groundtruth[
-            df_groundtruth.index.levels[1] < args.load[0]].index
-        index_more = df_groundtruth[
-            df_groundtruth.index.levels[1] > args.load[1]].index
-        df_groundtruth.drop(index_less, inplace=True)
-        df_groundtruth.drop(index_more, inplace=True)
+        index_less = gt_unprocessed[
+            gt_unprocessed.index.levels[1] < args.load[0]].index
+        index_more = gt_unprocessed[
+            gt_unprocessed.index.levels[1] > args.load[1]].index
+        gt_unprocessed.drop(index_less, inplace=True)
+        gt_unprocessed.drop(index_more, inplace=True)
+        gt_nonzero = gt_unprocessed[gt_unprocessed["EXT_CHM"] > 0]
 
         # Re-index groundtruth and predictions to have shared set of indexes
-        union_index = pred_nonzero.index.union(gt_unprocessed.index)
-        gt_processed = gt_unprocessed.reindex(index=union_index, fill_value=0)
+        union_index = pred_nonzero.index.union(gt_nonzero.index)
+        gt_processed = gt_nonzero.reindex(index=union_index, fill_value=0)
         pred_processed = pred_nonzero.reindex(index=union_index, fill_value=0)
 
         return pred_processed, gt_processed
