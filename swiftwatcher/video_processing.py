@@ -555,16 +555,16 @@ class FrameQueue:
         #         img.grey_opening(list(seg.values())[-1],
         #                          size=params["grey_op_SE"][i]).astype(np.uint8)
         #
-        # # Segment using connected component labeling
-        # num_components, labeled_frame = \
-        #     cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
-        #
-        # # Scale labeled image to be visible with uint8 grayscale
-        # if num_components > 0:
-        #     seg["connected_c_255"] = \
-        #         labeled_frame * int(255 / num_components)
-        # else:
-        #     seg["connected_c_255"] = labeled_frame
+        # Segment using connected component labeling
+        num_components, labeled_frame = \
+            cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
+
+        # Scale labeled image to be visible with uint8 grayscale
+        if num_components > 0:
+            seg["connected_c_255"] = \
+                labeled_frame * int(255 / num_components)
+        else:
+            seg["connected_c_255"] = labeled_frame
         #
         # # Append empty values first if queue is empty
         # if self.seg_queue.__len__() is 0:
