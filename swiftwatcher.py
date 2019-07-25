@@ -217,17 +217,17 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([0, -1])
+                            default=([55000, 57000])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-07-24_full-video/"
+                            default="/tests/edge-based-segmentation/"
                             )
         parser.add_argument("-v",
                             "--visual",
                             help="Output visualization of frame processing",
-                            default=False
+                            default=True
                             )
 
     parser = ap.ArgumentParser()
