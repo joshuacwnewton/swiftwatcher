@@ -829,13 +829,13 @@ def process_frames(args, params):
             fq.load_frame(args.default_dir)
             fq.preprocess_frame()
             fq.segment_frame(args, params)
-            fq.match_segments(args, params)
-            fq.analyse_matches()
+            # fq.match_segments(args, params)
+            # fq.analyse_matches()
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
             fq.segment_frame(args, params)
-            fq.match_segments(args, params)
-            fq.analyse_matches()
+            # fq.match_segments(args, params)
+            # fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."

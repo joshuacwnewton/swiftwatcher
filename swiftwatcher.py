@@ -175,7 +175,7 @@ if __name__ == "__main__":
                             "--_analyse",
                             help="Analyse results by comparing to ground truth",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-b",
                             "--_production",
