@@ -424,8 +424,8 @@ class FrameQueue:
         def segment_visualization():
             # Add roi mask to each stage for visualization.
             for keys, key_values in seg.items():
-                seg[keys] = cv2.addWeighted(self.roi_mask, 0.25,
-                                            key_values.astype(np.uint8), 0.75,
+                seg[keys] = cv2.addWeighted(self.roi_mask, 0.05,
+                                            key_values.astype(np.uint8), 0.95,
                                             0)
 
             # Add filler images if not enough stages to fill Nx3 grid
