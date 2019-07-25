@@ -488,8 +488,8 @@ class FrameQueue:
 
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
-            "frame": np.reshape(self.queue[-1],
-                                (self.height, self.width))
+            # "frame": np.reshape(self.queue[-1],
+            #                     (self.height, self.width))
         }
 
         # Apply Robust PCA method to isolate regions of motion
