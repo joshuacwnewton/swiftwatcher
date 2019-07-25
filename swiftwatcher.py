@@ -18,6 +18,10 @@
 # feature-engineering:
 # -TODO: Implement/test idea for relative position feature.
 #
+# segmentation-improvements:
+# -TODO: Temporarily remove overlay from segmentation.
+# -TODO: Find a way to test segmentation only.
+# -TODO: Look at output of canny edge detection.
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
