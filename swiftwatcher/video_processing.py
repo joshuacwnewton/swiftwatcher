@@ -438,8 +438,6 @@ class FrameQueue:
             # Get a threshold value from only the edge (+ edge-adjacent) values
             ret, _ = cv2.threshold(masked_image, 0, 255,
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            if ret == 0:   # This is the threshold value if no edges found
-                ret = 255  # In this case, set so all values will thresh to 0
 
             _, thresholded_image = cv2.threshold(image,
                                                  thresh=ret, maxval=255,
@@ -528,7 +526,12 @@ class FrameQueue:
                 rpca(params["ialm_lmbda"], params["ialm_tol"],
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
-        seg["RPCA_thresholded"] = edge_based_otsu(seg["RPCA_output"])
+        _, seg["RPCA_hardthr"] = cv2.threshold(list(seg.values())[-1],
+                                               thresh=15,
+                                               maxval=255,
+                                               type=cv2.THRESH_TOZERO)
+        seg["RPCA_otsuthr"] = edge_based_otsu(list(seg.values())[-1])
+
 
         # plt.cla()
         # plt.hist(seg["RPCA_masked"].ravel(), 256, [0, 256])
