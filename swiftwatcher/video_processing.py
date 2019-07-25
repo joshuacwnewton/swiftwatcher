@@ -505,9 +505,14 @@ class FrameQueue:
 
         seg["Canny_edge"] = cv2.Canny(list(seg.values())[-1], 100, 200)
 
-        seg["Canny_mask"] = cv2.dilate(list(seg.values())[-1],
+        mask = cv2.dilate(list(seg.values())[-1],
                                        np.ones((2, 2), np.uint8),
                                        iterations=1)
+        mask[mask == 255] = 1
+
+        seg["RPCA_masked"] = np.multiply(mask, seg["RPCA_output"])
+
+
 
         # # Apply thresholding to retain strongest areas and discard the rest
         # threshold_str = "thresh_{}".format(params["thr_value"])
