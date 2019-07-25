@@ -810,12 +810,15 @@ def process_frames(args, params):
     extracted frames and determine bird counts for that sequence."""
 
     def create_dataframe(passed_list):
-        dataframe = pd.DataFrame(passed_list,
-                                 columns=list(passed_list[0].keys())
-                                 ).astype('object')
-        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
-        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
-        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        if passed_list:
+            dataframe = pd.DataFrame(passed_list,
+                                     columns=list(passed_list[0].keys())
+                                     ).astype('object')
+            dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+            dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+            dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        else:
+            dataframe = pd.DataFrame(passed_list)
 
         return dataframe
 
