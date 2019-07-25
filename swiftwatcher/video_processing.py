@@ -20,6 +20,8 @@ from skimage import measure
 import utils.cm as cm
 import pandas as pd
 
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
 
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from a video file
@@ -506,11 +508,31 @@ class FrameQueue:
         seg["Canny_edge"] = cv2.Canny(list(seg.values())[-1], 100, 200)
 
         mask = cv2.dilate(list(seg.values())[-1],
-                                       np.ones((2, 2), np.uint8),
-                                       iterations=1)
-        mask[mask == 255] = 1
+                          np.ones((2, 2), np.uint8),
+                          iterations=2).astype(np.int)
+        mask[mask == 0] = (-255)
+        mask[mask == 255] = 0
+        neg_rpca = np.add(mask, seg["RPCA_output"])
+        neg_rpca[neg_rpca < 0] = 257
+        seg["RPCA_masked"] = neg_rpca
 
-        seg["RPCA_masked"] = np.multiply(mask, seg["RPCA_output"])
+        ret, _ = cv2.threshold(seg["RPCA_masked"].astype(np.uint8), 0, 255,
+                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if ret == 0:
+            ret = 255
+
+        _, seg["RPCA_thresholded"] = cv2.threshold(seg["RPCA_output"],
+                                                   thresh=ret, maxval=255,
+                                                   type=cv2.THRESH_TOZERO)
+
+        # plt.cla()
+        # plt.hist(seg["RPCA_masked"].ravel(), 256, [0, 256])
+        # fig.canvas.draw()
+        # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+        # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        # data_gray = cv2.cvtColor(data, cv2.COLOR_BGR2GRAY)
+        # seg["histogram"] = cv2.resize(data_gray, (seg["RPCA_masked"].shape[1],
+        #                                           seg["RPCA_masked"].shape[0]))
 
 
 
