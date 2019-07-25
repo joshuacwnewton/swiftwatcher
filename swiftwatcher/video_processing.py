@@ -80,6 +80,9 @@ class FrameQueue:
             self.delay = round(
                 self.src_fps / self.fps) - 1  # For subsampling vid
 
+            if "load" not in args:
+                args.load = [0, -1]
+
             self.frame_to_load_next = args.load[0]
             if args.load[1] == -1:
                 self.total_frames \
@@ -142,7 +145,7 @@ class FrameQueue:
 
             self.roi_region = [(int(left + 0.025 * width),
                                 int(bottom - height)),
-                               (int(left + 0.975 * width),
+                               (int(right - 0.025 * width),
                                 int(bottom))]
 
         def generate_roi_mask():
@@ -198,8 +201,9 @@ class FrameQueue:
         generate_chimney_regions(alpha=0.25)
         generate_roi_mask()
 
-        if not args.extract:
-            self.stream.release()
+        if "extract" in args:
+            if not args.extract:
+                self.stream.release()
 
     def load_frame(self, load_directory=None, empty=False):
 
@@ -468,14 +472,19 @@ class FrameQueue:
 
             # Save to file
             self.save_frame(save_directory,
-                                    frame=rows[0],
-                                    index=-1,
-                                    base_folder=folder_name,
-                                    frame_folder="visualizations/segmentation/")
+                            frame=rows[0],
+                            index=-1,
+                            base_folder=folder_name,
+                            frame_folder="visualizations/segmentation/")
 
-        save_directory = args.default_dir
-        folder_name = args.custom_dir
-        visual = args.visual
+        if "visual" not in args:
+            save_directory = None
+            folder_name = None
+            visual = False
+        else:
+            save_directory = args.default_dir
+            folder_name = args.custom_dir
+            visual = args.visual
 
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
@@ -641,9 +650,14 @@ class FrameQueue:
                                     frame_folder="visualizations/matching/",
                                     scale=1)
 
-        save_directory = args.default_dir
-        folder_name = args.custom_dir
-        visual = args.visual
+        if "visual" not in args:
+            save_directory = None
+            folder_name = None
+            visual = False
+        else:
+            save_directory = args.default_dir
+            folder_name = args.custom_dir
+            visual = args.visual
 
         # Assign names to commonly used properties
         count_curr = len(self.seg_properties[0])
@@ -829,6 +843,54 @@ def process_frames(args, params):
 
     print("[-] Analysis complete. {0}/{1} frames were used in processing."
           .format(fq.frames_processed, fq.frames_read))
+
+    df_eventinfo = create_dataframe(fq.event_list)
+
+    return df_eventinfo
+
+
+def full_algorithm(args, params, video_dict):
+    def create_dataframe(passed_list):
+        dataframe = pd.DataFrame(passed_list,
+                                 columns=list(passed_list[0].keys())
+                                 ).astype('object')
+        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+
+        return dataframe
+
+    args.save_directory = args.default_dir
+    args.chimney = video_dict["corners"]
+    args.load = [0, 3000]
+
+    fq = FrameQueue(args, params["queue_size"])
+
+    while fq.frames_processed < fq.total_frames:
+        if fq.frames_read < (params["queue_size"]-1):
+            fq.load_frame()
+            fq.preprocess_frame()
+            # No segmentation needed until queue is filled
+            # No matching needed until queue is filled
+            # No analysis needed until queue is filled
+
+        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
+            fq.load_frame()
+            fq.preprocess_frame()
+            fq.segment_frame(args, params)
+            fq.match_segments(args, params)
+            fq.analyse_matches()
+
+        elif fq.frames_read == fq.total_frames:
+            fq.load_frame(empty=True)
+            # No preprocessing needed for empty frame
+            fq.segment_frame(args, params)
+            fq.match_segments(args, params)
+            fq.analyse_matches()
+
+        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
+            print("[-] {0}/{1} frames processed."
+                  .format(fq.frames_processed, fq.total_frames))
 
     df_eventinfo = create_dataframe(fq.event_list)
 
