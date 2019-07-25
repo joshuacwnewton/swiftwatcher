@@ -424,7 +424,9 @@ class FrameQueue:
                                            (self.height, self.width))
 
         def edge_based_otsu(image):
-            smoothed_image = cv2.medianBlur(image, 5)
+            # smoothed_image = cv2.medianBlur(image, 5)
+            smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
+                                                 sigmaSpace=1)
             edge_image = cv2.Canny(smoothed_image, 100, 200)
             mask = cv2.dilate(edge_image, np.ones((2, 2), np.uint8),
                               iterations=2).astype(np.int)
@@ -439,7 +441,7 @@ class FrameQueue:
             ret, _ = cv2.threshold(masked_image, 0, 255,
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-            _, thresholded_image = cv2.threshold(image,
+            _, thresholded_image = cv2.threshold(smoothed_image,
                                                  thresh=ret, maxval=255,
                                                  type=cv2.THRESH_TOZERO)
 
