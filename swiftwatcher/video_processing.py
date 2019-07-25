@@ -565,6 +565,17 @@ class FrameQueue:
                 labeled_frame * int(255 / num_components)
         else:
             seg["connected_c_255"] = labeled_frame
+
+        # Connected component labeling of non-processed image for demonstration
+        num_componentsd, labeled_framed = \
+            cv2.connectedComponents(seg["RPCA_output"], connectivity=4)
+
+        # Scale labeled image to be visible with uint8 grayscale
+        if num_componentsd > 0:
+            seg["connected_c_255d"] = \
+                labeled_framed * int(255 / num_componentsd)
+        else:
+            seg["connected_c_255d"] = labeled_framed
         #
         # # Append empty values first if queue is empty
         # if self.seg_queue.__len__() is 0:
