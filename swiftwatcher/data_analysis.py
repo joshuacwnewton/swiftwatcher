@@ -173,12 +173,14 @@ def evaluate_results(args, df_groundtruth, df_prediction):
 
         # Cap groundtruth to specified frame range (done because sometimes I've
         # tested with a subset of frames, rather than the entire video.)
-        index_less = gt_unprocessed[
-            gt_unprocessed.index.levels[1] < args.load[0]].index
-        index_more = gt_unprocessed[
-            gt_unprocessed.index.levels[1] > args.load[1]].index
-        gt_unprocessed.drop(index_less, inplace=True)
-        gt_unprocessed.drop(index_more, inplace=True)
+        if args.load[0] > 0:
+            index_less = gt_unprocessed[
+                gt_unprocessed.index.levels[1] < args.load[0]].index
+            gt_unprocessed.drop(index_less, inplace=True)
+        if args.load[1] > args.load[0]:
+            index_more = gt_unprocessed[
+                gt_unprocessed.index.levels[1] > args.load[1]].index
+            gt_unprocessed.drop(index_more, inplace=True)
         gt_nonzero = gt_unprocessed[gt_unprocessed["EXT_CHM"] > 0]
 
         # Re-index groundtruth and predictions to have shared set of indexes
@@ -285,7 +287,7 @@ def evaluate_results(args, df_groundtruth, df_prediction):
     save_evaluation(args.default_dir+args.custom_dir+"results/", dict_totals)
 
 
-def plot_result(args, df_groundtruth, df_prediction, key, flag):
+def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
     """Plot comparisons between estimation and ground truth for segments."""
     save_directory = args.default_dir + args.custom_dir + "results/plots/"
     if not os.path.isdir(save_directory):
@@ -295,18 +297,16 @@ def plot_result(args, df_groundtruth, df_prediction, key, flag):
             print("[!] Creation of the directory {0} failed."
                   .format(save_directory))
 
-    # Reset index to just "FRM_NUM"
-    df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
     df_prediction = df_prediction.reset_index("TMSTAMP")
-
-    # Extract segment counts as series objects (from dataframes)
     es_series = df_prediction[key]
-    gt_series = df_groundtruth[key]
 
-    # Calculate the overestimate error and underestimate error
-    difference = es_series.subtract(gt_series)
-    false_positives = difference.where(difference > 0, 0)
-    false_negatives = -1 * difference.where(difference < 0, 0)
+    if df_groundtruth is not None:
+        df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
+        gt_series = df_groundtruth[key]
+
+        difference = es_series.subtract(gt_series)
+        false_positives = difference.where(difference > 0, 0)
+        false_negatives = -1 * difference.where(difference < 0, 0)
 
     # Initialize empty values
     series_plots = []
@@ -325,7 +325,7 @@ def plot_result(args, df_groundtruth, df_prediction, key, flag):
         xlabel = "Frame Number"
         ylabel = "Segment Count"
 
-    if flag is "false_positives":
+    elif flag is "false_positives":
         series_plots.append(false_positives.cumsum())
         series_plots.append(false_positives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
@@ -333,13 +333,20 @@ def plot_result(args, df_groundtruth, df_prediction, key, flag):
         xlabel = "Frame Number"
         ylabel = "False Positives"
 
-    if flag is "false_negatives":
+    elif flag is "false_negatives":
         series_plots.append(false_negatives.cumsum())
         series_plots.append(false_negatives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
         title = "False Negative Error for {}".format(key)
         xlabel = "Frame Number"
         ylabel = "False Negatives"
+
+    else:
+        series_plots.append(es_series.cumsum())
+        legend = ["Birds Entering Chimney"]
+        title = "Timeline of Predicted Bird Counts"
+        xlabel = "Frame Number"
+        ylabel = "Segment Count"
 
     # Create and save plot
     for series in series_plots:
@@ -404,8 +411,12 @@ def feature_engineering(args, df_comparison):
 
         counter = 0
         for index, row in positives.iterrows():
-            centroid_img = draw_centroids(np.copy(blank_img),
-                                          literal_eval(row["CENTRDS"]))
+            if row["CENTRDS"] is str:
+                centroid_img = draw_centroids(np.copy(blank_img),
+                                              literal_eval(row["CENTRDS"]))
+            else:
+                centroid_img = draw_centroids(np.copy(blank_img),
+                                              row["CENTRDS"])
             # centroid_img = cv2.resize(centroid_img, (224, 224))
             cv2.imwrite(save_directory + "1_{}.png".format(counter),
                         centroid_img)
@@ -413,8 +424,12 @@ def feature_engineering(args, df_comparison):
 
         counter = 0
         for index, row in negatives.iterrows():
-            centroid_img = draw_centroids(np.copy(blank_img),
-                                          literal_eval(row["CENTRDS"]))
+            if row["CENTRDS"] is str:
+                centroid_img = draw_centroids(np.copy(blank_img),
+                                              literal_eval(row["CENTRDS"]))
+            else:
+                centroid_img = draw_centroids(np.copy(blank_img),
+                                              row["CENTRDS"])
             # centroid_img = cv2.resize(centroid_img, (224, 224))
             cv2.imwrite(save_directory + "0_{}.png".format(counter),
                         centroid_img)
