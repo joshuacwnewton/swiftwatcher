@@ -423,6 +423,30 @@ class FrameQueue:
                 self.queue[i] = np.reshape(s_columns[:, i],
                                            (self.height, self.width))
 
+        def edge_based_otsu(image):
+            smoothed_image = cv2.medianBlur(image, 5)
+            edge_image = cv2.Canny(smoothed_image, 100, 200)
+            mask = cv2.dilate(edge_image, np.ones((2, 2), np.uint8),
+                              iterations=2).astype(np.int)
+
+            # Change mask so all 0 values will make original image negative
+            # (Therefore excluding those values from otsu's thresholding)
+            mask[mask == 0] = (-256)
+            mask[mask == 255] = 0
+            masked_image = np.add(mask, smoothed_image).astype(np.uint8)
+
+            # Get a threshold value from only the edge (+ edge-adjacent) values
+            ret, _ = cv2.threshold(masked_image, 0, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            if ret == 0:   # This is the threshold value if no edges found
+                ret = 255  # In this case, set so all values will thresh to 0
+
+            _, thresholded_image = cv2.threshold(image,
+                                                 thresh=ret, maxval=255,
+                                                 type=cv2.THRESH_TOZERO)
+
+            return thresholded_image
+
         def segment_visualization():
             # Add roi mask to each stage for visualization.
             for keys, key_values in seg.items():
@@ -504,26 +528,7 @@ class FrameQueue:
                 rpca(params["ialm_lmbda"], params["ialm_tol"],
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
-
-        seg["Canny_edge"] = cv2.Canny(list(seg.values())[-1], 100, 200)
-
-        mask = cv2.dilate(list(seg.values())[-1],
-                          np.ones((2, 2), np.uint8),
-                          iterations=2).astype(np.int)
-        mask[mask == 0] = (-255)
-        mask[mask == 255] = 0
-        neg_rpca = np.add(mask, seg["RPCA_output"])
-        neg_rpca[neg_rpca < 0] = 257
-        seg["RPCA_masked"] = neg_rpca
-
-        ret, _ = cv2.threshold(seg["RPCA_masked"].astype(np.uint8), 0, 255,
-                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        if ret == 0:
-            ret = 255
-
-        _, seg["RPCA_thresholded"] = cv2.threshold(seg["RPCA_output"],
-                                                   thresh=ret, maxval=255,
-                                                   type=cv2.THRESH_TOZERO)
+        seg["RPCA_thresholded"] = edge_based_otsu(seg["RPCA_output"])
 
         # plt.cla()
         # plt.hist(seg["RPCA_masked"].ravel(), 256, [0, 256])
