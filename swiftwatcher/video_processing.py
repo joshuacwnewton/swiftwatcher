@@ -503,41 +503,41 @@ class FrameQueue:
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
 
-        # Apply thresholding to retain strongest areas and discard the rest
-        threshold_str = "thresh_{}".format(params["thr_value"])
-        _, seg[threshold_str] = \
-            cv2.threshold(list(seg.values())[-1],
-                          thresh=params["thr_value"],
-                          maxval=255,
-                          type=params["thr_type"])
-
-        # Discard areas where 2x2 structuring element will not fit
-        for i in range(len(params["grey_op_SE"])):
-            seg["grey_opening{}".format(i+1)] = \
-                img.grey_opening(list(seg.values())[-1],
-                                 size=params["grey_op_SE"][i]).astype(np.uint8)
-
-        # Segment using connected component labeling
-        num_components, labeled_frame = \
-            cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
-
-        # Scale labeled image to be visible with uint8 grayscale
-        if num_components > 0:
-            seg["connected_c_255"] = \
-                labeled_frame * int(255 / num_components)
-        else:
-            seg["connected_c_255"] = labeled_frame
-
-        # Append empty values first if queue is empty
-        if self.seg_queue.__len__() is 0:
-            self.seg_queue.appendleft(np.zeros((self.height, self.width))
-                                      .astype(np.uint8))
-            self.seg_properties.appendleft([])
-
-        # Append segmented frame (and information about frame) to queue
-        self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
-        self.seg_properties.appendleft(measure.regionprops(labeled_frame))
-        self.frames_processed += 1
+        # # Apply thresholding to retain strongest areas and discard the rest
+        # threshold_str = "thresh_{}".format(params["thr_value"])
+        # _, seg[threshold_str] = \
+        #     cv2.threshold(list(seg.values())[-1],
+        #                   thresh=params["thr_value"],
+        #                   maxval=255,
+        #                   type=params["thr_type"])
+        #
+        # # Discard areas where 2x2 structuring element will not fit
+        # for i in range(len(params["grey_op_SE"])):
+        #     seg["grey_opening{}".format(i+1)] = \
+        #         img.grey_opening(list(seg.values())[-1],
+        #                          size=params["grey_op_SE"][i]).astype(np.uint8)
+        #
+        # # Segment using connected component labeling
+        # num_components, labeled_frame = \
+        #     cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
+        #
+        # # Scale labeled image to be visible with uint8 grayscale
+        # if num_components > 0:
+        #     seg["connected_c_255"] = \
+        #         labeled_frame * int(255 / num_components)
+        # else:
+        #     seg["connected_c_255"] = labeled_frame
+        #
+        # # Append empty values first if queue is empty
+        # if self.seg_queue.__len__() is 0:
+        #     self.seg_queue.appendleft(np.zeros((self.height, self.width))
+        #                               .astype(np.uint8))
+        #     self.seg_properties.appendleft([])
+        #
+        # # Append segmented frame (and information about frame) to queue
+        # self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
+        # self.seg_properties.appendleft(measure.regionprops(labeled_frame))
+        # self.frames_processed += 1
 
         if visual:
             segment_visualization()
