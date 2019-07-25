@@ -537,7 +537,8 @@ class FrameQueue:
         # # Append segmented frame (and information about frame) to queue
         # self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
         # self.seg_properties.appendleft(measure.regionprops(labeled_frame))
-        # self.frames_processed += 1
+
+        self.frames_processed += 1
 
         if visual:
             segment_visualization()
