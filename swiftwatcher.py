@@ -222,7 +222,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/edge-based-segmentation-bilateral/"
+                            default="/tests/edge-based-segmentation-opening/"
                             )
         parser.add_argument("-v",
                             "--visual",
