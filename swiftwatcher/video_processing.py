@@ -503,6 +503,8 @@ class FrameQueue:
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
 
+        seg["Canny_edge"] = cv2.Canny(list(seg.values())[-1], 100, 200)
+
         # # Apply thresholding to retain strongest areas and discard the rest
         # threshold_str = "thresh_{}".format(params["thr_value"])
         # _, seg[threshold_str] = \
