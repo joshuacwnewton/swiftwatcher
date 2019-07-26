@@ -175,7 +175,7 @@ if __name__ == "__main__":
                             "--_analyse",
                             help="Analyse results by comparing to ground truth",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-b",
                             "--_production",
@@ -217,12 +217,12 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([55000, 57000])
+                            default=([0, -1])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/edge-based-segmentation-opening/"
+                            default="/tests/2019-07-25_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",
