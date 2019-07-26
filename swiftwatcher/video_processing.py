@@ -573,27 +573,15 @@ class FrameQueue:
         else:
             seg["connected_c_255"] = labeled_frame
 
-        # Connected component labeling of non-processed image for demonstration
-        num_componentsd, labeled_framed = \
-            cv2.connectedComponents(seg["RPCA_output"], connectivity=4)
+        # Append empty values first if queue is empty
+        if self.seg_queue.__len__() is 0:
+            self.seg_queue.appendleft(np.zeros((self.height, self.width))
+                                      .astype(np.uint8))
+            self.seg_properties.appendleft([])
 
-        # Scale labeled image to be visible with uint8 grayscale
-        if num_componentsd > 0:
-            seg["connected_c_255d"] = \
-                labeled_framed * int(255 / num_componentsd)
-        else:
-            seg["connected_c_255d"] = labeled_framed
-        #
-        # # Append empty values first if queue is empty
-        # if self.seg_queue.__len__() is 0:
-        #     self.seg_queue.appendleft(np.zeros((self.height, self.width))
-        #                               .astype(np.uint8))
-        #     self.seg_properties.appendleft([])
-        #
-        # # Append segmented frame (and information about frame) to queue
-        # self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
-        # self.seg_properties.appendleft(measure.regionprops(labeled_frame))
-
+        # Append segmented frame (and information about frame) to queue
+        self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
+        self.seg_properties.appendleft(measure.regionprops(labeled_frame))
         self.frames_processed += 1
 
         if visual:
@@ -889,13 +877,13 @@ def process_frames(args, params):
             fq.load_frame(args.default_dir)
             fq.preprocess_frame()
             fq.segment_frame(args, params)
-            # fq.match_segments(args, params)
-            # fq.analyse_matches()
+            fq.match_segments(args, params)
+            fq.analyse_matches()
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
             fq.segment_frame(args, params)
-            # fq.match_segments(args, params)
-            # fq.analyse_matches()
+            fq.match_segments(args, params)
+            fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."
