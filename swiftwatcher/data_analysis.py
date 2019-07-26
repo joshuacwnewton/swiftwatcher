@@ -20,6 +20,9 @@ import cv2
 # import seaborn
 # seaborn.set()
 
+# Needed for pairwise iteration
+from itertools import tee
+
 
 def empty_gt_generator(args):
     """Helper function for generating an empty file to store manual
@@ -78,18 +81,6 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def generate_comparison(df_eventinfo, df_groundtruth):
-    """Generate dataframe comparing events in df_eventinfo with frame
-    counts in df_groundtruth."""
-    df_groundtruth = df_groundtruth[df_groundtruth["EXT_CHM"] > 0]
-    df_eventinfo_cp = df_eventinfo.copy()
-    df_eventinfo_cp["EXT_CHM"] = None
-    df_combined = df_eventinfo.combine_first(df_groundtruth)
-    df_combined["EXT_CHM"] = df_combined["EXT_CHM"].fillna(0)
-
-    return df_combined
-
-
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
@@ -128,6 +119,65 @@ def generate_classifications(df_features):
                                                labels=False)]
 
     return df_labels
+
+
+def generate_comparison(df_eventinfo, df_groundtruth):
+    """Generate dataframe comparing events in df_eventinfo with frame
+    counts in df_groundtruth."""
+    def fix_offbyone(df_comparison):
+        def pairwise(iterable):
+            """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+            a, b = tee(iterable)
+            next(b, None)
+            return zip(a, b)
+
+        rows_to_drop = []
+        for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
+            if pd.isna(row1["EVENTS"]):
+                if (i2[1] == i1[1] + 1) and (
+                        row2["LABELPR"] >= row2["LABELGT"]):
+                    # Replace nan value with 0 for addition below
+                    row1["LABELPR"] = 0
+                    row1["EVENTS"] = 0
+
+                    # Merge row values into one row, delete inaccurate row
+                    new_values = row1.values + row2.values
+                    row1["EVENTS"] = new_values[0]
+                    row1["LABELGT"] = new_values[1]
+                    row1["LABELPR"] = new_values[2]
+                    rows_to_drop.append(i2)
+
+            if pd.isna(row2["EVENTS"]):
+                if (i1[1] == i2[1] - 1) and (
+                        row1["LABELPR"] >= row1["LABELGT"]):
+                    # Replace nan value with 0 for addition below
+                    row2["LABELPR"] = 0
+                    row2["EVENTS"] = 0
+
+                    # Merge row values into one row, delete inaccurate row
+                    new_values = row1.values + row2.values
+                    row2["EVENTS"] = new_values[0]
+                    row2["LABELGT"] = new_values[1]
+                    row2["LABELPR"] = new_values[2]
+                    rows_to_drop.append(i1)
+
+        df_comparison_rm = df_comparison.drop(index=rows_to_drop)
+
+        df_comparison_rm = df_comparison_rm.fillna(0)
+
+        return df_comparison_rm
+
+    df_groundtruth = df_groundtruth[df_groundtruth["LABELGT"] > 0]
+    df_eventinfo_cp = df_eventinfo.copy()
+    df_eventinfo_cp = df_eventinfo_cp.reset_index().groupby(['TMSTAMP',
+                                                             'FRM_NUM']).sum()
+    df_eventinfo_cp["LABELGT"] = None
+    df_combined = df_eventinfo_cp.combine_first(df_groundtruth)
+    df_combined["LABELGT"] = df_combined["LABELGT"].fillna(0)
+
+    df_combined_fixed = fix_offbyone(df_combined)
+
+    return df_combined_fixed
 
 
 def import_dataframes(args, df_list):
