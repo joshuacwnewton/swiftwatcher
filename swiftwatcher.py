@@ -59,22 +59,24 @@ def main(args, params):
         if args._process:
             dfs = data.import_dataframes(args, ["groundtruth"])
             dfs["eventinfo"] = df_eventinfo
-            dfs["comparison"] = data.generate_comparison(dfs["eventinfo"],
-                                                         dfs["groundtruth"])
             dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
+            # TODO: Fix to match manually edited df_prediction
             dfs["prediction"] = data.generate_classifications(dfs["features"])
+            dfs["comparison"] = data.generate_comparison(dfs["prediction"],
+                                                         dfs["groundtruth"])
             data.export_dataframes(args, dfs)
         else:
             try:
                 dfs = data.import_dataframes(args, df_list=["groundtruth",
                                                             "eventinfo",
-                                                            "comparison",
                                                             "features",
-                                                            "prediction"])
+                                                            "prediction",
+                                                            "comparison"
+                                                            ])
             except FileNotFoundError:
                 print("[!] Dataframes not found! Try processing first?")
 
-        data.evaluate_results(args, dfs["groundtruth"], dfs["prediction"])
+        data.evaluate_results(args, dfs["comparison"])
         data.plot_result(args, "EXT_CHM",  dfs["prediction"],
                          dfs["groundtruth"], flag="cumu_comparison")
         data.plot_result(args, "EXT_CHM",  dfs["prediction"],
