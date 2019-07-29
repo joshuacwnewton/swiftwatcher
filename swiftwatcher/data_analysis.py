@@ -114,14 +114,17 @@ def generate_classifications(df_features):
 
     df_labels = pd.DataFrame(index=df_features.index)
 
-    df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
+    df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                bins=[-180, -125, -55, 180],
                                                labels=False)]
+    # Give each classified event a value of 1, so that when multiple events
+    # on a single timestamp are merged, it will clearly show EVENTS = (>=2)
+    df_labels["EVENTS"] = 1
 
     return df_labels
 
 
-def generate_comparison(df_eventinfo, df_groundtruth):
+def generate_comparison(df_prediction, df_groundtruth):
     """Generate dataframe comparing events in df_eventinfo with frame
     counts in df_groundtruth."""
     def fix_offbyone(df_comparison):
@@ -135,30 +138,30 @@ def generate_comparison(df_eventinfo, df_groundtruth):
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
             if pd.isna(row1["EVENTS"]):
                 if (i2[1] == i1[1] + 1) and (
-                        row2["LABELPR"] >= row2["LABELGT"]):
+                        row2["ENTERPR"] >= row2["ENTERGT"]):
                     # Replace nan value with 0 for addition below
-                    row1["LABELPR"] = 0
+                    row1["ENTERPR"] = 0
                     row1["EVENTS"] = 0
 
                     # Merge row values into one row, delete inaccurate row
                     new_values = row1.values + row2.values
                     row1["EVENTS"] = new_values[0]
-                    row1["LABELGT"] = new_values[1]
-                    row1["LABELPR"] = new_values[2]
+                    row1["ENTERGT"] = new_values[1]
+                    row1["ENTERPR"] = new_values[2]
                     rows_to_drop.append(i2)
 
             if pd.isna(row2["EVENTS"]):
                 if (i1[1] == i2[1] - 1) and (
-                        row1["LABELPR"] >= row1["LABELGT"]):
+                        row1["ENTERPR"] >= row1["ENTERGT"]):
                     # Replace nan value with 0 for addition below
-                    row2["LABELPR"] = 0
+                    row2["ENTERPR"] = 0
                     row2["EVENTS"] = 0
 
                     # Merge row values into one row, delete inaccurate row
                     new_values = row1.values + row2.values
                     row2["EVENTS"] = new_values[0]
-                    row2["LABELGT"] = new_values[1]
-                    row2["LABELPR"] = new_values[2]
+                    row2["ENTERGT"] = new_values[1]
+                    row2["ENTERPR"] = new_values[2]
                     rows_to_drop.append(i1)
 
         df_comparison_rm = df_comparison.drop(index=rows_to_drop)
@@ -167,13 +170,13 @@ def generate_comparison(df_eventinfo, df_groundtruth):
 
         return df_comparison_rm
 
-    df_groundtruth = df_groundtruth[df_groundtruth["LABELGT"] > 0]
-    df_eventinfo_cp = df_eventinfo.copy()
-    df_eventinfo_cp = df_eventinfo_cp.reset_index().groupby(['TMSTAMP',
-                                                             'FRM_NUM']).sum()
-    df_eventinfo_cp["LABELGT"] = None
-    df_combined = df_eventinfo_cp.combine_first(df_groundtruth)
-    df_combined["LABELGT"] = df_combined["LABELGT"].fillna(0)
+    df_groundtruth = df_groundtruth[df_groundtruth["ENTERGT"] > 0]
+    df_prediction_cp = df_prediction.copy()
+    df_prediction_cp = df_prediction_cp.reset_index().groupby(['TMSTAMP',
+                                                              'FRM_NUM']).sum()
+    df_prediction_cp["ENTERGT"] = None
+    df_combined = df_prediction_cp.combine_first(df_groundtruth)
+    df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
 
     df_combined_fixed = fix_offbyone(df_combined)
 
@@ -219,31 +222,31 @@ def evaluate_results(args, df_comparison):
 
         # A timestamp contains an event labeled 'positive' if the number of
         # predicted birds is nonzero.
-        positives = comparison[comparison["LABELPR"] > 0]
+        positives = comparison[comparison["ENTERPR"] > 0]
         # A timestamp contains a TP event if the ground truth count
         # (corresponding to a predicted count) is also nonzero.
-        event_types["tp"] = positives[positives["LABELGT"] > 0]
+        event_types["tp"] = positives[positives["ENTERGT"] > 0]
         # A timestamp contains a FP event if the predicted count is greater
         # than the corresponding groundtruth count.
-        event_types["fp"] = positives[positives["LABELPR"] >
-                                      positives["LABELGT"]]
+        event_types["fp"] = positives[positives["ENTERPR"] >
+                                      positives["ENTERGT"]]
 
         # A timestamp contains an event labeled 'negative' if the number of
         # predicted birds is less than the number of detected events.
-        negatives = comparison[comparison["LABELPR"] < comparison["EVENTS"]]
+        negatives = comparison[comparison["ENTERPR"] < comparison["EVENTS"]]
         # A timestamp contains a TN event if the number of events detected
         # is greater than the ground truth count.
         event_types["tn"] = negatives[negatives["EVENTS"] >
-                                      negatives["LABELGT"]]
+                                      negatives["ENTERGT"]]
         # A timestamp contains a FN event if predicted count is less than
         # the corresponding groundtruth count.
-        event_types["fn"] = negatives[negatives["LABELPR"] <
-                                      negatives["LABELGT"]]
+        event_types["fn"] = negatives[negatives["ENTERPR"] <
+                                      negatives["ENTERGT"]]
 
         # A timestamp contains a missed detection if the number of detected
         # events is lower than the ground truth count.
         event_types["md"] = comparison[comparison["EVENTS"] <
-                                       comparison["LABELGT"]]
+                                       comparison["ENTERGT"]]
 
         return event_types
 
@@ -251,36 +254,36 @@ def evaluate_results(args, df_comparison):
         sums = {}
 
         sums["te"] = int(np.sum(full_comparison["EVENTS"]))
-        sums["gt"] = int(np.sum(full_comparison["LABELGT"]))
+        sums["gt"] = int(np.sum(full_comparison["ENTERGT"]))
 
         # mds = total ground truth events - total events detected
-        sums["md"] = int(np.sum(np.subtract(event_types["md"]["LABELGT"],
+        sums["md"] = int(np.sum(np.subtract(event_types["md"]["ENTERGT"],
                                             event_types["md"]["EVENTS"])))
 
         # tps = whichever is lowest between predicted and ground truth events
-        sums["tp"] = int(np.sum(np.minimum(event_types["tp"]["LABELPR"],
-                                           event_types["tp"]["LABELGT"])))
+        sums["tp"] = int(np.sum(np.minimum(event_types["tp"]["ENTERPR"],
+                                           event_types["tp"]["ENTERGT"])))
 
         # fps = any predicted events that were not present in ground truth
-        sums["fp"] = int(np.sum(np.subtract(event_types["fp"]["LABELPR"],
-                                            event_types["fp"]["LABELGT"])))
+        sums["fp"] = int(np.sum(np.subtract(event_types["fp"]["ENTERPR"],
+                                            event_types["fp"]["ENTERGT"])))
 
         # A timestamp containing a true negative can also simultaneously have
         # a false positive: both meet criteria of events > ground truth count.
-        fps_in_tn = event_types["tn"][event_types["tn"]["LABELPR"] >
-                                      event_types["tn"]["LABELGT"]]
+        fps_in_tn = event_types["tn"][event_types["tn"]["ENTERPR"] >
+                                      event_types["tn"]["ENTERGT"]]
         # tns = total criteria-meeting events
         #       - false positive events
         sums["tn"] = int((np.sum(np.subtract(event_types["tn"]["EVENTS"],
-                                             event_types["tn"]["LABELGT"]))
-                          - np.sum(np.subtract(fps_in_tn["LABELPR"],
-                                               fps_in_tn["LABELGT"]))))
+                                             event_types["tn"]["ENTERGT"]))
+                          - np.sum(np.subtract(fps_in_tn["ENTERPR"],
+                                               fps_in_tn["ENTERGT"]))))
 
         # fns = total detected ground truth events
         #       - total predicted events
         sums["fn"] = int((np.sum(np.minimum(event_types["fn"]["EVENTS"],
-                                            event_types["fn"]["LABELGT"]))
-                         - np.sum(event_types["fn"]["LABELPR"])))
+                                            event_types["fn"]["ENTERGT"]))
+                         - np.sum(event_types["fn"]["ENTERPR"])))
 
         # Sanity check to ensure calculated sums match total events
         assert sums["te"] == sums["tp"] + sums["fp"] + sums["tn"] + sums["fn"]
@@ -348,12 +351,14 @@ def evaluate_results(args, df_comparison):
         file.writelines(results)
         file.close()
 
-    event_dict = split_comparison(df_comparison.copy())
-    sum_dict = sum_counts(event_dict, df_comparison)
+    result_dict = split_comparison(df_comparison.copy())
+    sum_dict = sum_counts(result_dict, df_comparison)
     export_results(args.default_dir+args.custom_dir+"results/", sum_dict)
 
+    return result_dict
 
-def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
+
+def plot_result(args, df_prediction, df_groundtruth=None, flag=None):
     """Plot comparisons between estimation and ground truth for segments."""
     save_directory = args.default_dir + args.custom_dir + "results/plots/"
     if not os.path.isdir(save_directory):
@@ -364,11 +369,11 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
                   .format(save_directory))
 
     df_prediction = df_prediction.reset_index("TMSTAMP")
-    es_series = df_prediction[key]
+    es_series = df_prediction["ENTERPR"]
 
     if df_groundtruth is not None:
         df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
-        gt_series = df_groundtruth[key]
+        gt_series = df_groundtruth["ENTERGT"]
 
         difference = es_series.subtract(gt_series)
         false_positives = difference.where(difference > 0, 0)
@@ -395,7 +400,7 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
         series_plots.append(false_positives.cumsum())
         series_plots.append(false_positives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
-        title = "False Positive Error for {}".format(key)
+        title = "False Positive Error for Enter Chimney Count"
         xlabel = "Frame Number"
         ylabel = "False Positives"
 
@@ -403,7 +408,7 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
         series_plots.append(false_negatives.cumsum())
         series_plots.append(false_negatives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
-        title = "False Negative Error for {}".format(key)
+        title = "False Negative Error for Enter Chimney Count"
         xlabel = "Frame Number"
         ylabel = "False Negatives"
 
@@ -426,15 +431,15 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
     # -- create something independent of data for placement?
     # ax2.text(7500, 1150, 'Total = {} Errors'.format(over_error.sum()),
     #          bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
-    plt.savefig(save_directory + '{0}_{1}.png'.format(key, flag),
+    plt.savefig(save_directory + '{}.png'.format(flag),
                 bbox_inches='tight')
 
 
-def feature_engineering(args, df_comparison):
+def feature_engineering(args, result_dict):
     """Testing function for exploring different features."""
 
     def split_data():
-        detected_events = df_comparison.dropna()
+        detected_events = None  # df_comparison.dropna()
         true_positives = detected_events[detected_events["EXT_CHM"] > 0]
         true_negatives = detected_events[detected_events["EXT_CHM"] == 0]
 
@@ -624,10 +629,12 @@ def feature_engineering(args, df_comparison):
         fig = ax.get_figure()
         fig.savefig(save_directory+'{}.png'.format(name))
 
-    tp, tn = split_data()
-    visualize_path(tp, tn)
+    test = None
 
-    tp_features = compute_feature_vectors(tp)
-    tn_features = compute_feature_vectors(tn)
-    for column in tp_features.columns:
-        plot_column_pair(tp_features[column], tn_features[column], column)
+    # tp, tn = split_data()
+    # visualize_path(tp, tn)
+    #
+    # tp_features = compute_feature_vectors(tp)
+    # tn_features = compute_feature_vectors(tn)
+    # for column in tp_features.columns:
+    #     plot_column_pair(tp_features[column], tn_features[column], column)
