@@ -201,7 +201,7 @@ if __name__ == "__main__":
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2017-05-18 00:00:00.000000000"
+                            default="2017-05-18 20:58:49.266666"
                             )
         parser.add_argument("-n",
                             "--chimney",

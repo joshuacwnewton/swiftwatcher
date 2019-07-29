@@ -23,6 +23,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots()
 
+
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from a video file
     using two FIFO queues. More or less collections.deques with additional
