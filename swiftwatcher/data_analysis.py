@@ -29,8 +29,7 @@ def empty_gt_generator(args):
     ground truth annotations. Ensures formatting is consistent."""
 
     # Create save directory if it does not already exist
-    gt_dir = args.groundtruth.split("/")[0]
-    save_directory = args.default_dir+gt_dir+"/"
+    save_directory = args.default_dir
     if not os.path.isdir(save_directory):
         try:
             os.makedirs(save_directory)
@@ -42,20 +41,24 @@ def empty_gt_generator(args):
     frame_queue = FrameQueue(args)
     nano = (1/frame_queue.fps) * 1e9
     frame_queue.stream.release()  # Not needed once fps is extracted
-    num_timestamps = args.load[1] - args.load[0] + 1
+    num_timestamps = frame_queue.total_frames
     duration = (num_timestamps - 1) * nano
-    indices = pd.date_range(start=args.timestamp,
-                            end=(pd.Timestamp(args.timestamp) +
-                                 pd.Timedelta(duration, 'ns')),
-                            periods=num_timestamps)
+    timestamps = pd.date_range(start=args.timestamp,
+                              end=(pd.Timestamp(args.timestamp) +
+                                   pd.Timedelta(duration, 'ns')),
+                              periods=num_timestamps)
+    timestamps = timestamps.round('us')
 
     # Create a Series of frame numbers which correspond to the timestamps
     framenumbers = np.array(range(num_timestamps))
 
+    tuples = list(zip(timestamps, framenumbers))
+    index = pd.MultiIndex.from_tuples(tuples, names=['TMSTAMP', 'FRM_NUM'])
+
     # Create an empty DataFrame for ground truth annotations to be put into
-    df_empty = pd.DataFrame(framenumbers, index=indices)
-    df_empty.index.rename("TMSTAMP", inplace=True)
-    df_empty.columns = ["FRM_NUM"]
+    df_empty = pd.DataFrame(index=index)
+    df_empty["ENTERGT"] = 0
+    df_empty["EXIT_GT"] = 0
 
     # Save for editing in Excel/LibreOffice Calc/etc.
     df_empty.to_csv(save_directory+"empty-groundtruth.csv")

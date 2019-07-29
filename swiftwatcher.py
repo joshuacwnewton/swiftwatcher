@@ -41,6 +41,8 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
+    data.empty_gt_generator(args)
+
     # Debugging/testing modes of functionality
     if args._extract:
         vid.extract_frames(args)
@@ -169,13 +171,13 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-a",
                             "--_analyse",
                             help="Analyse results by comparing to groundtruth",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-b",
                             "--_production",
@@ -194,12 +196,12 @@ if __name__ == "__main__":
         parser.add_argument("-f",
                             "--filename",
                             help="Name of video file",
-                            default="NPD 460 CHSW 2019 June 13.mp4"
+                            default="ch04_20170518205849.mp4"
                             )
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2019-06-13 00:00:00.000000000"
+                            default="2017-05-18 00:00:00.000000000"
                             )
         parser.add_argument("-n",
                             "--chimney",
