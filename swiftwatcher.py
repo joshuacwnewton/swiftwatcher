@@ -5,23 +5,22 @@
 # -TODO: Test smaller frame_queue for RPCA speed increase.
 #
 # test-automation:
-# -TODO: Read up on differences between JSON files and other storage types.
 # -TODO: Save algorithm parameters to a JSON file.
 # -TODO: Load algorithm parameters from a JSON file.
 # -TODO: Save command line arguments to JSON file.
 # -TODO: Load command line arguments from JSON file.
 #
 # timestamp-precision:
-# -TODO: Update empty-gt-generator for us timestamp precision.
+# -TODO: Update empty-gt-generator() for us timestamp precision.
 # -TODO: Explore source of timestamp rounding error (off-by-one microsecond?)
 #
 # feature-engineering:
 # -TODO: Implement/test idea for relative position feature.
 #
-# segmentation-improvements:
-# -TODO: Temporarily remove overlay from segmentation.
-# -TODO: Find a way to test segmentation only.
-# -TODO: Look at output of canny edge detection.
+# testing-old-data:
+# -TODO: Add proper fields (ENTERGT, EXIT_GT to empty-gt-generator()
+# -TODO: Create empty ground truth file for old video.
+# -TODO: Annotate ch4_2017*.mp4  video file.
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
