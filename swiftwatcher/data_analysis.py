@@ -20,6 +20,9 @@ import cv2
 # import seaborn
 # seaborn.set()
 
+# Needed for pairwise iteration
+from itertools import tee
+
 
 def empty_gt_generator(args):
     """Helper function for generating an empty file to store manual
@@ -78,18 +81,6 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def generate_comparison(df_eventinfo, df_groundtruth):
-    """Generate dataframe comparing events in df_eventinfo with frame
-    counts in df_groundtruth."""
-    df_groundtruth = df_groundtruth[df_groundtruth["EXT_CHM"] > 0]
-    df_eventinfo_cp = df_eventinfo.copy()
-    df_eventinfo_cp["EXT_CHM"] = None
-    df_combined = df_eventinfo.combine_first(df_groundtruth)
-    df_combined["EXT_CHM"] = df_combined["EXT_CHM"].fillna(0)
-
-    return df_combined
-
-
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
@@ -123,11 +114,73 @@ def generate_classifications(df_features):
 
     df_labels = pd.DataFrame(index=df_features.index)
 
-    df_labels["EXT_CHM"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
+    df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                bins=[-180, -125, -55, 180],
                                                labels=False)]
+    # Give each classified event a value of 1, so that when multiple events
+    # on a single timestamp are merged, it will clearly show EVENTS = (>=2)
+    df_labels["EVENTS"] = 1
 
     return df_labels
+
+
+def generate_comparison(df_prediction, df_groundtruth):
+    """Generate dataframe comparing events in df_eventinfo with frame
+    counts in df_groundtruth."""
+    def fix_offbyone(df_comparison):
+        def pairwise(iterable):
+            """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+            a, b = tee(iterable)
+            next(b, None)
+            return zip(a, b)
+
+        rows_to_drop = []
+        for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
+            if pd.isna(row1["EVENTS"]):
+                if (i2[1] == i1[1] + 1) and (
+                        row2["ENTERPR"] >= row2["ENTERGT"]):
+                    # Replace nan value with 0 for addition below
+                    row1["ENTERPR"] = 0
+                    row1["EVENTS"] = 0
+
+                    # Merge row values into one row, delete inaccurate row
+                    new_values = row1.values + row2.values
+                    row1["EVENTS"] = new_values[0]
+                    row1["ENTERGT"] = new_values[1]
+                    row1["ENTERPR"] = new_values[2]
+                    rows_to_drop.append(i2)
+
+            if pd.isna(row2["EVENTS"]):
+                if (i1[1] == i2[1] - 1) and (
+                        row1["ENTERPR"] >= row1["ENTERGT"]):
+                    # Replace nan value with 0 for addition below
+                    row2["ENTERPR"] = 0
+                    row2["EVENTS"] = 0
+
+                    # Merge row values into one row, delete inaccurate row
+                    new_values = row1.values + row2.values
+                    row2["EVENTS"] = new_values[0]
+                    row2["ENTERGT"] = new_values[1]
+                    row2["ENTERPR"] = new_values[2]
+                    rows_to_drop.append(i1)
+
+        df_comparison_rm = df_comparison.drop(index=rows_to_drop)
+
+        df_comparison_rm = df_comparison_rm.fillna(0)
+
+        return df_comparison_rm
+
+    df_groundtruth = df_groundtruth[df_groundtruth["ENTERGT"] > 0]
+    df_prediction_cp = df_prediction.copy()
+    df_prediction_cp = df_prediction_cp.reset_index().groupby(['TMSTAMP',
+                                                              'FRM_NUM']).sum()
+    df_prediction_cp["ENTERGT"] = None
+    df_combined = df_prediction_cp.combine_first(df_groundtruth)
+    df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
+
+    df_combined_fixed = fix_offbyone(df_combined)
+
+    return df_combined_fixed
 
 
 def import_dataframes(args, df_list):
@@ -161,75 +214,91 @@ def export_dataframes(args, dataframe_dict):
         value.to_csv(save_directory+"{}.csv".format(key))
 
 
-def evaluate_results(args, df_groundtruth, df_prediction):
+def evaluate_results(args, df_comparison):
     """Save the bird count estimations from image processing to csv files."""
 
-    def prepare_dataframes(pred_unprocessed, gt_unprocessed):
-        # Merge multiple predicted events from same frame into single row
-        pred_merged = pred_unprocessed.reset_index().groupby(['TMSTAMP',
-                                                              'FRM_NUM']).sum()
-        pred_nonzero = pred_merged.loc[(pred_merged['EXT_CHM'] > 0)]
+    def split_comparison(comparison):
+        event_types = {}
 
+        # A timestamp contains an event labeled 'positive' if the number of
+        # predicted birds is nonzero.
+        positives = comparison[comparison["ENTERPR"] > 0]
+        # A timestamp contains a TP event if the ground truth count
+        # (corresponding to a predicted count) is also nonzero.
+        event_types["tp"] = positives[positives["ENTERGT"] > 0]
+        # A timestamp contains a FP event if the predicted count is greater
+        # than the corresponding groundtruth count.
+        event_types["fp"] = positives[positives["ENTERPR"] >
+                                      positives["ENTERGT"]]
 
-        # Cap groundtruth to specified frame range (done because sometimes I've
-        # tested with a subset of frames, rather than the entire video.)
-        if args.load[0] > 0:
-            index_less = gt_unprocessed[
-                gt_unprocessed.index.levels[1] < args.load[0]].index
-            gt_unprocessed.drop(index_less, inplace=True)
-        if args.load[1] > args.load[0]:
-            index_more = gt_unprocessed[
-                gt_unprocessed.index.levels[1] > args.load[1]].index
-            gt_unprocessed.drop(index_more, inplace=True)
-        gt_nonzero = gt_unprocessed[gt_unprocessed["EXT_CHM"] > 0]
+        # A timestamp contains an event labeled 'negative' if the number of
+        # predicted birds is less than the number of detected events.
+        negatives = comparison[comparison["ENTERPR"] < comparison["EVENTS"]]
+        # A timestamp contains a TN event if the number of events detected
+        # is greater than the ground truth count.
+        event_types["tn"] = negatives[negatives["EVENTS"] >
+                                      negatives["ENTERGT"]]
+        # A timestamp contains a FN event if predicted count is less than
+        # the corresponding groundtruth count.
+        event_types["fn"] = negatives[negatives["ENTERPR"] <
+                                      negatives["ENTERGT"]]
 
-        # Re-index groundtruth and predictions to have shared set of indexes
-        union_index = pred_nonzero.index.union(gt_nonzero.index)
-        gt_processed = gt_nonzero.reindex(index=union_index, fill_value=0)
-        pred_processed = pred_nonzero.reindex(index=union_index, fill_value=0)
+        # A timestamp contains a missed detection if the number of detected
+        # events is lower than the ground truth count.
+        event_types["md"] = comparison[comparison["EVENTS"] <
+                                       comparison["ENTERGT"]]
 
-        return pred_processed, gt_processed
+        return event_types
 
-    def calculate_metrics(pred, pred_full, gt, gt_full):
-        missed_event_loc = gt.index.difference(pred.index)
-        missed_events = gt.loc[missed_event_loc, :]["EXT_CHM"].sum()
-        error_full = np.subtract(pred_full.values, gt_full.values)
-        correct = np.minimum(pred_full.values, gt_full.values)
+    def sum_counts(event_types, full_comparison):
+        sums = {}
 
-        metrics = {
-            "true_positives": correct.reshape((-1,)),
-            "false_positives": np.maximum(error_full, 0).reshape((-1,)),
-            "false_negatives": np.minimum(error_full, 0).reshape((-1,)),
-            "abs_error": abs(error_full).reshape((-1,)),
-            "net_error": error_full.reshape((-1,))
-        }
+        sums["te"] = int(np.sum(full_comparison["EVENTS"]))
+        sums["gt"] = int(np.sum(full_comparison["ENTERGT"]))
 
-        metrics = pd.DataFrame(metrics, index=gt_full.index)
-        # These "metrics_totals" calculates are a bit messy, and I would like
-        # to take some time to make it a bit clearer. Having different counts
-        # at different stages of the algorithm (segmentation, classification)
-        # can be a bit hard to track.
-        metric_totals = {
-            "te": pred["EXT_CHM"].size,
-            "pp": pred["EXT_CHM"].sum(),
-            "pn": pred["EXT_CHM"].size - pred["EXT_CHM"].sum(),
-            "ap": gt["EXT_CHM"].sum(),
-            "me": missed_events,
-            "tp": metrics["true_positives"].sum(),
-            "fp": metrics["false_positives"].sum(),
-            "tn": pred["EXT_CHM"].size-(metrics["true_positives"].sum() +
-                                        metrics["false_positives"].sum() +
-                                        (-1*metrics["false_negatives"].sum()
-                                         - missed_events)),
-            "fn": -1*metrics["false_negatives"].sum() - missed_events,
-            "md": -1*metrics["false_negatives"].sum(),
-            "ae": metrics["abs_error"].sum(),
-            "ne": metrics["net_error"].sum(),
-        }
+        # mds = total ground truth events - total events detected
+        sums["md"] = int(np.sum(np.subtract(event_types["md"]["ENTERGT"],
+                                            event_types["md"]["EVENTS"])))
 
-        return metric_totals
+        # tps = whichever is lowest between predicted and ground truth events
+        sums["tp"] = int(np.sum(np.minimum(event_types["tp"]["ENTERPR"],
+                                           event_types["tp"]["ENTERGT"])))
 
-    def save_evaluation(save_directory, totals):
+        # fps = any predicted events that were not present in ground truth
+        sums["fp"] = int(np.sum(np.subtract(event_types["fp"]["ENTERPR"],
+                                            event_types["fp"]["ENTERGT"])))
+
+        # A timestamp containing a true negative can also simultaneously have
+        # a false positive: both meet criteria of events > ground truth count.
+        fps_in_tn = event_types["tn"][event_types["tn"]["ENTERPR"] >
+                                      event_types["tn"]["ENTERGT"]]
+        # tns = total criteria-meeting events
+        #       - false positive events
+        sums["tn"] = int((np.sum(np.subtract(event_types["tn"]["EVENTS"],
+                                             event_types["tn"]["ENTERGT"]))
+                          - np.sum(np.subtract(fps_in_tn["ENTERPR"],
+                                               fps_in_tn["ENTERGT"]))))
+
+        # fns = total detected ground truth events
+        #       - total predicted events
+        sums["fn"] = int((np.sum(np.minimum(event_types["fn"]["EVENTS"],
+                                            event_types["fn"]["ENTERGT"]))
+                         - np.sum(event_types["fn"]["ENTERPR"])))
+
+        # Sanity check to ensure calculated sums match total events
+        assert sums["te"] == sums["tp"] + sums["fp"] + sums["tn"] + sums["fn"]
+
+        sums["precision"] = 100 * round(sums["tp"] /
+                                        (sums["tp"] + sums["fp"]), 4)
+        sums["recall"] = 100 * round(sums["tp"] /
+                                     (sums["tp"] + sums["fn"] + sums["md"]), 4)
+        sums["accuracy"] = 100 * round((sums["tp"] + sums["tn"]) /
+                                       (sums["tp"] + sums["tn"] + sums["fp"]
+                                        + sums["fn"] + sums["md"]), 4)
+
+        return sums
+
+    def export_results(save_directory, sums):
         if not os.path.isdir(save_directory):
             try:
                 os.makedirs(save_directory)
@@ -239,55 +308,57 @@ def evaluate_results(args, df_groundtruth, df_prediction):
 
         results = [
             "EVENT DETECTION\n",
-            "   -{} possible swifts to detect.\n".format(totals["ap"]),
-            "   -{}/{} swifts were detected.\n".format(totals["ap"] -
-                                                       totals["me"],
-                                                       totals["ap"]),
-            "   -{}/{} swifts were missed entirely.".format(totals["me"],
-                                                            totals["ap"]),
+            "   -{} possible swifts to detect.\n".format(sums["gt"]),
+            "   -{}/{} swifts were detected.\n".format(sums["gt"] -
+                                                       sums["md"],
+                                                       sums["gt"]),
+            "   -{}/{} swifts were missed entirely.".format(sums["md"],
+                                                            sums["gt"]),
             " (Due to poor matching, overlapping, etc.)\n",
             "\n",
             "EVENT CLASSIFICATION\n",
-            "   -{} events were detected by"
-            " segmentation/matching.\n".format(totals["te"]),
-            "   -{}/{} events labeled as positives.\n".format(totals["pp"],
-                                                              totals["te"]),
-            "       -{}/{} labeled positives were TPs.\n".format(totals["tp"],
-                                                                 totals["pp"]),
-            "       -{}/{} labeled positives were FPs.\n".format(totals["fp"],
-                                                                 totals["pp"]),
-            "   -{}/{} events were labeled negatives.\n".format(totals["pn"],
-                                                                totals["te"]),
-            "       -{}/{} labeled negatives were TNs.\n".format(totals["tn"],
-                                                                 totals["pn"]),
-            "       -{}/{} labeled negatives were FNs.\n".format(totals["fn"],
-                                                                 totals["pn"]),
+            "   -{} events were detected by segmentation/matching."
+            "\n".format(sums["te"]),
+            "   -{}/{} events labeled as positives.\n".format(sums["tp"] +
+                                                              sums["fp"],
+                                                              sums["te"]),
+            "       -{}/{} labeled positives were TPs.\n".format(sums["tp"],
+                                                                 sums["tp"] +
+                                                                 sums["fp"]),
+            "       -{}/{} labeled positives were FPs.\n".format(sums["fp"],
+                                                                 sums["tp"] +
+                                                                 sums["fp"]),
+            "   -{}/{} events were labeled negatives.\n".format(sums["tn"] +
+                                                                sums["fn"],
+                                                                sums["te"]),
+            "       -{}/{} labeled negatives were TNs.\n".format(sums["tn"],
+                                                                 sums["tn"] +
+                                                                 sums["fn"]),
+            "       -{}/{} labeled negatives were FNs.\n".format(sums["fn"],
+                                                                 sums["tn"] +
+                                                                 sums["fn"]),
             "\n",
             "FINAL EVALUATION\n",
-            "   -{} missed segments + {} false negatives "
-            "= {} missed detections.\n".format(totals["me"], totals["fn"],
-                                               (totals["me"] + totals["fn"])),
-            "   -Precision: {}\n".format(round(totals["tp"] /
-                                         (totals["tp"] + totals["fp"]), 4)),
-            "   -Recall: {}\n".format(round(totals["tp"] /
-                                      (totals["tp"] + totals["md"]), 4)),
-            "   -Accuracy: {}\n".format(round((totals["tp"] + totals["tn"]) /
-                                        (totals["tp"] + totals["tn"] +
-                                         totals["fp"] + totals["md"]), 4))
+            "   -Precision = {} TPs / ({} TPs + {} FPs)\n"
+            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fp"],
+                                           sums["precision"]),
+            "   -Recall    = {} TPs / ({} TPs + {} FNs + {} MSs)\n"
+            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fn"],
+                                           sums["md"], sums["recall"])
         ]
 
         file = open(save_directory+'results.txt', 'w')
         file.writelines(results)
         file.close()
 
-    df_prediction_full, df_groundtruth_full = prepare_dataframes(df_prediction,
-                                                                 df_groundtruth)
-    dict_totals = calculate_metrics(df_prediction, df_prediction_full,
-                                    df_groundtruth, df_groundtruth_full)
-    save_evaluation(args.default_dir+args.custom_dir+"results/", dict_totals)
+    result_dict = split_comparison(df_comparison.copy())
+    sum_dict = sum_counts(result_dict, df_comparison)
+    export_results(args.default_dir+args.custom_dir+"results/", sum_dict)
+
+    return result_dict
 
 
-def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
+def plot_result(args, df_prediction, df_groundtruth=None, flag=None):
     """Plot comparisons between estimation and ground truth for segments."""
     save_directory = args.default_dir + args.custom_dir + "results/plots/"
     if not os.path.isdir(save_directory):
@@ -298,11 +369,11 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
                   .format(save_directory))
 
     df_prediction = df_prediction.reset_index("TMSTAMP")
-    es_series = df_prediction[key]
+    es_series = df_prediction["ENTERPR"]
 
     if df_groundtruth is not None:
         df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
-        gt_series = df_groundtruth[key]
+        gt_series = df_groundtruth["ENTERGT"]
 
         difference = es_series.subtract(gt_series)
         false_positives = difference.where(difference > 0, 0)
@@ -329,7 +400,7 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
         series_plots.append(false_positives.cumsum())
         series_plots.append(false_positives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
-        title = "False Positive Error for {}".format(key)
+        title = "False Positive Error for Enter Chimney Count"
         xlabel = "Frame Number"
         ylabel = "False Positives"
 
@@ -337,7 +408,7 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
         series_plots.append(false_negatives.cumsum())
         series_plots.append(false_negatives.rolling(50).sum())
         legend = ["Cumulative Sum", "Rolling Counts"]
-        title = "False Negative Error for {}".format(key)
+        title = "False Negative Error for Enter Chimney Count"
         xlabel = "Frame Number"
         ylabel = "False Negatives"
 
@@ -360,15 +431,15 @@ def plot_result(args, key, df_prediction, df_groundtruth=None, flag=None):
     # -- create something independent of data for placement?
     # ax2.text(7500, 1150, 'Total = {} Errors'.format(over_error.sum()),
     #          bbox={'facecolor': 'red', 'alpha': 0.6, 'pad': 5})
-    plt.savefig(save_directory + '{0}_{1}.png'.format(key, flag),
+    plt.savefig(save_directory + '{}.png'.format(flag),
                 bbox_inches='tight')
 
 
-def feature_engineering(args, df_comparison):
+def feature_engineering(args, result_dict):
     """Testing function for exploring different features."""
 
     def split_data():
-        detected_events = df_comparison.dropna()
+        detected_events = None  # df_comparison.dropna()
         true_positives = detected_events[detected_events["EXT_CHM"] > 0]
         true_negatives = detected_events[detected_events["EXT_CHM"] == 0]
 
@@ -558,10 +629,12 @@ def feature_engineering(args, df_comparison):
         fig = ax.get_figure()
         fig.savefig(save_directory+'{}.png'.format(name))
 
-    tp, tn = split_data()
-    visualize_path(tp, tn)
+    test = None
 
-    tp_features = compute_feature_vectors(tp)
-    tn_features = compute_feature_vectors(tn)
-    for column in tp_features.columns:
-        plot_column_pair(tp_features[column], tn_features[column], column)
+    # tp, tn = split_data()
+    # visualize_path(tp, tn)
+    #
+    # tp_features = compute_feature_vectors(tp)
+    # tn_features = compute_feature_vectors(tn)
+    # for column in tp_features.columns:
+    #     plot_column_pair(tp_features[column], tn_features[column], column)

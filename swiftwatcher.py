@@ -58,31 +58,32 @@ def main(args, params):
         if args._process:
             dfs = data.import_dataframes(args, ["groundtruth"])
             dfs["eventinfo"] = df_eventinfo
-            dfs["comparison"] = data.generate_comparison(dfs["eventinfo"],
-                                                         dfs["groundtruth"])
             dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
             dfs["prediction"] = data.generate_classifications(dfs["features"])
+            dfs["comparison"] = data.generate_comparison(dfs["prediction"],
+                                                         dfs["groundtruth"])
             data.export_dataframes(args, dfs)
         else:
             try:
                 dfs = data.import_dataframes(args, df_list=["groundtruth",
                                                             "eventinfo",
-                                                            "comparison",
                                                             "features",
-                                                            "prediction"])
+                                                            "prediction",
+                                                            "comparison"])
             except FileNotFoundError:
                 print("[!] Dataframes not found! Try processing first?")
 
-        data.evaluate_results(args, dfs["groundtruth"], dfs["prediction"])
-        data.plot_result(args, "EXT_CHM",  dfs["prediction"],
+        results = data.evaluate_results(args, dfs["comparison"])
+        data.export_dataframes(args, results)
+        data.plot_result(args,  dfs["prediction"],
                          dfs["groundtruth"], flag="cumu_comparison")
-        data.plot_result(args, "EXT_CHM",  dfs["prediction"],
+        data.plot_result(args, dfs["prediction"],
                          dfs["groundtruth"], flag="false_positives")
-        data.plot_result(args, "EXT_CHM",  dfs["prediction"],
+        data.plot_result(args, dfs["prediction"],
                          dfs["groundtruth"], flag="false_negatives")
 
         # Experimental function for testing new features/classifiers
-        data.feature_engineering(args, dfs["comparison"])
+        data.feature_engineering(args, results)
 
     # The set of steps which would be run by an end-user
     if args._production:
@@ -172,7 +173,7 @@ if __name__ == "__main__":
                             )
         parser.add_argument("-a",
                             "--_analyse",
-                            help="Analyse results by comparing to ground truth",
+                            help="Analyse results by comparing to groundtruth",
                             action="store_true",
                             default=True
                             )
@@ -203,7 +204,9 @@ if __name__ == "__main__":
         parser.add_argument("-n",
                             "--chimney",
                             help="Bottom corners which define chimney edge",
-                            default=[(810, 435), (1160, 435)]
+                            default=[(810, 435), (1150, 435)]
+                            # [(798, 449), (1164, 423)] <- video1
+                            # [(810, 435), (1150, 435)] <- video2
                             )
 
     def set_processing_args():
@@ -221,7 +224,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-07-24_full-video/"
+                            default="/tests/2019-07-28_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",

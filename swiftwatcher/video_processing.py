@@ -20,6 +20,8 @@ from skimage import measure
 import utils.cm as cm
 import pandas as pd
 
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
 
 class FrameQueue:
     """Class for storing, describing, and manipulating frames from a video file
@@ -421,11 +423,35 @@ class FrameQueue:
                 self.queue[i] = np.reshape(s_columns[:, i],
                                            (self.height, self.width))
 
+        def edge_based_otsu(image):
+            # smoothed_image = cv2.medianBlur(image, 5)
+            smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
+                                                 sigmaSpace=1)
+            edge_image = cv2.Canny(smoothed_image, 100, 200)
+            mask = cv2.dilate(edge_image, np.ones((2, 2), np.uint8),
+                              iterations=2).astype(np.int)
+
+            # Change mask so all 0 values will make original image negative
+            # (Therefore excluding those values from otsu's thresholding)
+            mask[mask == 0] = (-256)
+            mask[mask == 255] = 0
+            masked_image = np.add(mask, smoothed_image).astype(np.uint8)
+
+            # Get a threshold value from only the edge (+ edge-adjacent) values
+            ret, _ = cv2.threshold(masked_image, 0, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+            _, thresholded_image = cv2.threshold(smoothed_image,
+                                                 thresh=ret, maxval=255,
+                                                 type=cv2.THRESH_TOZERO)
+
+            return thresholded_image
+
         def segment_visualization():
             # Add roi mask to each stage for visualization.
             for keys, key_values in seg.items():
-                seg[keys] = cv2.addWeighted(self.roi_mask, 0.25,
-                                            key_values.astype(np.uint8), 0.75,
+                seg[keys] = cv2.addWeighted(self.roi_mask, 0.05,
+                                            key_values.astype(np.uint8), 0.95,
                                             0)
 
             # Add filler images if not enough stages to fill Nx3 grid
@@ -488,8 +514,8 @@ class FrameQueue:
 
         # Dictionary for storing segmentation stages (used for visualization)
         seg = {
-            "frame": np.reshape(self.queue[-1],
-                                (self.height, self.width))
+            # "frame": np.reshape(self.queue[-1],
+            #                     (self.height, self.width))
         }
 
         # Apply Robust PCA method to isolate regions of motion
@@ -502,21 +528,40 @@ class FrameQueue:
                 rpca(params["ialm_lmbda"], params["ialm_tol"],
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
         seg["RPCA_output"] = self.queue[-1]
+        _, seg["RPCA_hardthr"] = cv2.threshold(list(seg.values())[-1],
+                                               thresh=15,
+                                               maxval=255,
+                                               type=cv2.THRESH_TOZERO)
+        seg["RPCA_otsuthr"] = edge_based_otsu(list(seg.values())[-1])
+        seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
+                                              size=(3, 3)).astype(np.uint8)
 
-        # Apply thresholding to retain strongest areas and discard the rest
-        threshold_str = "thresh_{}".format(params["thr_value"])
-        _, seg[threshold_str] = \
-            cv2.threshold(list(seg.values())[-1],
-                          thresh=params["thr_value"],
-                          maxval=255,
-                          type=params["thr_type"])
 
-        # Discard areas where 2x2 structuring element will not fit
-        for i in range(len(params["grey_op_SE"])):
-            seg["grey_opening{}".format(i+1)] = \
-                img.grey_opening(list(seg.values())[-1],
-                                 size=params["grey_op_SE"][i]).astype(np.uint8)
+        # plt.cla()
+        # plt.hist(seg["RPCA_masked"].ravel(), 256, [0, 256])
+        # fig.canvas.draw()
+        # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+        # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        # data_gray = cv2.cvtColor(data, cv2.COLOR_BGR2GRAY)
+        # seg["histogram"] = cv2.resize(data_gray, (seg["RPCA_masked"].shape[1],
+        #                                           seg["RPCA_masked"].shape[0]))
 
+
+
+        # # Apply thresholding to retain strongest areas and discard the rest
+        # threshold_str = "thresh_{}".format(params["thr_value"])
+        # _, seg[threshold_str] = \
+        #     cv2.threshold(list(seg.values())[-1],
+        #                   thresh=params["thr_value"],
+        #                   maxval=255,
+        #                   type=params["thr_type"])
+        #
+        # # Discard areas where 2x2 structuring element will not fit
+        # for i in range(len(params["grey_op_SE"])):
+        #     seg["grey_opening{}".format(i+1)] = \
+        #         img.grey_opening(list(seg.values())[-1],
+        #                          size=params["grey_op_SE"][i]).astype(np.uint8)
+        #
         # Segment using connected component labeling
         num_components, labeled_frame = \
             cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
@@ -809,12 +854,15 @@ def process_frames(args, params):
     extracted frames and determine bird counts for that sequence."""
 
     def create_dataframe(passed_list):
-        dataframe = pd.DataFrame(passed_list,
-                                 columns=list(passed_list[0].keys())
-                                 ).astype('object')
-        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
-        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
-        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        if passed_list:
+            dataframe = pd.DataFrame(passed_list,
+                                     columns=list(passed_list[0].keys())
+                                     ).astype('object')
+            dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+            dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+            dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        else:
+            dataframe = pd.DataFrame(passed_list)
 
         return dataframe
 
