@@ -44,7 +44,7 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    # data.empty_gt_generator(args)
+    data.empty_gt_generator(args)
 
     # Debugging/testing modes of functionality
     if args._extract:
@@ -67,13 +67,18 @@ def main(args, params):
             dfs["prediction"] = data.generate_classifications(dfs["features"])
             dfs["comparison"] = data.generate_comparison(dfs["prediction"],
                                                          dfs["groundtruth"])
+            data.export_dataframes(args, dfs)
         else:
             try:
-                dfs = data.import_dataframes(args, df_list=["groundtruth",
+                dfs = data.import_dataframes(args, df_list=[
+                                                            "groundtruth",
                                                             "eventinfo",
                                                             "features",
                                                             "prediction",
-                                                            "comparison"])
+                                                            # "comparison"
+                                                            ])
+                dfs["comparison"] = data.generate_comparison(dfs["prediction"],
+                                                             dfs["groundtruth"])
             except FileNotFoundError:
                 print("[!] Dataframes not found! Try processing first?")
 
@@ -88,11 +93,6 @@ def main(args, params):
 
         # Experimental function for testing new features/classifiers
         data.feature_engineering(args, results)
-
-    dfs = {
-        "evemtinfo": df_eventinfo
-    }
-    data.export_dataframes(args, dfs)
 
     # The set of steps which would be run by an end-user
     if args._production:
@@ -178,13 +178,13 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-a",
                             "--_analyse",
                             help="Analyse results by comparing to groundtruth",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-b",
                             "--_production",
@@ -215,6 +215,7 @@ if __name__ == "__main__":
                             "--chimney",
                             help="Bottom corners which define chimney edge",
                             default=[(748, 691), (920, 683)]
+                            # [(748, 691), (920, 683)]  <- CH04_
                             # [(798, 449), (1164, 423)] <- video1
                             # [(810, 435), (1150, 435)] <- video2
                             )
@@ -229,17 +230,17 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([0, -1])
+                            default=([7200, 16199])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-07-29_full-video-2/"
+                            default="tests/2019-07-30_partial/"
                             )
         parser.add_argument("-v",
                             "--visual",
                             help="Output visualization of frame processing",
-                            default=False
+                            default=True
                             )
 
     parser = ap.ArgumentParser()

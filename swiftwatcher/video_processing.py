@@ -377,7 +377,7 @@ class FrameQueue:
 
         convert_grayscale()
         crop_frame()
-        pyramid_down()
+        # pyramid_down()
 
         if not passed_frame:
             self.queue[index] = frame
@@ -536,35 +536,8 @@ class FrameQueue:
                                                type=cv2.THRESH_TOZERO)
         seg["RPCA_otsuthr"] = edge_based_otsu(list(seg.values())[-1])
         seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
-                                              size=(3, 3)).astype(np.uint8)
+                                              size=(2, 2)).astype(np.uint8)
 
-
-        # plt.cla()
-        # plt.hist(seg["RPCA_masked"].ravel(), 256, [0, 256])
-        # fig.canvas.draw()
-        # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-        # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        # data_gray = cv2.cvtColor(data, cv2.COLOR_BGR2GRAY)
-        # seg["histogram"] = cv2.resize(data_gray, (seg["RPCA_masked"].shape[1],
-        #                                           seg["RPCA_masked"].shape[0]))
-
-
-
-        # # Apply thresholding to retain strongest areas and discard the rest
-        # threshold_str = "thresh_{}".format(params["thr_value"])
-        # _, seg[threshold_str] = \
-        #     cv2.threshold(list(seg.values())[-1],
-        #                   thresh=params["thr_value"],
-        #                   maxval=255,
-        #                   type=params["thr_type"])
-        #
-        # # Discard areas where 2x2 structuring element will not fit
-        # for i in range(len(params["grey_op_SE"])):
-        #     seg["grey_opening{}".format(i+1)] = \
-        #         img.grey_opening(list(seg.values())[-1],
-        #                          size=params["grey_op_SE"][i]).astype(np.uint8)
-        #
-        # Segment using connected component labeling
         num_components, labeled_frame = \
             cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
 

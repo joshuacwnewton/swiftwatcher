@@ -137,35 +137,39 @@ def generate_comparison(df_prediction, df_groundtruth):
             next(b, None)
             return zip(a, b)
 
+        # Multiindex -> Single FRM_NUM index meant that I had to change
+        # i1[1], i2[1] -> i1, i2.
+        # I'd like to come up with some way to test on videos with GT that
+        # have accurate timestamps (and ones that don't) but this hacky
+        # bit is probably fine for August experimentation
+
         rows_to_drop = []
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
             if pd.isna(row1["EVENTS"]):
-                if (i2[1] == i1[1] + 1) and (
-                        row2["ENTERPR"] >= row2["ENTERGT"]):
+                if (i2 == i1 + 1) and (row2["ENTERPR"] > row2["ENTERGT"]):
                     # Replace nan value with 0 for addition below
                     row1["ENTERPR"] = 0
                     row1["EVENTS"] = 0
 
                     # Merge row values into one row, delete inaccurate row
-                    new_values = row1.values + row2.values
-                    row1["EVENTS"] = new_values[0]
-                    row1["ENTERGT"] = new_values[1]
-                    row1["ENTERPR"] = new_values[2]
-                    rows_to_drop.append(i2)
+                    new_values = row1 + row2
+                    row2["EVENTS"] = new_values["EVENTS"]
+                    row2["ENTERGT"] = new_values["ENTERGT"]
+                    row2["ENTERPR"] = new_values["ENTERPR"]
+                    rows_to_drop.append(i1)
 
             if pd.isna(row2["EVENTS"]):
-                if (i1[1] == i2[1] - 1) and (
-                        row1["ENTERPR"] >= row1["ENTERGT"]):
+                if (i1 == i2 - 1) and (row1["ENTERPR"] > row1["ENTERGT"]):
                     # Replace nan value with 0 for addition below
                     row2["ENTERPR"] = 0
                     row2["EVENTS"] = 0
 
                     # Merge row values into one row, delete inaccurate row
-                    new_values = row1.values + row2.values
-                    row2["EVENTS"] = new_values[0]
-                    row2["ENTERGT"] = new_values[1]
-                    row2["ENTERPR"] = new_values[2]
-                    rows_to_drop.append(i1)
+                    new_values = row1 + row2
+                    row1["EVENTS"] = new_values["EVENTS"]
+                    row1["ENTERGT"] = new_values["ENTERGT"]
+                    row1["ENTERPR"] = new_values["ENTERPR"]
+                    rows_to_drop.append(i2)
 
         df_comparison_rm = df_comparison.drop(index=rows_to_drop)
 
@@ -178,6 +182,11 @@ def generate_comparison(df_prediction, df_groundtruth):
     df_prediction_cp = df_prediction_cp.reset_index().groupby(['TMSTAMP',
                                                               'FRM_NUM']).sum()
     df_prediction_cp["ENTERGT"] = None
+
+    if "TMSTAMP" not in df_groundtruth.index.names:
+        df_prediction_cp = df_prediction_cp.reset_index(level=[0])
+        df_prediction_cp = df_prediction_cp.drop(columns="TMSTAMP")
+
     df_combined = df_prediction_cp.combine_first(df_groundtruth)
     df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
 
@@ -196,9 +205,13 @@ def import_dataframes(args, df_list):
     dfs = {}
     for df_name in df_list:
         dfs[df_name] = pd.read_csv(load_directory+df_name+".csv")
-        dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
-        dfs[df_name]["TMSTAMP"] = dfs[df_name]["TMSTAMP"].dt.round('us')
-        dfs[df_name].set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        if "TMSTAMP" in dfs[df_name].columns:
+            dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
+            dfs[df_name]["TMSTAMP"] = dfs[df_name]["TMSTAMP"].dt.round('us'
+                                                                       '')
+            dfs[df_name].set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+        else:
+            dfs[df_name].set_index(["FRM_NUM"], inplace=True)
 
     return dfs
 
@@ -256,37 +269,21 @@ def evaluate_results(args, df_comparison):
     def sum_counts(event_types, full_comparison):
         sums = {}
 
-        sums["te"] = int(np.sum(full_comparison["EVENTS"]))
         sums["gt"] = int(np.sum(full_comparison["ENTERGT"]))
-
-        # mds = total ground truth events - total events detected
+        sums["te"] = int(np.sum(full_comparison["EVENTS"]))
         sums["md"] = int(np.sum(np.subtract(event_types["md"]["ENTERGT"],
                                             event_types["md"]["EVENTS"])))
 
-        # tps = whichever is lowest between predicted and ground truth events
+        # Breakdown of events labeled "positive"
+        sums["p"] = int(np.sum(full_comparison["ENTERPR"]))
         sums["tp"] = int(np.sum(np.minimum(event_types["tp"]["ENTERPR"],
                                            event_types["tp"]["ENTERGT"])))
+        sums["fp"] = sums["p"] - sums["tp"]
 
-        # fps = any predicted events that were not present in ground truth
-        sums["fp"] = int(np.sum(np.subtract(event_types["fp"]["ENTERPR"],
-                                            event_types["fp"]["ENTERGT"])))
-
-        # A timestamp containing a true negative can also simultaneously have
-        # a false positive: both meet criteria of events > ground truth count.
-        fps_in_tn = event_types["tn"][event_types["tn"]["ENTERPR"] >
-                                      event_types["tn"]["ENTERGT"]]
-        # tns = total criteria-meeting events
-        #       - false positive events
-        sums["tn"] = int((np.sum(np.subtract(event_types["tn"]["EVENTS"],
-                                             event_types["tn"]["ENTERGT"]))
-                          - np.sum(np.subtract(fps_in_tn["ENTERPR"],
-                                               fps_in_tn["ENTERGT"]))))
-
-        # fns = total detected ground truth events
-        #       - total predicted events
-        sums["fn"] = int((np.sum(np.minimum(event_types["fn"]["EVENTS"],
-                                            event_types["fn"]["ENTERGT"]))
-                         - np.sum(event_types["fn"]["ENTERPR"])))
+        # Breakdown of events labeled "negative"
+        sums["n"] = int(np.sum(full_comparison["EVENTS"]) - sums["p"])
+        sums["fn"] = (sums["gt"] - sums["md"]) - sums["tp"]
+        sums["tn"] = sums["n"] - sums["fn"]
 
         # Sanity check to ensure calculated sums match total events
         assert sums["te"] == sums["tp"] + sums["fp"] + sums["tn"] + sums["fn"]
@@ -375,7 +372,8 @@ def plot_result(args, df_prediction, df_groundtruth=None, flag=None):
     es_series = df_prediction["ENTERPR"]
 
     if df_groundtruth is not None:
-        df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
+        if "TMSTAMP" in df_groundtruth.index.names:
+            df_groundtruth = df_groundtruth.reset_index("TMSTAMP")
         gt_series = df_groundtruth["ENTERGT"]
 
         difference = es_series.subtract(gt_series)
