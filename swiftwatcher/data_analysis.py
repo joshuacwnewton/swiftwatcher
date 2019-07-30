@@ -145,8 +145,8 @@ def generate_comparison(df_prediction, df_groundtruth):
 
         rows_to_drop = []
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
-            if pd.isna(row1["EVENTS"]):
-                if (i2 == i1 + 1) and (row2["ENTERPR"] > row2["ENTERGT"]):
+            if pd.isna(row1["EVENTS"]) and i1 not in rows_to_drop:
+                if (i2[1] == i1[1] + 1) and (row2["ENTERPR"] > row2["ENTERGT"]):
                     # Replace nan value with 0 for addition below
                     row1["ENTERPR"] = 0
                     row1["EVENTS"] = 0
@@ -159,7 +159,7 @@ def generate_comparison(df_prediction, df_groundtruth):
                     rows_to_drop.append(i1)
 
             if pd.isna(row2["EVENTS"]):
-                if (i1 == i2 - 1) and (row1["ENTERPR"] > row1["ENTERGT"]):
+                if (i1[1] == i2[1] - 1) and (row1["ENTERPR"] > row1["ENTERGT"]):
                     # Replace nan value with 0 for addition below
                     row2["ENTERPR"] = 0
                     row2["EVENTS"] = 0
@@ -174,6 +174,9 @@ def generate_comparison(df_prediction, df_groundtruth):
         df_comparison_rm = df_comparison.drop(index=rows_to_drop)
 
         df_comparison_rm = df_comparison_rm.fillna(0)
+
+        assert (np.sum(df_groundtruth["ENTERGT"]) ==
+                np.sum(df_comparison_rm["ENTERGT"]))
 
         return df_comparison_rm
 
