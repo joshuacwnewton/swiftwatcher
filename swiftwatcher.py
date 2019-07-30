@@ -21,6 +21,9 @@
 # -TODO: Add proper fields (ENTERGT, EXIT_GT to empty-gt-generator()
 # -TODO: Create empty ground truth file for old video.
 # -TODO: Annotate ch4_2017*.mp4  video file.
+# -TODO: empty-gt-generator to just FRM_NUMs
+# -TODO: import-dataframes to just FRM_NUMs
+# -TODO: vid.process_frames.create_dataframe() to just FRM_NUMs
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
@@ -41,7 +44,7 @@ def main(args, params):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    data.empty_gt_generator(args)
+    # data.empty_gt_generator(args)
 
     # Debugging/testing modes of functionality
     if args._extract:
@@ -64,7 +67,6 @@ def main(args, params):
             dfs["prediction"] = data.generate_classifications(dfs["features"])
             dfs["comparison"] = data.generate_comparison(dfs["prediction"],
                                                          dfs["groundtruth"])
-            data.export_dataframes(args, dfs)
         else:
             try:
                 dfs = data.import_dataframes(args, df_list=["groundtruth",
@@ -86,6 +88,11 @@ def main(args, params):
 
         # Experimental function for testing new features/classifiers
         data.feature_engineering(args, results)
+
+    dfs = {
+        "evemtinfo": df_eventinfo
+    }
+    data.export_dataframes(args, dfs)
 
     # The set of steps which would be run by an end-user
     if args._production:
@@ -171,7 +178,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -201,12 +208,13 @@ if __name__ == "__main__":
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2017-05-18 20:58:49.266666"
+                            default="2017-05-18 00:00:00.000000"
+                            # 20:58:49.000000"
                             )
         parser.add_argument("-n",
                             "--chimney",
                             help="Bottom corners which define chimney edge",
-                            default=[(810, 435), (1150, 435)]
+                            default=[(748, 691), (920, 683)]
                             # [(798, 449), (1164, 423)] <- video1
                             # [(810, 435), (1150, 435)] <- video2
                             )
@@ -226,7 +234,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-07-28_full-video/"
+                            default="/tests/2019-07-29_full-video-2/"
                             )
         parser.add_argument("-v",
                             "--visual",

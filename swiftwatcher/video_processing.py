@@ -90,6 +90,7 @@ class FrameQueue:
             if args.load[1] == -1:
                 self.total_frames \
                     = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
+                self.total_frames = 114938
             else:
                 self.total_frames = args.load[1] - args.load[0] + 1
 
@@ -831,9 +832,15 @@ def extract_frames(args, queue_size=1, save_directory=None):
 
     fq = FrameQueue(args, queue_size)
 
+    failcount = 0
+
     print("[*] Reading frames... (This may take a while!)")
-    while fq.frames_read < fq.src_framecount:
+    while failcount < 10:  # fq.frames_read < fq.src_framecount:
         success = fq.load_frame()
+        if success:
+            failcount = 0
+        else:
+            failcount += 1
 
         if success:
             fq.save_frame(save_directory)
