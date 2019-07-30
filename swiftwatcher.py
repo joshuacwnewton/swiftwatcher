@@ -178,7 +178,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -203,12 +203,12 @@ if __name__ == "__main__":
         parser.add_argument("-f",
                             "--filename",
                             help="Name of video file",
-                            default="NPD 460 CHSW 2019 June 14.mp4"
+                            default="ch04_20170518205849.mp4"
                             )
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2019-06-14 00:00:00.000000"
+                            default="2017-05-18 00:00:00.000000"
                             # 20:58:49.000000"
                             )
         parser.add_argument("-n",
@@ -230,12 +230,12 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([0, -1])
+                            default=([7200, 16199])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-07-28_full-video/"
+                            default="tests/2019-07-30_partial/"
                             )
         parser.add_argument("-v",
                             "--visual",
