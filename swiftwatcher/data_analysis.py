@@ -143,37 +143,36 @@ def generate_comparison(df_prediction, df_groundtruth):
         # have accurate timestamps (and ones that don't) but this hacky
         # bit is probably fine for August experimentation
 
+        df_comparison = df_comparison.fillna(0)
+
         rows_to_drop = []
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
-            if pd.isna(row1["EVENTS"]) and i1 not in rows_to_drop:
-                if (i2 == i1 + 1) and (row2["ENTERPR"] > row2["ENTERGT"]):
-                    # Replace nan value with 0 for addition below
-                    row1["ENTERPR"] = 0
-                    row1["EVENTS"] = 0
+            if i2 - i1 == 1:
+                diff1 = row1["ENTERGT"] - row1["ENTERPR"]
+                diff2 = row2["ENTERGT"] - row2["ENTERPR"]
 
-                    # Merge row values into one row, delete inaccurate row
-                    new_values = row1 + row2
-                    row2["EVENTS"] = new_values["EVENTS"]
-                    row2["ENTERGT"] = new_values["ENTERGT"]
-                    row2["ENTERPR"] = new_values["ENTERPR"]
-                    rows_to_drop.append(i1)
+                # Condition for FN/MD and FP in sequential frames
+                if (diff1 > 0) and (diff2 < 0):
+                    # Shift "off-by-one" GT count to cancel out errors
+                    offbyone = min(diff1, abs(diff2))
+                    row1["ENTERGT"] -= offbyone
+                    row2["ENTERGT"] += offbyone
+                    # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                    if np.array_equal(row1.values, [0, 0, 0]):
+                        rows_to_drop.append(i1)
 
-            if pd.isna(row2["EVENTS"]):
-                if (i1 == i2 - 1) and (row1["ENTERPR"] > row1["ENTERGT"]):
-                    # Replace nan value with 0 for addition below
-                    row2["ENTERPR"] = 0
-                    row2["EVENTS"] = 0
+                # Condition for FP and FN/MD in sequential frames
+                elif (diff1 < 0) and (diff2 > 0):
+                    # Shift "off-by-one" GT count to cancel out errors
+                    offbyone = min(abs(diff1), diff2)
+                    row2["ENTERGT"] -= offbyone
+                    row1["ENTERGT"] += offbyone
 
-                    # Merge row values into one row, delete inaccurate row
-                    new_values = row1 + row2
-                    row1["EVENTS"] = new_values["EVENTS"]
-                    row1["ENTERGT"] = new_values["ENTERGT"]
-                    row1["ENTERPR"] = new_values["ENTERPR"]
-                    rows_to_drop.append(i2)
+                    # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                    if np.array_equal(row2.values, [0, 0, 0]):
+                        rows_to_drop.append(i2)
 
         df_comparison_rm = df_comparison.drop(index=rows_to_drop)
-
-        df_comparison_rm = df_comparison_rm.fillna(0)
 
         assert (np.sum(df_groundtruth["ENTERGT"]) ==
                 np.sum(df_comparison_rm["ENTERGT"]))
