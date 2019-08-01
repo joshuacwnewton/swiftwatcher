@@ -185,18 +185,22 @@ if __name__ == "__main__":
                             "--filename",
                             help="Name of video file",
                             default="NPD 460 CHSW 2019 June 13.mp4"
+                            # ch04_20170518205849.mp4
+                            # NPD 460 CHSW 2019 June 13.mp4
+                            # NPD 541 CHSW 2019 June 14.mp4
                             )
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2019-06-13 00:00:00.000000000"
+                            default="2019-06-13 00:00:00.000000"
                             )
         parser.add_argument("-n",
                             "--chimney",
                             help="Bottom corners which define chimney edge",
                             default=[(810, 435), (1150, 435)]
-                            # [(798, 449), (1164, 423)] <- video1
-                            # [(810, 435), (1150, 435)] <- video2
+                            # [(748, 691), (920, 683)]  <- ch04_20170518
+                            # [(810, 435), (1150, 435)] <- june 13
+                            # [(798, 449), (1164, 423)] <- june 14
                             )
 
     def set_processing_args():
@@ -209,17 +213,17 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([0, -1])
+                            default=([6400, 9400])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-07-28_full-video/"
+                            default="/tests/2019-08-01_partial-fp-nofix/"
                             )
         parser.add_argument("-v",
                             "--visual",
                             help="Output visualization of frame processing",
-                            default=False
+                            default=True
                             )
 
     parser = ap.ArgumentParser()

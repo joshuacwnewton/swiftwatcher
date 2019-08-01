@@ -356,6 +356,15 @@ class FrameQueue:
             self.height = frame.shape[0]
             self.width = frame.shape[1]
 
+        def resize_frame():
+            nonlocal frame
+
+            frame = cv2.resize(frame, (200, 100))
+
+            # Update frame attributes
+            self.height = frame.shape[0]
+            self.width = frame.shape[1]
+
         def pyramid_down():
             nonlocal frame
 
@@ -376,6 +385,7 @@ class FrameQueue:
 
         convert_grayscale()
         crop_frame()
+        resize_frame()
         # pyramid_down()
 
         if not passed_frame:
