@@ -1,26 +1,16 @@
-# =================================== TODOs ================================= #
-# execution-time:
-# -TODO: Test smaller crop-regions for RPCA speed increase.
-# -TODO: Test smaller scaled image (pyramid-down?) for RPCA speed increase.
-# -TODO: Test smaller frame_queue for RPCA speed increase.
+# =================================== Ideas ================================= #
+# -TODO: RPCA speed increase (crop regions, queue size, non-RPCA BS)
 #
-# test-automation:
-# -TODO: Save algorithm parameters to a JSON file.
-# -TODO: Load algorithm parameters from a JSON file.
-# -TODO: Save command line arguments to JSON file.
-# -TODO: Load command line arguments from JSON file.
+# -TODO: Get both ch04 and 13/14 to use same GT processing
+# -TODO: Automated batch processing (ch04, june 13, june 14 in one go)
 #
-# timestamp-precision:
-# -TODO: Update empty-gt-generator() for us timestamp precision.
-# -TODO: Explore source of timestamp rounding error (off-by-one microsecond?)
+# -TODO: Resize all cropped frames into same dimensions
+# -TODO: Find alternative method to (3, 3) opening for removing chimney sway
 #
-# feature-engineering:
-# -TODO: Implement/test idea for relative position feature.
-#
-# testing-old-data:
-# -TODO: Add proper fields (ENTERGT, EXIT_GT to empty-gt-generator()
-# -TODO: Create empty ground truth file for old video.
-# -TODO: Annotate ch4_2017*.mp4  video file.
+# -TODO: Analyse all videos for shared sources of error
+# -TODO: Matching/feature: Area of segment (Avg?)
+# -TODO: Matching/feature: Diagonal length of segment (Avg?)
+# -TODO: Matching/feature: Relative position of segment
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
