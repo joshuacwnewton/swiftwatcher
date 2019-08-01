@@ -90,7 +90,6 @@ class FrameQueue:
             if args.load[1] == -1:
                 self.total_frames \
                     = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
-                self.total_frames = 114938
             else:
                 self.total_frames = args.load[1] - args.load[0] + 1
 
