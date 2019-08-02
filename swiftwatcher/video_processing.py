@@ -438,9 +438,10 @@ class FrameQueue:
             # smoothed_image = cv2.medianBlur(image, 5)
             smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
                                                  sigmaSpace=1)
-            edge_image = cv2.Canny(smoothed_image, 100, 200)
-            mask = cv2.dilate(edge_image, np.ones((2, 2), np.uint8),
-                              iterations=2).astype(np.int)
+            edge_image = cv2.Canny(smoothed_image, 25, 50)
+            mask = cv2.dilate(edge_image, np.ones((7, 7), np.uint8),
+                              iterations=1).astype(np.int)
+            mask_cp = mask.astype(np.uint8)
 
             # Extract pixel values in mask
             mask[mask == 0] = (-256)
