@@ -203,14 +203,15 @@ def generate_comparison(df_prediction, df_groundtruth):
 
 def import_dataframes(args, df_list):
 
-    if df_list == ["groundtruth"]:
-        load_directory = args.default_dir
-    else:
-        load_directory = args.default_dir+args.custom_dir+"results/df-export/"
-
     dfs = {}
     for df_name in df_list:
-        dfs[df_name] = pd.read_csv(load_directory+df_name+".csv")
+        if df_name == "groundtruth":
+            load_directory = args.default_dir
+        else:
+            load_directory = args.default_dir + args.custom_dir + \
+                             "results/df-export/"
+        dfs[df_name] = pd.read_csv(load_directory + df_name + ".csv")
+
         if "TMSTAMP" in dfs[df_name].columns:
             dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
             dfs[df_name]["TMSTAMP"] = dfs[df_name]["TMSTAMP"].dt.round('us'
