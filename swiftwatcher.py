@@ -4,8 +4,7 @@
 # -TODO: Get both ch04 and 13/14 to use same GT processing
 # -TODO: Automated batch processing (ch04, june 13, june 14 in one go)
 #
-# -TODO: Resize all cropped frames into same dimensions
-# -TODO: Find alternative method to (3, 3) opening for removing chimney sway
+# -TODO: Try 3x3 opening on scaled-up video.
 #
 # -TODO: Analyse all videos for shared sources of error
 # -TODO: Matching/feature: Area of segment (Avg?)
