@@ -54,14 +54,14 @@ def main(args, params):
                                                          dfs["groundtruth"])
             data.export_dataframes(args, dfs)
         else:
-            try:
-                dfs = data.import_dataframes(args, df_list=["groundtruth",
-                                                            "eventinfo",
-                                                            "features",
-                                                            "prediction",
-                                                            "comparison"])
-            except FileNotFoundError:
-                print("[!] Dataframes not found! Try processing first?")
+            dfs = data.import_dataframes(args, df_list=["groundtruth",
+                                                        "eventinfo",
+                                                        "features",
+                                                        "prediction",
+                                                        "comparison"
+                                                        ])
+            dfs["comparison"] = data.generate_comparison(dfs["prediction"],
+                                                         dfs["groundtruth"])
 
         results = data.evaluate_results(args, dfs["comparison"])
         data.export_dataframes(args, results)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         parser.add_argument("-f",
                             "--filename",
                             help="Name of video file",
-                            default="NPD 460 CHSW 2019 June 13.mp4"
+                            default="ch04_20170518205849.mp4"
                             # ch04_20170518205849.mp4
                             # NPD 460 CHSW 2019 June 13.mp4
                             # NPD 541 CHSW 2019 June 14.mp4
@@ -192,12 +192,12 @@ if __name__ == "__main__":
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2017-06-13 00:00:00.000000"
+                            default="2017-05-18 00:00:00.000000"
                             )
         parser.add_argument("-n",
                             "--chimney",
                             help="Bottom corners which define chimney edge",
-                            default=[(810, 435), (1150, 435)]
+                            default=[(748, 691), (920, 683)]
                             # [(748, 691), (920, 683)]  <- ch04_20170518
                             # [(810, 435), (1150, 435)] <- june 13
                             # [(798, 449), (1164, 423)] <- june 14
@@ -213,12 +213,12 @@ if __name__ == "__main__":
                             nargs=2,
                             type=int,
                             metavar=('START_INDEX', 'END_INDEX'),
-                            default=([6400, 9400])
+                            default=([7200, 16200])
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-08-01_no-opening/"
+                            default="/tests/2019-08-02_1-3x3-2x/"
                             )
         parser.add_argument("-v",
                             "--visual",
