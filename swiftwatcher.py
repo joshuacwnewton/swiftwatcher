@@ -192,7 +192,7 @@ if __name__ == "__main__":
         parser.add_argument("-t",
                             "--timestamp",
                             help="Specified starting timestamp for video",
-                            default="2019-06-13 00:00:00.000000"
+                            default="2017-06-13 00:00:00.000000"
                             )
         parser.add_argument("-n",
                             "--chimney",
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="/tests/2019-08-01_partial-fp-nofix/"
+                            default="/tests/2019-08-01_no-opening/"
                             )
         parser.add_argument("-v",
                             "--visual",
