@@ -359,7 +359,7 @@ class FrameQueue:
         def resize_frame():
             nonlocal frame
 
-            frame = cv2.resize(frame, (200, 100))
+            frame = cv2.resize(frame, (300, 150))
 
             # Update frame attributes
             self.height = frame.shape[0]
@@ -544,8 +544,8 @@ class FrameQueue:
                                                maxval=255,
                                                type=cv2.THRESH_TOZERO)
         seg["RPCA_otsuthr"] = edge_based_otsu(list(seg.values())[-1])
-        # seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
-        #                                       size=(2, 2)).astype(np.uint8)
+        seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
+                                              size=(3, 3)).astype(np.uint8)
 
         num_components, labeled_frame = \
             cv2.connectedComponents(list(seg.values())[-1], connectivity=4)

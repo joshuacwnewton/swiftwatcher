@@ -147,7 +147,7 @@ def generate_comparison(df_prediction, df_groundtruth):
 
         rows_to_drop = []
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
-            if len(i1) > 1 and len(i2) > 1:
+            if (type(i1) is list) and (type(i2) is list):
                 i1 = i1[1]
                 i2 = i2[1]
 
