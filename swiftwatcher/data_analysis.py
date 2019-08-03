@@ -147,7 +147,7 @@ def generate_comparison(df_prediction, df_groundtruth):
 
         rows_to_drop = []
         for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
-            if (type(i1) is list) and (type(i2) is list):
+            if (type(i1) is tuple) and (type(i2) is tuple):
                 i1 = i1[1]
                 i2 = i2[1]
 
@@ -176,7 +176,7 @@ def generate_comparison(df_prediction, df_groundtruth):
                     if np.array_equal(row2.values, [0, 0, 0]):
                         rows_to_drop.append(i2)
 
-        df_comparison_rm = df_comparison.drop(index=rows_to_drop)
+        df_comparison_rm = df_comparison.drop(level=1, index=rows_to_drop)
 
         assert (np.sum(df_groundtruth["ENTERGT"]) ==
                 np.sum(df_comparison_rm["ENTERGT"]))
