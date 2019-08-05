@@ -389,12 +389,12 @@ class FrameQueue:
         else:
             return frame
 
-    def segment_frame(self, args, params):
+    def segment_frame(self, args):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
-        def rpca(lmbda, tol, maxiter, darker, index=None):
+        def rpca(index=None):
             """Decompose set of images into corresponding low-rank and sparse
             images. Method expects images to have been reshaped to matrix of
             column vectors.
@@ -417,13 +417,11 @@ class FrameQueue:
 
             # Algorithm for the IALM approximation of Robust PCA method.
             lr_columns, s_columns = \
-                inexact_augmented_lagrange_multiplier(col_matrix,
-                                                      lmbda, tol, maxiter)
+                inexact_augmented_lagrange_multiplier(col_matrix)
 
             # Bring pixels that are darker than background to [0, 255] range
-            if darker:
-                s_columns = np.negative(s_columns)
-                s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
+            s_columns = np.negative(s_columns)
+            s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
 
             # Reshape columns back into image dimensions
             for i in range(img_matrix.shape[0]):
@@ -524,14 +522,12 @@ class FrameQueue:
             visual = args.visual
 
         # Apply Robust PCA method in batches
-        if self.frames_read % params["queue_size"] == 0:
-            rpca(params["ialm_lmbda"], params["ialm_tol"],
-                 params["ialm_maxiter"], params["ialm_darker"])
+        if self.frames_read % 21 == 0:
+            rpca()
         if self.frames_read == self.total_frames:
-            if self.frames_read-self.frames_processed == params["queue_size"]:
-                rem = self.total_frames % params["queue_size"]
-                rpca(params["ialm_lmbda"], params["ialm_tol"],
-                     params["ialm_maxiter"], params["ialm_darker"], index=rem)
+            if self.frames_read-self.frames_processed == 21:
+                rem = self.total_frames % 21
+                rpca(index=rem)
 
         # Process each RPCA "sparse error" frame to remove non-swift details
         seg = {}
@@ -564,7 +560,7 @@ class FrameQueue:
         if visual:
             segment_visualization()
 
-    def match_segments(self, args, params):
+    def match_segments(self, args):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames.
 
@@ -827,7 +823,7 @@ def extract_frames(args):
           .format(fq.frames_read))
 
 
-def process_frames(args, params):
+def process_frames(args):
     """Function which uses object methods to analyse a sequence of previously
     extracted frames and determine bird counts for that sequence."""
 
@@ -846,21 +842,21 @@ def process_frames(args, params):
 
     print("[*] Analysing frames... (This may take a while!)")
 
-    fq = FrameQueue(args, queue_size=params["queue_size"])
+    fq = FrameQueue(args, queue_size=21)
     while fq.frames_processed < fq.total_frames:
-        if fq.frames_read < (params["queue_size"]-1):
+        if fq.frames_read < (21 - 1):
             fq.load_frame(args.default_dir)
             fq.preprocess_frame()
-        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
+        elif (21 - 1) <= fq.frames_read < fq.total_frames:
             fq.load_frame(args.default_dir)
             fq.preprocess_frame()
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
@@ -875,7 +871,7 @@ def process_frames(args, params):
     return df_eventinfo
 
 
-def full_algorithm(args, params, video_dict):
+def full_algorithm(args, video_dict):
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
                                  columns=list(passed_list[0].keys())
@@ -890,28 +886,28 @@ def full_algorithm(args, params, video_dict):
     args.chimney = video_dict["corners"]
     args.load = [0, 3000]
 
-    fq = FrameQueue(args, params["queue_size"])
+    fq = FrameQueue(args, queue_size=21)
 
     while fq.frames_processed < fq.total_frames:
-        if fq.frames_read < (params["queue_size"]-1):
+        if fq.frames_read < (21 - 1):
             fq.load_frame()
             fq.preprocess_frame()
             # No segmentation needed until queue is filled
             # No matching needed until queue is filled
             # No analysis needed until queue is filled
 
-        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
+        elif (21 - 1) <= fq.frames_read < fq.total_frames:
             fq.load_frame()
             fq.preprocess_frame()
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
 
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
             # No preprocessing needed for empty frame
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:

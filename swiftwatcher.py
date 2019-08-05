@@ -19,7 +19,7 @@ import time
 import json
 
 
-def main(args, params):
+def main(args):
     """To understand the current configuration of the algorithm, please look
     to the following functions, which are outside of main() below:
 
@@ -34,13 +34,13 @@ def main(args, params):
         pass
     if args._process:
         start = time.time()
-        df_eventinfo = vid.process_frames(args, params)
+        df_eventinfo = vid.process_frames(args)
         end = time.time()
 
         elapsed_time = pd.to_timedelta((end - start), 's')
         print("[-] Frame processing took {}.".format(elapsed_time))
 
-        data.save_test_config(args, params)
+        # data.save_test_config(args, params)
     if args._analyse:
         if args._process:
             dfs = data.import_dataframes(args, ["groundtruth"])
@@ -83,7 +83,7 @@ def main(args, params):
             args.default_dir = (args.video_dir +
                                 os.path.splitext(args.filename)[0] + "/")
             videos[key]["eventinfo"] = \
-                vid.full_algorithm(args, params, value)
+                vid.full_algorithm(args, value)
 
             if not videos[key]["eventinfo"].empty:
                 videos[key]["features"] = \
@@ -114,32 +114,6 @@ def configuration(video_dir):
         json.dump(video_dictionary, write_file, indent=4)
 
     return video_dictionary
-
-
-def set_parameters():
-    """Dashboard for setting parameters for each processing stage of algorithm.
-
-    Distinct from command line arguments. For this program, arguments are used
-    for file I/O, directory selection, etc. These parameters affect the image
-    processing and analysis parts of the algorithm instead."""
-
-    params = {
-        # Robust PCA/motion estimation
-        "queue_size": 21,
-        "ialm_lmbda": 0.01,
-        "ialm_tol": 0.001,
-        "ialm_maxiter": 100,
-        "ialm_darker": True,
-
-        # Thresholding
-        "thr_type": 3,     # value of cv2.THRESH_TOZERO option
-        "thr_value": 10,
-
-        # Greyscale processing
-        "grey_op_SE": [(2, 2), (3, 3)]
-    }
-
-    return params
 
 
 if __name__ == "__main__":
@@ -215,7 +189,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-02_full-video/"
+                            default="tests/2019-08-05_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",
@@ -229,12 +203,10 @@ if __name__ == "__main__":
     set_processing_args()
     arguments = parser.parse_args()
 
-    parameters = set_parameters()
-
     # Repeatedly used default directory to ensure standardization. Storing here
     # because it is a derived from only arguments.
     arguments.default_dir = (arguments.video_dir +
                              os.path.splitext(arguments.filename)[0] +
                              "/debug/")
 
-    main(arguments, parameters)
+    main(arguments)
