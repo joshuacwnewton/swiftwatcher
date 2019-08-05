@@ -4,9 +4,6 @@
 # -TODO: Get both ch04 and 13/14 to use same GT processing
 # -TODO: Automated batch processing (ch04, june 13, june 14 in one go)
 #
-# -TODO: Test without hard thresholding.
-# -TODO: Test with larger dilation for edge-based OTSU
-#
 # -TODO: Analyse all videos for shared sources of error
 # -TODO: Matching/feature: Area of segment (Avg?)
 # -TODO: Matching/feature: Diagonal length of segment (Avg?)
