@@ -204,10 +204,6 @@ class FrameQueue:
         generate_chimney_regions(alpha=0.25)
         generate_roi_mask()
 
-        if "extract" in args:
-            if not args.extract:
-                self.stream.release()
-
     def load_frame(self, load_directory=None, empty=False):
 
         def fn_to_ts(frame_number):
@@ -801,36 +797,31 @@ class FrameQueue:
                     self.event_list.append(event_info)
 
 
-def extract_frames(args, queue_size=1, save_directory=None):
+def extract_frames(args):
     """Function which uses object methods to extract individual frames
      (one at a time) from a video file. Saves each frame to image files for
      future reuse."""
 
-    if not save_directory:
-        save_directory = args.default_dir
-
-    fq = FrameQueue(args, queue_size)
+    fq = FrameQueue(args)
 
     failcount = 0
 
     print("[*] Reading frames... (This may take a while!)")
+
     while failcount < 10:  # fq.frames_read < fq.src_framecount:
         success = fq.load_frame()
         if success:
             failcount = 0
+            fq.save_frame(args.default_dir)
         else:
             failcount += 1
-
-        if success:
-            fq.save_frame(save_directory)
-        else:
-            raise Exception("read_frame() failed before expected end of file.")
 
         if fq.frames_read % 1000 == 0:
             print("[-] {}/{} frames successfully processed."
                   .format(fq.frames_read, fq.src_framecount))
             # NOTE: Should probably have some sort of "verbose" flag, or
             # utilize logging. This seems like a naive way to provide updates.
+
     fq.stream.release()
     print("[-] Extraction complete. {} total frames extracted."
           .format(fq.frames_read))
