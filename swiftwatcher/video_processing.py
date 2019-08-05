@@ -438,25 +438,29 @@ class FrameQueue:
             # smoothed_image = cv2.medianBlur(image, 5)
             smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
                                                  sigmaSpace=1)
-            edge_image = cv2.Canny(smoothed_image, 100, 200)
-            mask = cv2.dilate(edge_image, np.ones((2, 2), np.uint8),
-                              iterations=2).astype(np.int)
+            edge_image = cv2.Canny(smoothed_image, 25, 50)
+            mask = cv2.dilate(edge_image, np.ones((7, 7), np.uint8),
+                              iterations=1).astype(np.int)
+            mask_cp = mask.astype(np.uint8)
 
-            # Change mask so all 0 values will make original image negative
-            # (Therefore excluding those values from otsu's thresholding)
+            # Extract pixel values in mask
             mask[mask == 0] = (-256)
             mask[mask == 255] = 0
-            masked_image = np.add(mask, smoothed_image).astype(np.uint8)
+            masked_image = np.add(mask, smoothed_image).astype(np.int)
+            values = masked_image[masked_image >= 0].astype(np.uint8)
 
             # Get a threshold value from only the edge (+ edge-adjacent) values
-            ret, _ = cv2.threshold(masked_image, 0, 255,
-                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            if values.size == 0:
+                ret = 255
+            else:
+                ret, _ = cv2.threshold(values, 0, 255,
+                                       cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             _, thresholded_image = cv2.threshold(smoothed_image,
                                                  thresh=ret, maxval=255,
                                                  type=cv2.THRESH_TOZERO)
 
-            return thresholded_image
+            return edge_image, mask_cp, thresholded_image
 
         def segment_visualization():
             # Add roi mask to each stage for visualization.
@@ -523,13 +527,7 @@ class FrameQueue:
             folder_name = args.custom_dir
             visual = args.visual
 
-        # Dictionary for storing segmentation stages (used for visualization)
-        seg = {
-            # "frame": np.reshape(self.queue[-1],
-            #                     (self.height, self.width))
-        }
-
-        # Apply Robust PCA method to isolate regions of motion
+        # Apply Robust PCA method in batches
         if self.frames_read % params["queue_size"] == 0:
             rpca(params["ialm_lmbda"], params["ialm_tol"],
                  params["ialm_maxiter"], params["ialm_darker"])
@@ -538,19 +536,18 @@ class FrameQueue:
                 rem = self.total_frames % params["queue_size"]
                 rpca(params["ialm_lmbda"], params["ialm_tol"],
                      params["ialm_maxiter"], params["ialm_darker"], index=rem)
+
+        # Process each RPCA "sparse error" frame to remove non-swift details
+        seg = {}
         seg["RPCA_output"] = self.queue[-1]
-        _, seg["RPCA_hardthr"] = cv2.threshold(list(seg.values())[-1],
-                                               thresh=15,
-                                               maxval=255,
-                                               type=cv2.THRESH_TOZERO)
-        seg["RPCA_otsuthr"] = edge_based_otsu(list(seg.values())[-1])
+        seg["edge_image"], seg["masked_image"], seg["RPCA_otsuthr"] = \
+            edge_based_otsu(list(seg.values())[-1])
         seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
                                               size=(3, 3)).astype(np.uint8)
 
+        # Segment using CC labeling, and scale so segments are visible
         num_components, labeled_frame = \
             cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
-
-        # Scale labeled image to be visible with uint8 grayscale
         if num_components > 0:
             seg["connected_c_255"] = \
                 labeled_frame * int(255 / num_components)
