@@ -163,9 +163,10 @@ if __name__ == "__main__":
         parser.add_argument("-z",
                             "--configs",
                             help="Config files for tests to be run",
-                            default=["videos/configs/ch04_partial.json",
-                                     "videos/configs/june13_partial.json",
-                                     "videos/configs/june14_partial.json"]
+                            default=[
+                                "videos/configs/ch04_partial.json",
+                                "videos/configs/june13_partial.json",
+                                "videos/configs/june14_partial.json"]
                             )
         parser.add_argument("-c",
                             "--custom_dir",

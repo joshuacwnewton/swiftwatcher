@@ -136,8 +136,6 @@ def generate_comparison(config, df_prediction, df_groundtruth):
         df_combined = df_prediction_cp.combine_first(df_groundtruth)
         df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
 
-        df_combined_copy = df_combined.copy(deep=True)
-
         if type(df_combined.index) == pd.MultiIndex:
             indexes_to_drop = df_combined[(df_combined.index.levels[1]
                                            < config["start_frame"] - 1) |
@@ -148,9 +146,8 @@ def generate_comparison(config, df_prediction, df_groundtruth):
                                            < config["start_frame"] - 1) |
                                           (df_combined.index
                                            > config["end_frame"] - 1)].index
-
-            df_combined_copy = df_combined_copy.drop(index=indexes_to_drop)
-        df_combined_fixed = fix_offbyone(df_combined_copy)
+        df_combined_fixed = fix_offbyone(df_combined)
+        df_combined_fixed = df_combined_fixed.drop(index=indexes_to_drop)
 
     else:
         df_combined_fixed = df_prediction
@@ -310,7 +307,7 @@ def evaluate_results(test_directory, df_comparison):
         file.close()
 
     if not df_comparison.empty:
-        result_dict = split_comparison(df_comparison.copy())
+        result_dict = split_comparison(df_comparison.copy(deep=True))
         sum_dict = sum_counts(result_dict, df_comparison)
         export_results(test_directory/"results", sum_dict)
     else:
