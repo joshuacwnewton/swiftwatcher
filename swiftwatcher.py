@@ -18,9 +18,10 @@ import argparse as ap
 import os
 import time
 import json
+from pathlib import Path
 
 
-def main(args, params):
+def main(args):
     """To understand the current configuration of the algorithm, please look
     to the following functions, which are outside of main() below:
 
@@ -30,48 +31,58 @@ def main(args, params):
         set_parameters() function."""
 
     # Debugging/testing modes of functionality
-    if args._extract:
-        vid.extract_frames(args)
-        pass
-    if args._process:
-        start = time.time()
-        df_eventinfo = vid.process_frames(args, params)
-        end = time.time()
+    for config_path in args.configs:
+        with open(config_path) as json_file:
+            config = json.load(json_file)
+        config["src_filepath"] = Path("videos", config["name"])
+        config["base_dir"] = Path(config["src_filepath"].parent,
+                                  config["src_filepath"].stem)
 
-        elapsed_time = pd.to_timedelta((end - start), 's')
-        print("[-] Frame processing took {}.".format(elapsed_time))
-
-        data.save_test_config(args, params)
-    if args._analyse:
-        if args._process:
-            dfs = data.import_dataframes(args, ["groundtruth"])
-            dfs["eventinfo"] = df_eventinfo
-            dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
-            dfs["prediction"] = data.generate_classifications(dfs["features"])
-            dfs["comparison"] = data.generate_comparison(dfs["prediction"],
-                                                         dfs["groundtruth"])
-            data.export_dataframes(args, dfs)
+        if args._extract:
+            vid.extract_frames(args)
+            pass
         else:
-            dfs = data.import_dataframes(args, df_list=["groundtruth",
-                                                        "eventinfo",
-                                                        "features",
-                                                        "prediction",
-                                                        "comparison"
-                                                        ])
-            dfs["comparison"] = data.generate_comparison(dfs["prediction"],
-                                                         dfs["groundtruth"])
+            config["base_dir"] = config["base_dir"] / "debug"
+            config["test_dir"] = config["base_dir"] / args.custom_dir
 
-        results = data.evaluate_results(args, dfs["comparison"])
-        data.export_dataframes(args, results)
-        data.plot_result(args,  dfs["prediction"],
-                         dfs["groundtruth"], flag="cumu_comparison")
-        data.plot_result(args, dfs["prediction"],
-                         dfs["groundtruth"], flag="false_positives")
-        data.plot_result(args, dfs["prediction"],
-                         dfs["groundtruth"], flag="false_negatives")
+        if args._process:
+            start = time.time()
+            df_eventinfo = vid.process_frames(args, config)
+            end = time.time()
 
-        # Experimental function for testing new features/classifiers
-        data.feature_engineering(args, results)
+            elapsed_time = pd.to_timedelta((end - start), 's')
+            print("[-] Frame processing took {}.".format(elapsed_time))
+
+        if args._analyse:
+            if args._process:
+                dfs = data.import_dataframes(config["base_dir"],
+                                             ["groundtruth"])
+                dfs["eventinfo"] = df_eventinfo
+                dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
+                dfs["prediction"] = data.generate_classifications(dfs["features"])
+                dfs["comparison"] = data.generate_comparison(config,
+                                                             dfs["prediction"],
+                                                             dfs["groundtruth"])
+                data.export_dataframes(config["test_dir"], dfs)
+            else:
+                dfs = data.import_dataframes(config["test_dir"],
+                                             df_list=[
+                                                 "groundtruth",
+                                                 "eventinfo",
+                                                 "features",
+                                                 "prediction",
+                                                 "comparison"
+                                              ])
+
+            results = data.evaluate_results(config["test_dir"],
+                                            dfs["comparison"])
+            data.export_dataframes(config["test_dir"], results)
+            data.plot_result(config["test_dir"],  dfs["prediction"],
+                             dfs["groundtruth"], flag="cumu_comparison")
+            data.plot_result(config["test_dir"], dfs["prediction"],
+                             dfs["groundtruth"], flag="false_positives")
+            data.plot_result(config["test_dir"], dfs["prediction"],
+                             dfs["groundtruth"], flag="false_negatives")
 
     # The set of steps which would be run by an end-user
     if args._production:
@@ -84,7 +95,7 @@ def main(args, params):
             args.default_dir = (args.video_dir +
                                 os.path.splitext(args.filename)[0] + "/")
             videos[key]["eventinfo"] = \
-                vid.full_algorithm(args, params, value)
+                vid.full_algorithm(args, value)
 
             if not videos[key]["eventinfo"].empty:
                 videos[key]["features"] = \
@@ -117,32 +128,6 @@ def configuration(video_dir):
     return video_dictionary
 
 
-def set_parameters():
-    """Dashboard for setting parameters for each processing stage of algorithm.
-
-    Distinct from command line arguments. For this program, arguments are used
-    for file I/O, directory selection, etc. These parameters affect the image
-    processing and analysis parts of the algorithm instead."""
-
-    params = {
-        # Robust PCA/motion estimation
-        "queue_size": 21,
-        "ialm_lmbda": 0.01,
-        "ialm_tol": 0.001,
-        "ialm_maxiter": 100,
-        "ialm_darker": True,
-
-        # Thresholding
-        "thr_type": 3,     # value of cv2.THRESH_TOZERO option
-        "thr_value": 10,
-
-        # Greyscale processing
-        "grey_op_SE": [(2, 2), (3, 3)]
-    }
-
-    return params
-
-
 if __name__ == "__main__":
     def set_program_flags():
         """Set flags which determine which modes of functionality the program
@@ -172,51 +157,22 @@ if __name__ == "__main__":
                             default=False
                             )
 
-    def set_file_args():
-        """Set arguments relating to video file I/O."""
-        parser.add_argument("-d",
-                            "--video_dir",
-                            help="Path to directory containing video file",
-                            default="videos/"
-                            )
-        parser.add_argument("-f",
-                            "--filename",
-                            help="Name of video file",
-                            default="NPD 541 CHSW 2019 June 14.mp4"
-                            # ch04_20170518205849.mp4
-                            # NPD 460 CHSW 2019 June 13.mp4
-                            # NPD 541 CHSW 2019 June 14.mp4
-                            )
-        parser.add_argument("-t",
-                            "--timestamp",
-                            help="Specified starting timestamp for video",
-                            default="2019-06-14 00:00:00.000000"
-                            )
-        parser.add_argument("-n",
-                            "--chimney",
-                            help="Bottom corners which define chimney edge",
-                            default=[(798, 449), (1164, 423)]
-                            # [(748, 691), (920, 683)]  <- ch04_20170518
-                            # [(810, 435), (1150, 435)] <- june 13
-                            # [(798, 449), (1164, 423)] <- june 14
-                            )
-
     def set_processing_args():
         """Set arguments which relate to testing the algorithm, but that are
         unrelated to the functionality of the algorithm itself."""
 
-        parser.add_argument("-l",
-                            "--load",
-                            help="Specify indices to load frames",
-                            nargs=2,
-                            type=int,
-                            metavar=('START_INDEX', 'END_INDEX'),
-                            default=([0, -1])
+        parser.add_argument("-z",
+                            "--configs",
+                            help="Config files for tests to be run",
+                            default=[
+                                "videos/configs/ch04_partial.json",
+                                "videos/configs/june13_partial.json",
+                                "videos/configs/june14_partial.json"]
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-02_full-video/"
+                            default="tests/2019-08-06_partial/"
                             )
         parser.add_argument("-v",
                             "--visual",
@@ -226,16 +182,6 @@ if __name__ == "__main__":
 
     parser = ap.ArgumentParser()
     set_program_flags()
-    set_file_args()
     set_processing_args()
     arguments = parser.parse_args()
-
-    parameters = set_parameters()
-
-    # Repeatedly used default directory to ensure standardization. Storing here
-    # because it is a derived from only arguments.
-    arguments.default_dir = (arguments.video_dir +
-                             os.path.splitext(arguments.filename)[0] +
-                             "/debug/")
-
-    main(arguments, parameters)
+    main(arguments)

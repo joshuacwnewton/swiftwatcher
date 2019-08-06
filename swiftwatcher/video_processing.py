@@ -1,6 +1,5 @@
 # Stdlib imports
-import os
-import glob
+from os import fspath
 import collections
 import math
 from time import sleep
@@ -19,9 +18,6 @@ from scipy.optimize import linear_sum_assignment
 from skimage import measure
 import utils.cm as cm
 import pandas as pd
-
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
 
 
 class FrameQueue:
@@ -45,20 +41,22 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, args, queue_size=1, desired_fps=False):
+    def __init__(self, config=None, queue_size=1, desired_fps=False,
+                 test_dir="", visual=False):
+
+        def assign_paths():
+            self.src_filepath = config["src_filepath"]
+            self.dir_base = config["base_dir"]
+            if "test_dir" in config:
+                self.dir_test = config["test_dir"]
 
         def assign_file_properties():
-            # Check validity of filepath
-            video_filepath = args.video_dir + args.filename
-            if not os.path.isfile(video_filepath):
+            if not self.src_filepath.exists():
                 raise Exception(
                     "[!] Filepath does not point to valid video file.")
 
             # Open source video file and initialize its immutable attributes
-            self.src_filename = args.filename
-            self.src_directory = args.video_dir
-            self.stream = cv2.VideoCapture("{}/{}".format(self.src_directory,
-                                                          self.src_filename))
+            self.stream = cv2.VideoCapture(fspath(self.src_filepath))
             if not self.stream.isOpened():
                 raise Exception("[!] Video file could not be opened to read"
                                 " frames. Check file path.")
@@ -69,7 +67,7 @@ class FrameQueue:
                 self.src_height = int(
                     self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self.src_starttime = pd.Timestamp(args.timestamp)
+                self.src_starttime = pd.Timestamp(config["timestamp"])
 
         def assign_processing_properties():
             # Separate from src in case of cropping
@@ -83,21 +81,21 @@ class FrameQueue:
             self.delay = round(
                 self.src_fps / self.fps) - 1  # For subsampling vid
 
-            if "load" not in args:
-                args.load = [0, -1]
-
-            self.frame_to_load_next = args.load[0]
-            if args.load[1] == -1:
+            self.frame_to_load_next = config["start_frame"]
+            if config["end_frame"] == -1:
                 self.total_frames \
                     = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
             else:
-                self.total_frames = args.load[1] - args.load[0] + 1
+                self.total_frames = config["end_frame"]-config["start_frame"]+1
 
             # Initialize "disappeared segment" event tracking list
             self.event_list = []
 
+            self.visual = visual
+
         def assign_queue_properties():
             # Initialize primary queue for unaltered frames
+            self.queue_size = queue_size
             self.queue = collections.deque([], queue_size)
             self.framenumbers = collections.deque([], queue_size)
             self.timestamps = collections.deque([], queue_size)
@@ -122,7 +120,7 @@ class FrameQueue:
 
             # Recording the outer-most coordinates from the two provided points
             # because they may not be parallel.
-            bottom_corners = args.chimney
+            bottom_corners = config["corners"]
             left = min(bottom_corners[0][0], bottom_corners[1][0])
             right = max(bottom_corners[0][0], bottom_corners[1][0])
             top = min(bottom_corners[0][1], bottom_corners[1][1])
@@ -134,18 +132,6 @@ class FrameQueue:
                                  top - 2*height),
                                 (right + int(0.5*height),
                                  bottom + int(0.5*height))]
-            self.nn_region = [(left - int(0.5*height),
-                                 top - height),
-                                (right + int(0.5*height),
-                                 bottom)]
-            # NOTE: I think he "crop_region" is too large -- I believe a
-            # smaller region would produce similar results. For example:
-            # crop_region = [(left, top - height), (right, bottom + height)]
-            #
-            # Because choosing a different crop would require recomputing the
-            # RPCA step (which is a bottleneck for time), this won't be touched
-            # for a while.
-
             self.roi_region = [(int(left + 0.025 * width),
                                 int(bottom - height)),
                                (int(right - 0.025 * width),
@@ -171,18 +157,6 @@ class FrameQueue:
             thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8),
                              anchor=(0, 0))
 
-            # NOTE: I've chosen a rectangular ROI here but I think this isn't the
-            # right approach to take. I think the ROI should be shaped like the
-            # edge of the chimney to more accurately represent regions where
-            # swifts exist right before entering the chimney.
-            #    ______________________              ________________
-            #   |X   ______________   X|           ,' ______________ ',
-            #   |  ,'              ',  |          / ,'              ', \
-            #   | /                  \ |         | /    potential     \ |
-            #   |/      current       \|         |/    alternative     \|
-            #
-            # X's represent area in the current ROI where false positives occur.
-
             # Add roi to empty image of the same size as the frame
             frame_with_thr = np.zeros_like(
                 cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
@@ -193,22 +167,15 @@ class FrameQueue:
             frame_with_thr = self.preprocess_frame(frame_with_thr)
             _, self.roi_mask = cv2.threshold(frame_with_thr, 0, 255,
                                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            # NOTE: This is a hacky way to do this -- there's probably a nicer way
-            # to ensure that the ROI gets the same preprocessing as the frames
-            # themselves. I could probably wrap the preprocessing stages in a
-            # single function rather than having them separate. Time concerns, etc
 
+        assign_paths()
         assign_file_properties()
         assign_processing_properties()
         assign_queue_properties()
         generate_chimney_regions(alpha=0.25)
         generate_roi_mask()
 
-        if "extract" in args:
-            if not args.extract:
-                self.stream.release()
-
-    def load_frame(self, load_directory=None, empty=False):
+    def load_frame(self, empty=False):
 
         def fn_to_ts(frame_number):
             """Helper function to convert an amount of frames into a timestamp."""
@@ -216,17 +183,6 @@ class FrameQueue:
             timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
             return timestamp
-
-        def ts_to_fn(timestamp):
-            """Helper function to convert timestamp into an amount of frames."""
-            t = timestamp.time()
-            total_s = (t.hour * 60 * 60 +
-                       t.minute * 60 +
-                       t.second +
-                       t.microsecond / 1e6)
-            frame_number = int(round(total_s * self.fps))
-
-            return frame_number
 
         def load_frame_from_video():
             """Insert next frame from stream into index 0 of queue."""
@@ -252,12 +208,12 @@ class FrameQueue:
             new_timestamp = fn_to_ts(new_framenumber)
 
             t = new_timestamp.time()
-            directory = (load_directory +
-                         "frames/{0:02d}:{1:02d}".format(t.hour, t.minute))
+            load_directory = (self.dir_base / "frames"
+                              / "{0:02d}:{1:02d}".format(t.hour, t.minute))
 
-            file_paths = glob.glob("{0}/frame{1}_*".format(directory,
-                                                           new_framenumber))
-            new_frame = np.array(cv2.imread(file_paths[0]))
+            file_paths = list(load_directory.glob(
+                              "frame{}_*".format(new_framenumber)))
+            new_frame = np.array(cv2.imread(fspath(file_paths[0])))
 
             if not new_frame.size == 0:
                 success = True
@@ -270,10 +226,10 @@ class FrameQueue:
         new_frame = ""
         success = False
 
-        if load_directory:
-            load_frame_from_file()
-        elif empty:
+        if empty:
             pass
+        elif (self.dir_base/"frames").exists():
+            load_frame_from_file()
         else:
             load_frame_from_video()
 
@@ -284,27 +240,24 @@ class FrameQueue:
         return success
 
     def save_frame(self, base_save_directory, frame=None, index=0,
-                   scale=1, single_folder=False,
-                   base_folder="", frame_folder="frames/",
+                   scale=1, single_folder=False, frame_folder="frames/",
                    file_prefix="", file_suffix=""):
         """Save an individual frame to an image file. If frame itself is not
         provided, frame will be pulled from frame queue at specified index."""
 
-        # By default, frames will be saved in a subfolder corresponding to
-        # HH:MM formatting. However, a custom subfolder can be chosen instead.
-        base_save_directory = base_save_directory+base_folder+frame_folder
+        base_save_directory = base_save_directory/frame_folder
 
         if single_folder:
             save_directory = base_save_directory
         else:
             t = self.timestamps[-1].time()
-            save_directory = (base_save_directory+"{0:02d}:{1:02d}"
+            save_directory = (base_save_directory/"{0:02d}:{1:02d}"
                               .format(t.hour, t.minute))
 
         # Create save directory if it does not already exist
-        if not os.path.isdir(save_directory):
+        if not save_directory.exists():
             try:
-                os.makedirs(save_directory)
+                save_directory.mkdir(parents=True, exist_ok=True)
                 sleep(0.5)  # Sometimes frame 0 won't be saved without a delay
             except OSError:
                 print("[!] Creation of the directory {0} failed."
@@ -323,7 +276,7 @@ class FrameQueue:
 
         # Write frame to image file within save_directory
         cv2.imwrite("{0}/{1}frame{2}_{3}{4}.jpg"
-                    .format(save_directory, file_prefix,
+                    .format(fspath(save_directory), file_prefix,
                             self.framenumbers[index],
                             self.timestamps[index].time(),
                             file_suffix),
@@ -333,7 +286,6 @@ class FrameQueue:
 
         def convert_grayscale():
             """Convert to grayscale a frame at specified index of FrameQueue"""
-
             nonlocal frame
 
             # OpenCV default, may use other methods in future (single HSV channel?)
@@ -342,8 +294,8 @@ class FrameQueue:
 
         def crop_frame():
             """Crop frame at specified index of FrameQueue."""
-
             nonlocal frame
+
             corners = self.crop_region
 
             try:
@@ -360,16 +312,6 @@ class FrameQueue:
             nonlocal frame
 
             frame = cv2.resize(frame, (300, 150))
-
-            # Update frame attributes
-            self.height = frame.shape[0]
-            self.width = frame.shape[1]
-
-        def pyramid_down():
-            nonlocal frame
-
-            for i in range(iterations):
-                frame = cv2.pyrDown(frame)
 
             # Update frame attributes
             self.height = frame.shape[0]
@@ -393,17 +335,17 @@ class FrameQueue:
         else:
             return frame
 
-    def segment_frame(self, args, params):
+    def segment_frame(self):
         """Segment birds from one frame ("index") using information from other
         frames in the FrameQueue object. Store segmented frame in secondary
         queue."""
 
-        def rpca(lmbda, tol, maxiter, darker, index=None):
+        def rpca(index=None):
             """Decompose set of images into corresponding low-rank and sparse
             images. Method expects images to have been reshaped to matrix of
             column vectors.
 
-            Note: frame = lowrank + sparse
+            Note: frame = lowrank + sparse, where:
                           lowrank = "background" image
                           sparse  = "foreground" errors corrupting
                                     the "background" image
@@ -421,13 +363,11 @@ class FrameQueue:
 
             # Algorithm for the IALM approximation of Robust PCA method.
             lr_columns, s_columns = \
-                inexact_augmented_lagrange_multiplier(col_matrix,
-                                                      lmbda, tol, maxiter)
+                inexact_augmented_lagrange_multiplier(col_matrix)
 
             # Bring pixels that are darker than background to [0, 255] range
-            if darker:
-                s_columns = np.negative(s_columns)
-                s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
+            s_columns = np.negative(s_columns)
+            s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
 
             # Reshape columns back into image dimensions
             for i in range(img_matrix.shape[0]):
@@ -435,7 +375,6 @@ class FrameQueue:
                                            (self.height, self.width))
 
         def edge_based_otsu(image):
-            # smoothed_image = cv2.medianBlur(image, 5)
             smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
                                                  sigmaSpace=1)
             edge_image = cv2.Canny(smoothed_image, 25, 50)
@@ -512,30 +451,18 @@ class FrameQueue:
                                          rows[i])).astype(np.uint8)
 
             # Save to file
-            self.save_frame(save_directory,
+            self.save_frame(self.dir_test,
                             frame=rows[0],
                             index=-1,
-                            base_folder=folder_name,
                             frame_folder="visualizations/segmentation/")
 
-        if "visual" not in args:
-            save_directory = None
-            folder_name = None
-            visual = False
-        else:
-            save_directory = args.default_dir
-            folder_name = args.custom_dir
-            visual = args.visual
-
         # Apply Robust PCA method in batches
-        if self.frames_read % params["queue_size"] == 0:
-            rpca(params["ialm_lmbda"], params["ialm_tol"],
-                 params["ialm_maxiter"], params["ialm_darker"])
+        if self.frames_read % self.queue_size == 0:
+            rpca()
         if self.frames_read == self.total_frames:
-            if self.frames_read-self.frames_processed == params["queue_size"]:
-                rem = self.total_frames % params["queue_size"]
-                rpca(params["ialm_lmbda"], params["ialm_tol"],
-                     params["ialm_maxiter"], params["ialm_darker"], index=rem)
+            if self.frames_read-self.frames_processed == self.queue_size:
+                rem = self.total_frames % self.queue_size
+                rpca(index=rem)
 
         # Process each RPCA "sparse error" frame to remove non-swift details
         seg = {}
@@ -565,10 +492,10 @@ class FrameQueue:
         self.seg_properties.appendleft(measure.regionprops(labeled_frame))
         self.frames_processed += 1
 
-        if visual:
+        if self.visual:
             segment_visualization()
 
-    def match_segments(self, args, params):
+    def match_segments(self):
         """Analyze a pair of segmented frames and return conclusions about
         which segments match between frames.
 
@@ -669,21 +596,11 @@ class FrameQueue:
                                 match_comparison_color, 0.90, 0)
 
             # Save completed visualization to folder
-            self.save_frame(save_directory,
-                                    frame=match_comparison_color,
-                                    index=-1,
-                                    base_folder=folder_name,
-                                    frame_folder="visualizations/matching/",
-                                    scale=1)
-
-        if "visual" not in args:
-            save_directory = None
-            folder_name = None
-            visual = False
-        else:
-            save_directory = args.default_dir
-            folder_name = args.custom_dir
-            visual = args.visual
+            self.save_frame(self.dir_test,
+                            frame=match_comparison_color,
+                            index=-1,
+                            frame_folder="visualizations/matching/",
+                            scale=1)
 
         # Assign names to commonly used properties
         count_curr = len(self.seg_properties[0])
@@ -724,7 +641,7 @@ class FrameQueue:
 
                 # Map distance values using an Exponential curve
                 # NOTE: This function was scrapped together in June. Needs to
-                # be chosen more methodically if used for paper.
+                # be chosen more methodically if used for research paper.
                 likeilihood_matrix[i, i] = \
                     (1 / 8) * math.exp(-edge_distance / 10)
 
@@ -755,7 +672,7 @@ class FrameQueue:
             seg_matches = []  # Empty list for visuals in case count_total = 0
 
         # Create visualization of segment matches if requested
-        if visual:
+        if self.visual:
             match_visualization()
 
     def analyse_matches(self):
@@ -801,42 +718,37 @@ class FrameQueue:
                     self.event_list.append(event_info)
 
 
-def extract_frames(args, queue_size=1, save_directory=None):
+def extract_frames(args):
     """Function which uses object methods to extract individual frames
      (one at a time) from a video file. Saves each frame to image files for
      future reuse."""
 
-    if not save_directory:
-        save_directory = args.default_dir
-
-    fq = FrameQueue(args, queue_size)
+    fq = FrameQueue(args)
 
     failcount = 0
 
     print("[*] Reading frames... (This may take a while!)")
+
     while failcount < 10:  # fq.frames_read < fq.src_framecount:
         success = fq.load_frame()
         if success:
             failcount = 0
+            fq.save_frame(args.default_dir)
         else:
             failcount += 1
-
-        if success:
-            fq.save_frame(save_directory)
-        else:
-            raise Exception("read_frame() failed before expected end of file.")
 
         if fq.frames_read % 1000 == 0:
             print("[-] {}/{} frames successfully processed."
                   .format(fq.frames_read, fq.src_framecount))
             # NOTE: Should probably have some sort of "verbose" flag, or
             # utilize logging. This seems like a naive way to provide updates.
+
     fq.stream.release()
     print("[-] Extraction complete. {} total frames extracted."
           .format(fq.frames_read))
 
 
-def process_frames(args, params):
+def process_frames(args, config):
     """Function which uses object methods to analyse a sequence of previously
     extracted frames and determine bird counts for that sequence."""
 
@@ -855,21 +767,29 @@ def process_frames(args, params):
 
     print("[*] Analysing frames... (This may take a while!)")
 
-    fq = FrameQueue(args, queue_size=params["queue_size"])
+    fq = FrameQueue(config, queue_size=21,
+                    test_dir=args.custom_dir, visual=args.visual)
+
     while fq.frames_processed < fq.total_frames:
-        if fq.frames_read < (params["queue_size"]-1):
-            fq.load_frame(args.default_dir)
+        if fq.frames_read < (fq.queue_size - 1):
+            fq.load_frame()
             fq.preprocess_frame()
-        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
-            fq.load_frame(args.default_dir)
+            # No segmentation needed until queue is filled
+            # No matching needed until queue is filled
+            # No analysis needed until queue is filled
+
+        elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
+            fq.load_frame()
             fq.preprocess_frame()
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame()
+            fq.match_segments()
             fq.analyse_matches()
+
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            # No preprocessing needed for empty frame
+            fq.segment_frame()
+            fq.match_segments()
             fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
@@ -884,7 +804,7 @@ def process_frames(args, params):
     return df_eventinfo
 
 
-def full_algorithm(args, params, video_dict):
+def full_algorithm(args, video_dict):
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
                                  columns=list(passed_list[0].keys())
@@ -899,28 +819,28 @@ def full_algorithm(args, params, video_dict):
     args.chimney = video_dict["corners"]
     args.load = [0, 3000]
 
-    fq = FrameQueue(args, params["queue_size"])
+    fq = FrameQueue(args, queue_size=21)
 
     while fq.frames_processed < fq.total_frames:
-        if fq.frames_read < (params["queue_size"]-1):
+        if fq.frames_read < (fq.queue_size - 1):
             fq.load_frame()
             fq.preprocess_frame()
             # No segmentation needed until queue is filled
             # No matching needed until queue is filled
             # No analysis needed until queue is filled
 
-        elif (params["queue_size"]-1) <= fq.frames_read < fq.total_frames:
+        elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
             fq.load_frame()
             fq.preprocess_frame()
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
 
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
             # No preprocessing needed for empty frame
-            fq.segment_frame(args, params)
-            fq.match_segments(args, params)
+            fq.segment_frame(args)
+            fq.match_segments(args)
             fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
