@@ -136,7 +136,24 @@ def generate_comparison(config, df_prediction, df_groundtruth):
         df_combined = df_prediction_cp.combine_first(df_groundtruth)
         df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
 
-    df_combined_fixed = fix_offbyone(df_combined)
+        df_combined_copy = df_combined.copy(deep=True)
+
+        if type(df_combined.index) == pd.MultiIndex:
+            indexes_to_drop = df_combined[(df_combined.index.levels[1]
+                                           < config["start_frame"] - 1) |
+                                          (df_combined.index.levels[1]
+                                           > config["end_frame"] - 1)].index
+        else:
+            indexes_to_drop = df_combined[(df_combined.index
+                                           < config["start_frame"] - 1) |
+                                          (df_combined.index
+                                           > config["end_frame"] - 1)].index
+
+            df_combined_copy = df_combined_copy.drop(index=indexes_to_drop)
+        df_combined_fixed = fix_offbyone(df_combined_copy)
+
+    else:
+        df_combined_fixed = df_prediction
 
     return df_combined_fixed
 
