@@ -9,6 +9,7 @@
 # -TODO: Matching/feature: Area of segment (Avg?)
 # -TODO: Matching/feature: Diagonal length of segment (Avg?)
 # -TODO: Matching/feature: Relative position of segment
+# -TODO: Overhaul how matching works to make more sense (costs)
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
