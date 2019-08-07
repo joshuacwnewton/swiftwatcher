@@ -73,6 +73,11 @@ def main(args):
                                                  "prediction",
                                                  "comparison"
                                               ])
+                dfs["comparison_before"], dfs["comparison"] \
+                    = data.generate_comparison(config,
+                                               dfs["prediction"],
+                                               dfs["groundtruth"])
+                data.export_dataframes(config["test_dir"], dfs)
 
             results = data.evaluate_results(config["test_dir"],
                                             dfs["comparison"])
