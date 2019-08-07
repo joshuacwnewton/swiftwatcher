@@ -56,14 +56,15 @@ def main(args):
 
         if args._analyse:
             if args._process:
-                dfs = data.import_dataframes(config["base_dir"],
+                dfs = data.import_dataframes(config["test_dir"],
                                              ["groundtruth"])
                 dfs["eventinfo"] = df_eventinfo
                 dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
                 dfs["prediction"] = data.generate_classifications(dfs["features"])
-                dfs["comparison"] = data.generate_comparison(config,
-                                                             dfs["prediction"],
-                                                             dfs["groundtruth"])
+                dfs["comparison_before"], dfs["comparison"] \
+                    = data.generate_comparison(config,
+                                               dfs["prediction"],
+                                               dfs["groundtruth"])
                 data.export_dataframes(config["test_dir"], dfs)
             else:
                 dfs = data.import_dataframes(config["test_dir"],
@@ -74,11 +75,6 @@ def main(args):
                                                  "prediction",
                                                  "comparison"
                                               ])
-                dfs["comparison_before"], dfs["comparison"] \
-                    = data.generate_comparison(config,
-                                               dfs["prediction"],
-                                               dfs["groundtruth"])
-                data.export_dataframes(config["test_dir"], dfs)
 
             results = data.evaluate_results(config["test_dir"],
                                             dfs["comparison"])
@@ -148,7 +144,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -171,15 +167,17 @@ if __name__ == "__main__":
                             "--configs",
                             help="Config files for tests to be run",
                             default=[
-                                "videos/configs/ch04_partial.json",
-                                "videos/configs/june13_full-video.json",
-                                "videos/configs/june14_full-video.json"
+                                # "videos/configs/ch04_partial.json",
+                                # "videos/configs/june13_partial.json",
+                                "videos/configs/june14_partial.json",
+                                # "videos/configs/june13_full-video.json",
+                                # "videos/configs/june14_full-video.json"
                             ]
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-06_full-video/"
+                            default="tests/2019-08-07_matching-angle-history/"
                             )
         parser.add_argument("-v",
                             "--visual",
