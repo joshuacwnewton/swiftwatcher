@@ -26,6 +26,7 @@ from itertools import tee
 
 from scipy import interpolate as intp
 
+
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
@@ -60,10 +61,10 @@ def generate_feature_vectors(df_eventinfo):
 
     if not df_eventinfo.empty:
         df_features = pd.DataFrame(index=df_eventinfo.index)
-        df_features["ANGLE"] = df_eventinfo.apply(
-            lambda row: compute_angle(row["CENTRDS"]),
-            axis=1
-        )
+        # df_features["ANGLE"] = df_eventinfo.apply(
+        #     lambda row: compute_angle(row["CENTRDS"]),
+        #     axis=1
+        # )
         df_features["SLOPE"] = df_eventinfo.apply(
             lambda row: compute_poly_slope(row["CENTRDS"]),
             axis=1
@@ -87,9 +88,19 @@ def generate_classifications(df_features):
 
     if not df_features.empty:
         df_labels = pd.DataFrame(index=df_features.index)
-        df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                                   bins=[-180, -125, -55, 180],
+
+        df_labels["SLOPE_y"] = np.array([0, 1, 0])[pd.cut(df_features["SLOPE"],
+                                                   bins=[-1e6, -1.5, 1.5, 1e6],
                                                    labels=False)]
+        df_labels["Y_INT_y"] = np.array([0, 1, 0])[pd.cut(df_features["Y_INT"],
+                                                   bins=[-1e6, -250, 250, 1e6],
+                                                   labels=False)]
+        df_labels["ENTERPR"] = df_labels["Y_INT_y"] & df_labels["SLOPE_y"]
+
+        # df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
+        #                                            bins=[-180, -125, -55, 180],
+        #                                            labels=False)]
+
         # Give each classified event a value of 1, so that when multiple events
         # on a single timestamp are merged, it will clearly show EVENTS = (>=2)
         df_labels["EVENTS"] = 1
@@ -510,6 +521,157 @@ def save_test_config(args, params):
         for key in params.keys():
             filewriter.writerow(["{}".format(key),
                                  "{}".format(params[key])])
+
+
+def feature_engineering2(config, df_features, df_groundtruth):
+    def apply_labels():
+        nonlocal df_features
+
+        def fix_offbyonetwo(df_comparison):
+            df_comparison = df_comparison.fillna(0)
+
+            if type(df_comparison.index) is pd.MultiIndex:
+                for offset in [1, 2]:
+                    rows_to_drop = []
+                    for (i1, row1) in df_comparison.iterrows():
+                        i1 = i1[1]
+                        i2 = i1 + offset
+                        if i2 in df_comparison.index.get_level_values(1):
+                            row2 = df_comparison.xs(i2, level=1,
+                                                    drop_level=False)
+                            row2T = row2.T.squeeze()
+                            diff1 = row1["ENTERGT"] - row1["EVENTS"]
+                            diff2 = row2T["ENTERGT"] - row2T["EVENTS"]
+
+                            # Condition for FN/MD and FP in sequential frames
+                            if (diff1 > 0) and (diff2 < 0):
+                                # Shift "off-by-one" GT count to cancel out errors
+                                offbyone = min(diff1, abs(diff2))
+                                row1["ENTERGT"] -= offbyone
+                                df_comparison.at[
+                                    row2.index.remove_unused_levels().values[
+                                        0], "ENTERGT"] += offbyone
+                                # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                                if np.array_equal(row1.values, [0, 0, 0]):
+                                    rows_to_drop.append(i1)
+
+                            # Condition for FP and FN/MD in sequential frames
+                            elif (diff1 < 0) and (diff2 > 0):
+                                # Shift "off-by-one" GT count to cancel out errors
+                                offbyone = min(abs(diff1), diff2)
+                                df_comparison.at[
+                                    row2.index.remove_unused_levels().values[
+                                        0], "ENTERGT"] -= offbyone
+                                row1["ENTERGT"] += offbyone
+
+                                # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                                if np.array_equal(row2.values, [0, 0, 0]):
+                                    rows_to_drop.append(i2)
+                    df_comparison = df_comparison.drop(level=1,
+                                                       index=rows_to_drop)
+            else:
+                for offset in [1, 2]:
+                    rows_to_drop = []
+                    for (i1, row1) in df_comparison.iterrows():
+                        i2 = i1 + offset
+                        if i2 in df_comparison.index:
+                            row2 = df_comparison.loc[i2, :]
+                            diff1 = row1["ENTERGT"] - row1["ENTERPR"]
+                            diff2 = row2["ENTERGT"] - row2["ENTERPR"]
+
+                            # Condition for FN/MD and FP in sequential frames
+                            if (diff1 > 0) and (diff2 < 0):
+                                # Shift "off-by-one" GT count to cancel out errors
+                                offbyone = min(diff1, abs(diff2))
+                                row1["ENTERGT"] -= offbyone
+                                df_comparison.at[i2, "ENTERGT"] += offbyone
+                                # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                                if np.array_equal(row1.values, [0, 0, 0]):
+                                    rows_to_drop.append(i1)
+
+                            # Condition for FP and FN/MD in sequential frames
+                            elif (diff1 < 0) and (diff2 > 0):
+                                # Shift "off-by-one" GT count to cancel out errors
+                                offbyone = min(abs(diff1), diff2)
+                                df_comparison.at[i2, "ENTERGT"] -= offbyone
+                                row1["ENTERGT"] += offbyone
+
+                                # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                                if np.array_equal(row2.values, [0, 0, 0]):
+                                    rows_to_drop.append(i2)
+                    df_comparison = df_comparison.drop(index=rows_to_drop)
+
+            return df_comparison
+
+        # Remove double-event timestamps
+        dupl = df_features.index.duplicated(keep=False)
+        df_features = df_features[~dupl]
+        df_features["EVENTS"] = 1
+        df_groundtruth["EVENTS"] = 0
+
+        # Combine df_features/df_groundtruth
+        df_features["ENTERGT"] = None
+        df_combined = df_features.combine_first(df_groundtruth)
+        if type(df_combined.index) == pd.MultiIndex:
+            indexes_to_drop = df_combined[(df_combined.index.levels[1]
+                                           < config["start_frame"] - 1) |
+                                          (df_combined.index.levels[1]
+                                           > config["end_frame"] - 1)].index
+        else:
+            indexes_to_drop = df_combined[(df_combined.index
+                                           < config["start_frame"] - 1) |
+                                          (df_combined.index
+                                           > config["end_frame"] - 1)].index
+
+        # Fix off-by-one/off-by-two
+        df_combined = df_combined.drop(index=indexes_to_drop)
+        df_combined_fixed = fix_offbyonetwo(df_combined)
+
+        return df_combined_fixed[(df_combined_fixed.T != 0).any()]
+
+    def split_data(labeled_data):
+        true_positives = labeled_data[labeled_data["ENTERGT"] > 0]
+        true_negatives = labeled_data[labeled_data["ENTERGT"] == 0]
+
+        return true_positives, true_negatives
+
+    def plot_column_pair(df_pos, df_neg, name):
+        save_directory = fspath(config["test_dir"])
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+
+        plt.cla()
+
+        plt.scatter(df_neg["SLOPE"], df_neg["Y_INT"], s=1)
+        plt.scatter(df_pos["SLOPE"], df_pos["Y_INT"], s=1)
+        axes = plt.gca()
+        axes.set_xlim([-1.5, 1.5])
+        axes.set_ylim([0, 250])
+
+        # ax = tp_col.hist(bins=72, alpha=0.8)
+        # ax = tn_col.hist(bins=72, alpha=0.5)
+        #
+        # ax.set_axisbelow(True)
+        # ax.minorticks_on()
+        # ax.grid(which='major', linestyle='-', linewidth='0.5', color='black')
+        # ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+        #
+        # ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
+        #           loc="upper right")
+        # ax.set_title("Comparison in {} for Detected Segments".format(name))
+        # ax.set_xlabel("Angle (Degrees)")
+        # ax.set_ylabel("Total Segments")
+        # fig = ax.get_figure()
+        plt.savefig(save_directory + '{}.png'.format(name))
+
+    df_labeled = apply_labels()
+    df_pos, df_neg = split_data(df_labeled)
+    plot_column_pair(df_pos, df_neg, "scatter")
+    test = None
 
 
 def feature_engineering(args, result_dict):

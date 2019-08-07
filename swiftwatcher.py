@@ -151,7 +151,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-07_full-angle-history/"
+                            default="tests/2019-08-07_otsu-full-polyfit/"
                             )
         parser.add_argument("-v",
                             "--visual",
