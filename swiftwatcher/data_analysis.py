@@ -179,8 +179,14 @@ def generate_comparison(config, df_prediction, df_groundtruth):
 def import_dataframes(load_directory, df_list):
     dfs = {}
     for df_name in df_list:
-        dfs[df_name] = \
-            pd.read_csv(fspath(load_directory/"{}.csv".format(df_name)))
+        if df_name == "groundtruth":
+            dfs[df_name] = \
+                pd.read_csv(fspath(load_directory.parent.parent/
+                                   "{}.csv".format(df_name)))
+        else:
+            dfs[df_name] = \
+                pd.read_csv(fspath(load_directory / "results" / "df-export" /
+                                   "{}.csv".format(df_name)))
 
         if "TMSTAMP" in dfs[df_name].columns:
             dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
