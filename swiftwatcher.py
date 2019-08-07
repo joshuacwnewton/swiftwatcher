@@ -74,6 +74,11 @@ def main(args):
                                                  "prediction",
                                                  "comparison"
                                               ])
+                dfs["comparison_before"], dfs["comparison"] \
+                    = data.generate_comparison(config,
+                                               dfs["prediction"],
+                                               dfs["groundtruth"])
+                data.export_dataframes(config["test_dir"], dfs)
 
             results = data.evaluate_results(config["test_dir"],
                                             dfs["comparison"])
@@ -143,7 +148,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -167,13 +172,14 @@ if __name__ == "__main__":
                             help="Config files for tests to be run",
                             default=[
                                 "videos/configs/ch04_partial.json",
-                                "videos/configs/june13_partial.json",
-                                "videos/configs/june14_partial.json"]
+                                "videos/configs/june13_full-video.json",
+                                "videos/configs/june14_full-video.json"
+                            ]
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-06_partial/"
+                            default="tests/2019-08-06_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",

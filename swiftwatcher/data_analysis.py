@@ -75,52 +75,75 @@ def generate_classifications(df_features):
 def generate_comparison(config, df_prediction, df_groundtruth):
     """Generate dataframe comparing events in df_eventinfo with frame
     counts in df_groundtruth."""
-    def fix_offbyone(df_comparison):
-        def pairwise(iterable):
-            """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
-            a, b = tee(iterable)
-            next(b, None)
-            return zip(a, b)
-
+    def fix_offbyonetwo(df_comparison):
         df_comparison = df_comparison.fillna(0)
 
-        rows_to_drop = []
-        for (i1, row1), (i2, row2) in pairwise(df_comparison.iterrows()):
-            if (type(i1) is tuple) and (type(i2) is tuple):
-                i1 = i1[1]
-                i2 = i2[1]
+        if type(df_comparison.index) is pd.MultiIndex:
+            for offset in [1, 2]:
+                rows_to_drop = []
+                for (i1, row1) in df_comparison.iterrows():
+                    i1 = i1[1]
+                    i2 = i1 + offset
+                    if i2 in df_comparison.index.get_level_values(1):
+                        row2 = df_comparison.xs(i2, level=1, drop_level=False)
+                        row2T = row2.T.squeeze()
+                        diff1 = row1["ENTERGT"] - row1["ENTERPR"]
+                        diff2 = row2T["ENTERGT"] - row2T["ENTERPR"]
 
-            if i2 - i1 == 1:
-                diff1 = row1["ENTERGT"] - row1["ENTERPR"]
-                diff2 = row2["ENTERGT"] - row2["ENTERPR"]
+                        # Condition for FN/MD and FP in sequential frames
+                        if (diff1 > 0) and (diff2 < 0):
+                            # Shift "off-by-one" GT count to cancel out errors
+                            offbyone = min(diff1, abs(diff2))
+                            row1["ENTERGT"] -= offbyone
+                            df_comparison.at[row2.index.remove_unused_levels().values[0], "ENTERGT"] += offbyone
+                            # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                            if np.array_equal(row1.values, [0, 0, 0]):
+                                rows_to_drop.append(i1)
 
-                # Condition for FN/MD and FP in sequential frames
-                if (diff1 > 0) and (diff2 < 0):
-                    # Shift "off-by-one" GT count to cancel out errors
-                    offbyone = min(diff1, abs(diff2))
-                    row1["ENTERGT"] -= offbyone
-                    row2["ENTERGT"] += offbyone
-                    # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-                    if np.array_equal(row1.values, [0, 0, 0]):
-                        rows_to_drop.append(i1)
+                        # Condition for FP and FN/MD in sequential frames
+                        elif (diff1 < 0) and (diff2 > 0):
+                            # Shift "off-by-one" GT count to cancel out errors
+                            offbyone = min(abs(diff1), diff2)
+                            df_comparison.at[row2.index.remove_unused_levels().values[0], "ENTERGT"] -= offbyone
+                            row1["ENTERGT"] += offbyone
 
-                # Condition for FP and FN/MD in sequential frames
-                elif (diff1 < 0) and (diff2 > 0):
-                    # Shift "off-by-one" GT count to cancel out errors
-                    offbyone = min(abs(diff1), diff2)
-                    row2["ENTERGT"] -= offbyone
-                    row1["ENTERGT"] += offbyone
-
-                    # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-                    if np.array_equal(row2.values, [0, 0, 0]):
-                        rows_to_drop.append(i2)
-
-        if type(df_comparison.index) == pd.MultiIndex:
-            df_comparison_rm = df_comparison.drop(level=1, index=rows_to_drop)
+                            # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                            if np.array_equal(row2.values, [0, 0, 0]):
+                                rows_to_drop.append(i2)
+                df_comparison = df_comparison.drop(level=1, index=rows_to_drop)
         else:
-            df_comparison_rm = df_comparison.drop(index=rows_to_drop)
+            for offset in [1, 2]:
+                rows_to_drop = []
+                for (i1, row1) in df_comparison.iterrows():
+                    i2 = i1 + offset
+                    if i2 in df_comparison.index:
+                        row2 = df_comparison.loc[i2, :]
+                        diff1 = row1["ENTERGT"] - row1["ENTERPR"]
+                        diff2 = row2["ENTERGT"] - row2["ENTERPR"]
 
-        return df_comparison_rm
+                        # Condition for FN/MD and FP in sequential frames
+                        if (diff1 > 0) and (diff2 < 0):
+                            # Shift "off-by-one" GT count to cancel out errors
+                            offbyone = min(diff1, abs(diff2))
+                            row1["ENTERGT"] -= offbyone
+                            df_comparison.at[i2, "ENTERGT"] += offbyone
+                            # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                            if np.array_equal(row1.values, [0, 0, 0]):
+                                rows_to_drop.append(i1)
+
+                        # Condition for FP and FN/MD in sequential frames
+                        elif (diff1 < 0) and (diff2 > 0):
+                            # Shift "off-by-one" GT count to cancel out errors
+                            offbyone = min(abs(diff1), diff2)
+                            df_comparison.at[i2, "ENTERGT"] -= offbyone
+                            row1["ENTERGT"] += offbyone
+
+                            # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+                            if np.array_equal(row2.values, [0, 0, 0]):
+                                rows_to_drop.append(i2)
+                df_comparison = df_comparison.drop(index=rows_to_drop)
+
+        return df_comparison
 
     if not df_prediction.empty:
         df_groundtruth = df_groundtruth[df_groundtruth["ENTERGT"] > 0]
@@ -134,7 +157,6 @@ def generate_comparison(config, df_prediction, df_groundtruth):
             df_prediction_cp = df_prediction_cp.drop(columns="TMSTAMP")
 
         df_combined = df_prediction_cp.combine_first(df_groundtruth)
-        df_combined["ENTERGT"] = df_combined["ENTERGT"].fillna(0)
 
         if type(df_combined.index) == pd.MultiIndex:
             indexes_to_drop = df_combined[(df_combined.index.levels[1]
@@ -146,20 +168,25 @@ def generate_comparison(config, df_prediction, df_groundtruth):
                                            < config["start_frame"] - 1) |
                                           (df_combined.index
                                            > config["end_frame"] - 1)].index
-        df_combined_fixed = fix_offbyone(df_combined)
+        df_combined_fixed = fix_offbyonetwo(df_combined)
         df_combined_fixed = df_combined_fixed.drop(index=indexes_to_drop)
-
     else:
         df_combined_fixed = df_prediction
 
-    return df_combined_fixed
+    return df_combined, df_combined_fixed
 
 
 def import_dataframes(load_directory, df_list):
     dfs = {}
     for df_name in df_list:
-        dfs[df_name] = \
-            pd.read_csv(fspath(load_directory/"{}.csv".format(df_name)))
+        if df_name == "groundtruth":
+            dfs[df_name] = \
+                pd.read_csv(fspath(load_directory.parent.parent/
+                                   "{}.csv".format(df_name)))
+        else:
+            dfs[df_name] = \
+                pd.read_csv(fspath(load_directory / "results" / "df-export" /
+                                   "{}.csv".format(df_name)))
 
         if "TMSTAMP" in dfs[df_name].columns:
             dfs[df_name]["TMSTAMP"] = pd.to_datetime(dfs[df_name]["TMSTAMP"])
