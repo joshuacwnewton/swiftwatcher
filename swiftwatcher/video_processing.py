@@ -398,7 +398,7 @@ class FrameQueue:
                                        cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             _, thresholded_image = cv2.threshold(smoothed_image,
-                                                 thresh=ret, maxval=255,
+                                                 thresh=10, maxval=255,
                                                  type=cv2.THRESH_TOZERO)
 
             return edge_image, mask_cp, thresholded_image
