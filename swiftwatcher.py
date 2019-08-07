@@ -75,6 +75,13 @@ def main(args):
                                                  "prediction",
                                                  "comparison"
                                               ])
+                dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
+                dfs["prediction"] = data.generate_classifications(dfs["features"])
+                dfs["comparison_before"], dfs["comparison"] \
+                    = data.generate_comparison(config,
+                                               dfs["prediction"],
+                                               dfs["groundtruth"])
+                data.export_dataframes(config["test_dir"], dfs)
 
             results = data.evaluate_results(config["test_dir"],
                                             dfs["comparison"])
@@ -144,7 +151,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -177,7 +184,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-07_angle-minus-last/"
+                            default="tests/2019-08-07_full-angle-history/"
                             )
         parser.add_argument("-v",
                             "--visual",
