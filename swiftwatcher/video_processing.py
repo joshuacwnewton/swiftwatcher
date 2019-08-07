@@ -624,9 +624,9 @@ class FrameQueue:
                     if len(seg_prev.__centroids) > 1:
                         centroid_list = seg_prev.__centroids
 
-                        del_y = centroid_list[0][0] - centroid_list[1][0]
+                        del_y = centroid_list[0][0] - centroid_list[-1][0]
                         del_x = -1 * (
-                                    centroid_list[0][1] - centroid_list[1][1])
+                                    centroid_list[0][1] - centroid_list[-1][1])
                         angle_prev = math.degrees(math.atan2(del_y, del_x))
 
                         del_y = centroid_list[1][0] - seg.centroid[0]
