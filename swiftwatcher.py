@@ -1,15 +1,24 @@
 # =================================== Ideas ================================= #
-# -TODO: RPCA speed increase (crop regions, queue size, non-RPCA BS)
+# rpca-speed-increase:
+# -TODO: Smaller crop regions/resize regions (for RPCA)
+# -TODO: Smaller queue size (for RPCA)
+# -TODO: Alternate background subtraction technique
 #
-# -TODO: Try hard threshold at 10-15
-#
-# -TODO: Modify how angle is calculated.
-# -TODO: Try increasing angle range? (Guess and check optimal decision boundary)
+# testing-stage-modifications:
 # -TODO: Analyse all videos for shared sources of error
-# -TODO: Matching/feature: Area of segment (Avg?)
-# -TODO: Matching/feature: Diagonal length of segment (Avg?)
-# -TODO: Matching/feature: Relative position of segment
-# -TODO: Overhaul how matching works to make more sense (costs)
+#
+# -TODO: Test hard threshold at 10-15
+#
+# -TODO: Test different angle feature extraction (full vs. partial)
+# -TODO: Test different angle decision boundary
+#
+# -TODO: Test distance cost vs. distance likelihood functions
+# -TODO: Test angle costs
+# -TODO: Test segment size/shape costs
+#
+# -TODO: Test polynomial-fitting (slope/y-int) with ML classifier
+# -TODO: Test position feature combined with angle feature
+# -TODO: Explore ML/data analysis theory
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
