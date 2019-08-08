@@ -18,11 +18,11 @@ from swiftwatcher.video_processing import FrameQueue
 # Classifier modules
 from sklearn import svm
 import cv2
-# import seaborn
-# seaborn.set()
-
-# Needed for pairwise iteration
-from itertools import tee
+from pathlib import Path
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 def generate_feature_vectors(df_eventinfo):
@@ -39,12 +39,38 @@ def generate_feature_vectors(df_eventinfo):
 
         return angle
 
+    def compute_poly_slope(centroid_list):
+        if type(centroid_list) is str:
+            centroid_list = literal_eval(centroid_list)
+
+        x, y = zip(*centroid_list)
+        slope, y_int = np.polyfit(x, y, 1)
+
+        return slope
+
+    def compute_poly_yint(centroid_list):
+        if type(centroid_list) is str:
+            centroid_list = literal_eval(centroid_list)
+
+        x, y = zip(*centroid_list)
+        slope, y_int = np.polyfit(x, y, 1)
+
+        return y_int
+
     if not df_eventinfo.empty:
         df_features = pd.DataFrame(index=df_eventinfo.index)
         df_features["ANGLE"] = df_eventinfo.apply(
             lambda row: compute_angle(row["CENTRDS"]),
             axis=1
         )
+        # df_features["SLOPE"] = df_eventinfo.apply(
+        #     lambda row: compute_poly_slope(row["CENTRDS"]),
+        #     axis=1
+        # )
+        # df_features["Y_INT"] = df_eventinfo.apply(
+        #     lambda row: compute_poly_yint(row["CENTRDS"]),
+        #     axis=1
+        # )
     else:
         df_features = df_eventinfo
 
@@ -57,12 +83,54 @@ def generate_classifications(df_features):
 
     Note: currently this is done using a hard-coded values, but
     if time permits I would like to transition to a ML classifier."""
+    def train_model():
+        positives = pd.read_csv(fspath(Path.cwd()/"videos"/"positives.csv"))
+        negatives = pd.read_csv(
+            fspath(Path.cwd() / "videos" / "negatives.csv"))
+        X_p = np.array([positives["SLOPE"].values, positives["Y_INT"].values]).T
+        X_n = np.array([negatives["SLOPE"].values, negatives["Y_INT"].values]).T
+        y_p = np.ones((X_p.shape[0], 1))
+        y_n = np.zeros((X_n.shape[0], 1))
+        X = np.vstack([X_p, X_n])
+        y = np.vstack([y_p, y_n])
+
+        clf = GaussianProcessClassifier(1.0 * RBF(1.0))
+        # X = StandardScaler().fit_transform(X)
+        X_train, X_test, y_train, y_test = \
+            train_test_split(X, y, test_size=.4, random_state=42)
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+
+        return clf
+
+    def classify_feature_vectors(clf):
+        # Hand-crafted classification
+        df_labels["SLLABEL"] = np.array([0, 1, 0])[pd.cut(df_features["SLOPE"],
+                                                   bins=[-1e6, -1.5, 1.5, 1e6],
+                                                   labels=False)]
+        df_labels["YILABEL"] = np.array([0, 1, 0])[pd.cut(df_features["Y_INT"],
+                                                   bins=[-1e6, -250, 250, 1e6],
+                                                   labels=False)]
+        y1 = df_labels["YILABEL"] & df_labels["SLLABEL"]
+
+        # new method using classifier
+        classifier = train_model()
+        X = np.array([df_labels["SLOPE"].values, df_labels["Y_INT"].values]).T
+        # X = StandardScaler().fit_transform(X)
+        y2 = classifier.predict(X).T
+        return y1, y2
 
     if not df_features.empty:
-        df_labels = pd.DataFrame(index=df_features.index)
+        df_labels = df_features.copy()
         df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                    bins=[-180, -125, -55, 180],
                                                    labels=False)]
+
+        # Experimental classification using line-fitting
+        # classifier = train_model()
+        # df_labels["ENTERPR2"], df_labels["ENTERPR3"] \
+        #     = classify_feature_vectors(classifier)
+
         # Give each classified event a value of 1, so that when multiple events
         # on a single timestamp are merged, it will clearly show EVENTS = (>=2)
         df_labels["EVENTS"] = 1
@@ -483,6 +551,200 @@ def save_test_config(args, params):
         for key in params.keys():
             filewriter.writerow(["{}".format(key),
                                  "{}".format(params[key])])
+
+
+def feature_engineering2(config, results):
+    # def apply_labels():
+    #     def fix_offbyonetwo(df_comparison):
+    #         df_comparison = df_comparison.fillna(0)
+    #
+    #         if type(df_comparison.index) is pd.MultiIndex:
+    #             for offset in [1, 2]:
+    #                 rows_to_drop = []
+    #                 for (i1, row1) in df_comparison.iterrows():
+    #                     i1 = i1[1]
+    #                     i2 = i1 + offset
+    #                     if i2 in df_comparison.index.get_level_values(1):
+    #                         row2 = df_comparison.xs(i2, level=1,
+    #                                                 drop_level=False)
+    #                         row2T = row2.T.squeeze()
+    #                         diff1 = row1["ENTERGT"] - row1["EVENTS"]
+    #                         diff2 = row2T["ENTERGT"] - row2T["EVENTS"]
+    #
+    #                         # Condition for FN/MD and FP in sequential frames
+    #                         if (diff1 > 0) and (diff2 < 0):
+    #                             # Shift "off-by-one" GT count to cancel out errors
+    #                             offbyone = min(diff1, abs(diff2))
+    #                             row1["ENTERGT"] -= offbyone
+    #                             df_comparison.at[
+    #                                 row2.index.remove_unused_levels().values[
+    #                                     0], "ENTERGT"] += offbyone
+    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+    #                             if np.array_equal(row1.values, [0, 0, 0]):
+    #                                 rows_to_drop.append(i1)
+    #
+    #                         # Condition for FP and FN/MD in sequential frames
+    #                         elif (diff1 < 0) and (diff2 > 0):
+    #                             # Shift "off-by-one" GT count to cancel out errors
+    #                             offbyone = min(abs(diff1), diff2)
+    #                             df_comparison.at[
+    #                                 row2.index.remove_unused_levels().values[
+    #                                     0], "ENTERGT"] -= offbyone
+    #                             row1["ENTERGT"] += offbyone
+    #
+    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+    #                             if np.array_equal(row2.values, [0, 0, 0]):
+    #                                 rows_to_drop.append(i2)
+    #                 df_comparison = df_comparison.drop(level=1,
+    #                                                    index=rows_to_drop)
+    #         else:
+    #             for offset in [1, 2]:
+    #                 rows_to_drop = []
+    #                 for (i1, row1) in df_comparison.iterrows():
+    #                     i2 = i1 + offset
+    #                     if i2 in df_comparison.index:
+    #                         row2 = df_comparison.loc[i2, :]
+    #                         diff1 = row1["ENTERGT"] - row1["ENTERPR"]
+    #                         diff2 = row2["ENTERGT"] - row2["ENTERPR"]
+    #
+    #                         # Condition for FN/MD and FP in sequential frames
+    #                         if (diff1 > 0) and (diff2 < 0):
+    #                             # Shift "off-by-one" GT count to cancel out errors
+    #                             offbyone = min(diff1, abs(diff2))
+    #                             row1["ENTERGT"] -= offbyone
+    #                             df_comparison.at[i2, "ENTERGT"] += offbyone
+    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+    #                             if np.array_equal(row1.values, [0, 0, 0]):
+    #                                 rows_to_drop.append(i1)
+    #
+    #                         # Condition for FP and FN/MD in sequential frames
+    #                         elif (diff1 < 0) and (diff2 > 0):
+    #                             # Shift "off-by-one" GT count to cancel out errors
+    #                             offbyone = min(abs(diff1), diff2)
+    #                             df_comparison.at[i2, "ENTERGT"] -= offbyone
+    #                             row1["ENTERGT"] += offbyone
+    #
+    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
+    #                             if np.array_equal(row2.values, [0, 0, 0]):
+    #                                 rows_to_drop.append(i2)
+    #                 df_comparison = df_comparison.drop(index=rows_to_drop)
+    #
+    #         return df_comparison
+    #
+    #     # Remove double-event timestamps
+    #     dupl = df_features.index.duplicated(keep=False)
+    #     df_features = df_features[~dupl]
+    #     df_features["EVENTS"] = 1
+    #     df_groundtruth["EVENTS"] = 0
+    #
+    #     # Combine df_features/df_groundtruth
+    #     df_features["ENTERGT"] = None
+    #     df_combined = df_features.combine_first(df_groundtruth)
+    #     if type(df_combined.index) == pd.MultiIndex:
+    #         indexes_to_drop = df_combined[(df_combined.index.levels[1]
+    #                                        < config["start_frame"] - 1) |
+    #                                       (df_combined.index.levels[1]
+    #                                        > config["end_frame"] - 1)].index
+    #     else:
+    #         indexes_to_drop = df_combined[(df_combined.index
+    #                                        < config["start_frame"] - 1) |
+    #                                       (df_combined.index
+    #                                        > config["end_frame"] - 1)].index
+    #
+    #     # Fix off-by-one/off-by-two
+    #     df_combined = df_combined.drop(index=indexes_to_drop)
+    #     df_combined_fixed = fix_offbyonetwo(df_combined)
+    #
+    #     return df_combined_fixed[(df_combined_fixed.T != 0).any()]
+    #
+    # def split_data(labeled_data):
+    #     true_positives = labeled_data[labeled_data["ENTERGT"] > 0]
+    #     true_negatives = labeled_data[labeled_data["ENTERGT"] == 0]
+    #
+    #     return true_positives, true_negatives
+
+    def plot_column_pair(results, name):
+        save_directory = fspath(config["base_dir"])
+        if not os.path.isdir(save_directory):
+            try:
+                os.makedirs(save_directory)
+            except OSError:
+                print("[!] Creation of the directory {0} failed."
+                      .format(save_directory))
+
+        # all_results = {}
+        # for key, value in results_dict[0].items():
+        #     all_results[key] = pd.concat([results_dict[0][key],
+        #                                   results_dict[1][key],
+        #                                   # results_dict[2][key]
+        #                                   ])
+        # all_results["positives"] = pd.concat(
+        #     [all_results["tp"], all_results["fn"]])
+        # all_results["positives"] = all_results["positives"][
+        #     ~(all_results["positives"]["EVENTS"] > 1)]
+        # all_results["negatives"] = pd.concat(
+        #     [all_results["fp"], all_results["tn"]])
+        # all_results["negatives"] = all_results["negatives"][
+        #     ~(all_results["negatives"]["EVENTS"] > 1)]
+        # data.export_dataframes(config["base_dir"].parent.parent, all_results)
+        # data.feature_engineering2(config, all_results)
+
+        for key, value in results.items():
+            #remove anything with events > 2
+            value = value[~(value["EVENTS"] > 1)]
+            legend = []
+            plt.cla()
+            plt.scatter(value["SLOPE"], value["Y_INT"], s=1)
+            legend.append(key)
+            axes = plt.gca()
+            axes.legend(legend, loc="upper right")
+            plt.savefig(save_directory + '/{0}-{1}.png'.format(name, key),
+                        dpi=300)
+
+        plt.cla()
+        legend = []
+        for key, value in results.items():
+            if (key == "tp") or (key == "fp"):
+                plt.scatter(value["SLOPE"], value["Y_INT"], s=1)
+                legend.append(key)
+                axes = plt.gca()
+        axes.legend(legend, loc="upper right")
+        axes.set_xlim([-1.5, 1.5])
+        axes.set_ylim([-250, 250])
+        plt.savefig(save_directory + '/positives.png', dpi=300)
+
+        positives = pd.concat([results["tp"], results["fn"]])
+        negatives = pd.concat([results["fp"], results["tn"]])
+        plt.cla()
+        plt.scatter(positives["SLOPE"], positives["Y_INT"], s=0.5)
+        plt.scatter(negatives["SLOPE"], negatives["Y_INT"], s=0.5)
+        axes = plt.gca()
+        axes.set_ylim([-100, 500])
+        axes.set_xlim([-3, 3])
+        legend = ["positives", "negatives"]
+        axes.legend(legend, loc="upper right")
+        plt.savefig(save_directory + '/comparison.png', dpi=300)
+
+        # ax = tp_col.hist(bins=72, alpha=0.8)
+        # ax = tn_col.hist(bins=72, alpha=0.5)
+        #
+        # ax.set_axisbelow(True)
+        # ax.minorticks_on()
+        # ax.grid(which='major', linestyle='-', linewidth='0.5', color='black')
+        # ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+        #
+        # ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
+        #           loc="upper right")
+        # ax.set_title("Comparison in {} for Detected Segments".format(name))
+        # ax.set_xlabel("Angle (Degrees)")
+        # ax.set_ylabel("Total Segments")
+        # fig = ax.get_figure()
+
+
+    # df_labeled = apply_labels()
+    # df_pos, df_neg = split_data(df_labeled)
+    plot_column_pair(results, "scatter")
+    test = None
 
 
 def feature_engineering(args, result_dict):

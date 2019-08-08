@@ -3,6 +3,8 @@ from os import fspath
 import collections
 import math
 from time import sleep
+import sys
+eps = sys.float_info.epsilon
 
 # Imports used in numerous stages
 import cv2
@@ -610,6 +612,7 @@ class FrameQueue:
         if count_total > 0:
             # Initialize likelihood matrix as (N+M)x(N+M)
             likeilihood_matrix = np.zeros((count_total, count_total))
+            cost_matrix_new = (1+eps)*np.ones((count_total, count_total))
 
             # Matrix values: likelihood of segments being a match
             for seg_prev in self.seg_properties[1]:
@@ -618,15 +621,38 @@ class FrameQueue:
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
 
-                    # Likeilihoods as a function of distance between segments
+                    # Previous method of calculating likelihoods
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
-
-                    # Map distance values using a Gaussian curve
-                    # NOTE: This function was scrapped together in June. Needs
-                    # to be chosen more methodically if used for paper.
                     likeilihood_matrix[index_v, index_h] = \
                         math.exp(-1 * (((dist - 5) ** 2) / 40))
+
+                    # Compute "angle cost"
+                    if len(seg_prev.__centroids) > 1:
+                        centroid_list = seg_prev.__centroids
+
+                        del_y = centroid_list[0][0] - centroid_list[-1][0]
+                        del_x = -1 * (
+                                    centroid_list[0][1] - centroid_list[-1][1])
+                        angle_prev = math.degrees(math.atan2(del_y, del_x))
+
+                        del_y = centroid_list[1][0] - seg.centroid[0]
+                        del_x = -1 * (
+                                    centroid_list[1][1] - seg.centroid[1])
+                        angle = math.degrees(math.atan2(del_y, del_x))
+
+                        angle_diff = min(360 - abs(angle - angle_prev),
+                                         abs(angle-angle_prev))
+                        angle_cost = 2**(angle_diff - 90)
+                    else:
+                        angle_cost = 1
+
+                    # Compute "distance cost"
+                    dist_cost = 2**(dist - 20)
+
+                    # Average costs for new cost matrix
+                    cost = 0.5*(dist_cost+angle_cost)
+                    cost_matrix_new[index_v, index_h] = cost
 
             # Matrix values: likelihood of segments having no match
             for i in range(count_total):
@@ -639,11 +665,12 @@ class FrameQueue:
                                      self.height - point[0],
                                      self.width - point[1]])
 
-                # Map distance values using an Exponential curve
-                # NOTE: This function was scrapped together in June. Needs to
-                # be chosen more methodically if used for research paper.
+                # Previous method of calculating likelihood
                 likeilihood_matrix[i, i] = \
                     (1 / 8) * math.exp(-edge_distance / 10)
+
+                # New method
+                cost_matrix_new[i, i] = 1
 
             # Convert likelihood matrix into cost matrix
             # This is necessary because of scipy's default implementation
@@ -652,6 +679,9 @@ class FrameQueue:
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
             seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
+
+            # Apply Hungarian/Munkres algorithm using new method
+            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
 
             # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):

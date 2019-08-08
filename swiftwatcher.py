@@ -41,6 +41,7 @@ def main(args):
         set_parameters() function."""
 
     # Debugging/testing modes of functionality
+    results_dict = []
     for config_path in args.configs:
         with open(config_path) as json_file:
             config = json.load(json_file)
@@ -65,39 +66,26 @@ def main(args):
 
         if args._analyse:
             if args._process:
-                dfs = data.import_dataframes(config["base_dir"],
+                dfs = data.import_dataframes(config["test_dir"],
                                              ["groundtruth"])
                 dfs["eventinfo"] = df_eventinfo
-                dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
-                dfs["prediction"] = data.generate_classifications(dfs["features"])
-                dfs["comparison"] = data.generate_comparison(config,
-                                                             dfs["prediction"],
-                                                             dfs["groundtruth"])
-                data.export_dataframes(config["test_dir"], dfs)
             else:
                 dfs = data.import_dataframes(config["test_dir"],
-                                             df_list=[
-                                                 "groundtruth",
-                                                 "eventinfo",
-                                                 "features",
-                                                 "prediction",
-                                                 "comparison"
-                                              ])
-                dfs["comparison_before"], dfs["comparison"] \
-                    = data.generate_comparison(config,
-                                               dfs["prediction"],
-                                               dfs["groundtruth"])
-                data.export_dataframes(config["test_dir"], dfs)
+                                             ["groundtruth", "eventinfo"])
 
+            dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
+            dfs["prediction"] = data.generate_classifications(dfs["features"])
+            dfs["comparison_before"], dfs["comparison"] \
+                = data.generate_comparison(config,
+                                           dfs["prediction"],
+                                           dfs["groundtruth"])
             results = data.evaluate_results(config["test_dir"],
                                             dfs["comparison"])
-            data.export_dataframes(config["test_dir"], results)
+            dfs.update(results)
+            data.export_dataframes(config["test_dir"], dfs)
             data.plot_result(config["test_dir"],  dfs["prediction"],
                              dfs["groundtruth"], flag="cumu_comparison")
-            data.plot_result(config["test_dir"], dfs["prediction"],
-                             dfs["groundtruth"], flag="false_positives")
-            data.plot_result(config["test_dir"], dfs["prediction"],
-                             dfs["groundtruth"], flag="false_negatives")
+            results_dict.append(results)
 
     # The set of steps which would be run by an end-user
     if args._production:
@@ -181,6 +169,8 @@ if __name__ == "__main__":
                             help="Config files for tests to be run",
                             default=[
                                 "videos/configs/ch04_partial.json",
+                                # "videos/configs/june13_partial.json",
+                                # "videos/configs/june14_partial.json",
                                 "videos/configs/june13_full-video.json",
                                 "videos/configs/june14_full-video.json"
                             ]
@@ -188,7 +178,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-06_full-video/"
+                            default="tests/2019-08-07_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",
