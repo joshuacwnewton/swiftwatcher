@@ -621,6 +621,13 @@ class FrameQueue:
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
 
+                    # Previous method of calculating likelihoods
+                    dist = distance.euclidean(seg_prev.centroid,
+                                              seg.centroid)
+                    likeilihood_matrix[index_v, index_h] = \
+                        math.exp(-1 * (((dist - 5) ** 2) / 40))
+
+                    # Compute "angle cost"
                     if len(seg_prev.__centroids) > 1:
                         centroid_list = seg_prev.__centroids
 
@@ -640,21 +647,12 @@ class FrameQueue:
                     else:
                         angle_cost = 1
 
-                    # Likeilihoods as a function of distance between segments
-                    dist = distance.euclidean(seg_prev.centroid,
-                                              seg.centroid)
+                    # Compute "distance cost"
                     dist_cost = 2**(dist - 20)
 
+                    # Average costs for new cost matrix
                     cost = 0.5*(dist_cost+angle_cost)
-
                     cost_matrix_new[index_v, index_h] = cost
-
-                    # Map distance values using a Gaussian curve
-                    # NOTE: This function was scrapped together in June. Needs
-                    # to be chosen more methodically if used for paper.
-                    likeilihood_matrix[index_v, index_h] = \
-                        math.exp(-1 * (((dist - 5) ** 2) / 40))
-
 
             # Matrix values: likelihood of segments having no match
             for i in range(count_total):
@@ -667,12 +665,13 @@ class FrameQueue:
                                      self.height - point[0],
                                      self.width - point[1]])
 
-                # Map distance values using an Exponential curve
-                # NOTE: This function was scrapped together in June. Needs to
-                # be chosen more methodically if used for research paper.
+                # Previous method of calculating likelihood
                 likeilihood_matrix[i, i] = \
                     (1 / 8) * math.exp(-edge_distance / 10)
+
+                # New method
                 cost_matrix_new[i, i] = 1
+
             # Convert likelihood matrix into cost matrix
             # This is necessary because of scipy's default implementation
             cost_matrix = -1*likeilihood_matrix
@@ -680,11 +679,9 @@ class FrameQueue:
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
             seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
-            seg_labels_new, seg_matches_new = \
-                linear_sum_assignment(cost_matrix_new)
 
-            if (count_curr > 1) and (count_prev > 1):
-                test = None
+            # Apply Hungarian/Munkres algorithm using new method
+            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
 
             # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):
