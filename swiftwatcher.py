@@ -12,6 +12,7 @@
 # -TODO: Test different angle feature extraction (full vs. partial)
 # -TODO: Test different angle decision boundary
 #
+# -TODO: Test current cost matrix configuration
 # -TODO: Test distance cost vs. distance likelihood functions
 # -TODO: Test angle costs
 # -TODO: Test segment size/shape costs
