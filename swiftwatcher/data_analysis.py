@@ -63,14 +63,14 @@ def generate_feature_vectors(df_eventinfo):
             lambda row: compute_angle(row["CENTRDS"]),
             axis=1
         )
-        # df_features["SLOPE"] = df_eventinfo.apply(
-        #     lambda row: compute_poly_slope(row["CENTRDS"]),
-        #     axis=1
-        # )
-        # df_features["Y_INT"] = df_eventinfo.apply(
-        #     lambda row: compute_poly_yint(row["CENTRDS"]),
-        #     axis=1
-        # )
+        df_features["SLOPE"] = df_eventinfo.apply(
+            lambda row: compute_poly_slope(row["CENTRDS"]),
+            axis=1
+        )
+        df_features["Y_INT"] = df_eventinfo.apply(
+            lambda row: compute_poly_yint(row["CENTRDS"]),
+            axis=1
+        )
     else:
         df_features = df_eventinfo
 
@@ -314,6 +314,9 @@ def evaluate_results(test_directory, df_comparison):
         event_types["md"] = comparison[comparison["EVENTS"] <
                                        comparison["ENTERGT"]]
 
+        event_types["p"] = pd.concat([event_types["tp"], event_types["fn"]])
+        event_types["n"] = pd.concat([event_types["fp"], event_types["tn"]])
+
         return event_types
 
     def sum_counts(event_types, full_comparison):
@@ -553,400 +556,53 @@ def save_test_config(args, params):
                                  "{}".format(params[key])])
 
 
-def feature_engineering2(config, results):
-    # def apply_labels():
-    #     def fix_offbyonetwo(df_comparison):
-    #         df_comparison = df_comparison.fillna(0)
-    #
-    #         if type(df_comparison.index) is pd.MultiIndex:
-    #             for offset in [1, 2]:
-    #                 rows_to_drop = []
-    #                 for (i1, row1) in df_comparison.iterrows():
-    #                     i1 = i1[1]
-    #                     i2 = i1 + offset
-    #                     if i2 in df_comparison.index.get_level_values(1):
-    #                         row2 = df_comparison.xs(i2, level=1,
-    #                                                 drop_level=False)
-    #                         row2T = row2.T.squeeze()
-    #                         diff1 = row1["ENTERGT"] - row1["EVENTS"]
-    #                         diff2 = row2T["ENTERGT"] - row2T["EVENTS"]
-    #
-    #                         # Condition for FN/MD and FP in sequential frames
-    #                         if (diff1 > 0) and (diff2 < 0):
-    #                             # Shift "off-by-one" GT count to cancel out errors
-    #                             offbyone = min(diff1, abs(diff2))
-    #                             row1["ENTERGT"] -= offbyone
-    #                             df_comparison.at[
-    #                                 row2.index.remove_unused_levels().values[
-    #                                     0], "ENTERGT"] += offbyone
-    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-    #                             if np.array_equal(row1.values, [0, 0, 0]):
-    #                                 rows_to_drop.append(i1)
-    #
-    #                         # Condition for FP and FN/MD in sequential frames
-    #                         elif (diff1 < 0) and (diff2 > 0):
-    #                             # Shift "off-by-one" GT count to cancel out errors
-    #                             offbyone = min(abs(diff1), diff2)
-    #                             df_comparison.at[
-    #                                 row2.index.remove_unused_levels().values[
-    #                                     0], "ENTERGT"] -= offbyone
-    #                             row1["ENTERGT"] += offbyone
-    #
-    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-    #                             if np.array_equal(row2.values, [0, 0, 0]):
-    #                                 rows_to_drop.append(i2)
-    #                 df_comparison = df_comparison.drop(level=1,
-    #                                                    index=rows_to_drop)
-    #         else:
-    #             for offset in [1, 2]:
-    #                 rows_to_drop = []
-    #                 for (i1, row1) in df_comparison.iterrows():
-    #                     i2 = i1 + offset
-    #                     if i2 in df_comparison.index:
-    #                         row2 = df_comparison.loc[i2, :]
-    #                         diff1 = row1["ENTERGT"] - row1["ENTERPR"]
-    #                         diff2 = row2["ENTERGT"] - row2["ENTERPR"]
-    #
-    #                         # Condition for FN/MD and FP in sequential frames
-    #                         if (diff1 > 0) and (diff2 < 0):
-    #                             # Shift "off-by-one" GT count to cancel out errors
-    #                             offbyone = min(diff1, abs(diff2))
-    #                             row1["ENTERGT"] -= offbyone
-    #                             df_comparison.at[i2, "ENTERGT"] += offbyone
-    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-    #                             if np.array_equal(row1.values, [0, 0, 0]):
-    #                                 rows_to_drop.append(i1)
-    #
-    #                         # Condition for FP and FN/MD in sequential frames
-    #                         elif (diff1 < 0) and (diff2 > 0):
-    #                             # Shift "off-by-one" GT count to cancel out errors
-    #                             offbyone = min(abs(diff1), diff2)
-    #                             df_comparison.at[i2, "ENTERGT"] -= offbyone
-    #                             row1["ENTERGT"] += offbyone
-    #
-    #                             # Remove row if empty (e.g. 1 0 0 -> 0 0 0 after shift)
-    #                             if np.array_equal(row2.values, [0, 0, 0]):
-    #                                 rows_to_drop.append(i2)
-    #                 df_comparison = df_comparison.drop(index=rows_to_drop)
-    #
-    #         return df_comparison
-    #
-    #     # Remove double-event timestamps
-    #     dupl = df_features.index.duplicated(keep=False)
-    #     df_features = df_features[~dupl]
-    #     df_features["EVENTS"] = 1
-    #     df_groundtruth["EVENTS"] = 0
-    #
-    #     # Combine df_features/df_groundtruth
-    #     df_features["ENTERGT"] = None
-    #     df_combined = df_features.combine_first(df_groundtruth)
-    #     if type(df_combined.index) == pd.MultiIndex:
-    #         indexes_to_drop = df_combined[(df_combined.index.levels[1]
-    #                                        < config["start_frame"] - 1) |
-    #                                       (df_combined.index.levels[1]
-    #                                        > config["end_frame"] - 1)].index
-    #     else:
-    #         indexes_to_drop = df_combined[(df_combined.index
-    #                                        < config["start_frame"] - 1) |
-    #                                       (df_combined.index
-    #                                        > config["end_frame"] - 1)].index
-    #
-    #     # Fix off-by-one/off-by-two
-    #     df_combined = df_combined.drop(index=indexes_to_drop)
-    #     df_combined_fixed = fix_offbyonetwo(df_combined)
-    #
-    #     return df_combined_fixed[(df_combined_fixed.T != 0).any()]
-    #
-    # def split_data(labeled_data):
-    #     true_positives = labeled_data[labeled_data["ENTERGT"] > 0]
-    #     true_negatives = labeled_data[labeled_data["ENTERGT"] == 0]
-    #
-    #     return true_positives, true_negatives
+def feature_engineering(args, config, results):
+    def plot_features(dataframe_list, feature_list, config_dict, plot_name):
+        plt.cla()
 
-    def plot_column_pair(results, name):
-        save_directory = fspath(config["base_dir"])
+        for dataframe in dataframe_list:
+            if len(feature_list) == 1:
+                plt.hist(dataframe[feature_list[0]], bins=72)
+                feature = feature_list[0]
+            if len(feature_list) == 2:
+                plt.scatter(dataframe[feature_list[0]],
+                            dataframe[feature_list[1]], s=0.5)
+                feature = feature_list[0].join(feature_list[1])
+
+        save_directory = (Path.cwd()/"feature-engineering"
+                          /args.custom_dir/config_dict["name"])
         if not os.path.isdir(save_directory):
             try:
                 os.makedirs(save_directory)
             except OSError:
                 print("[!] Creation of the directory {0} failed."
                       .format(save_directory))
+        plt.savefig(fspath(save_directory/"{0}-{1}.png"
+                           .format(feature, plot_name)), dpi=300)
 
-        # all_results = {}
-        # for key, value in results_dict[0].items():
-        #     all_results[key] = pd.concat([results_dict[0][key],
-        #                                   results_dict[1][key],
-        #                                   # results_dict[2][key]
-        #                                   ])
-        # all_results["positives"] = pd.concat(
-        #     [all_results["tp"], all_results["fn"]])
-        # all_results["positives"] = all_results["positives"][
-        #     ~(all_results["positives"]["EVENTS"] > 1)]
-        # all_results["negatives"] = pd.concat(
-        #     [all_results["fp"], all_results["tn"]])
-        # all_results["negatives"] = all_results["negatives"][
-        #     ~(all_results["negatives"]["EVENTS"] > 1)]
-        # data.export_dataframes(config["base_dir"].parent.parent, all_results)
-        # data.feature_engineering2(config, all_results)
+    config.append({"name": "NPD June 13 and June 14"})
+    results.append({
+        "p": pd.concat([results[1]["p"], results[2]["p"]]),
+        "n": pd.concat([results[1]["n"], results[2]["n"]]),
+    })
+    config.append({"name": "ch04 and NPD June 13 and June 14"})
+    results.append({
+        "p": pd.concat([results[0]["p"], results[1]["p"], results[2]["p"]]),
+        "n": pd.concat([results[0]["n"], results[1]["n"], results[2]["n"]])
+    })
 
-        for key, value in results.items():
-            #remove anything with events > 2
-            value = value[~(value["EVENTS"] > 1)]
-            legend = []
-            plt.cla()
-            plt.scatter(value["SLOPE"], value["Y_INT"], s=1)
-            legend.append(key)
-            axes = plt.gca()
-            axes.legend(legend, loc="upper right")
-            plt.savefig(save_directory + '/{0}-{1}.png'.format(name, key),
-                        dpi=300)
+    counter = 0
+    for result_dict in results:
+        for key, value in result_dict.items():
+            result_dict[key] = \
+                result_dict[key][~(result_dict[key]["EVENTS"] > 1)]
 
-        plt.cla()
-        legend = []
-        for key, value in results.items():
-            if (key == "tp") or (key == "fp"):
-                plt.scatter(value["SLOPE"], value["Y_INT"], s=1)
-                legend.append(key)
-                axes = plt.gca()
-        axes.legend(legend, loc="upper right")
-        axes.set_xlim([-1.5, 1.5])
-        axes.set_ylim([-250, 250])
-        plt.savefig(save_directory + '/positives.png', dpi=300)
+        for features in [["ANGLE"], ["SLOPE", "Y_INT"]]:
+            plot_features([result_dict["p"]], features, config[counter],
+                          "positives")
+            plot_features([result_dict["n"]], features, config[counter],
+                          "negatives")
+            plot_features([result_dict["p"], result_dict["n"]], features,
+                          config[counter], "positives-negatives")
 
-        positives = pd.concat([results["tp"], results["fn"]])
-        negatives = pd.concat([results["fp"], results["tn"]])
-        plt.cla()
-        plt.scatter(positives["SLOPE"], positives["Y_INT"], s=0.5)
-        plt.scatter(negatives["SLOPE"], negatives["Y_INT"], s=0.5)
-        axes = plt.gca()
-        axes.set_ylim([-100, 500])
-        axes.set_xlim([-3, 3])
-        legend = ["positives", "negatives"]
-        axes.legend(legend, loc="upper right")
-        plt.savefig(save_directory + '/comparison.png', dpi=300)
-
-        # ax = tp_col.hist(bins=72, alpha=0.8)
-        # ax = tn_col.hist(bins=72, alpha=0.5)
-        #
-        # ax.set_axisbelow(True)
-        # ax.minorticks_on()
-        # ax.grid(which='major', linestyle='-', linewidth='0.5', color='black')
-        # ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
-        #
-        # ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
-        #           loc="upper right")
-        # ax.set_title("Comparison in {} for Detected Segments".format(name))
-        # ax.set_xlabel("Angle (Degrees)")
-        # ax.set_ylabel("Total Segments")
-        # fig = ax.get_figure()
-
-
-    # df_labeled = apply_labels()
-    # df_pos, df_neg = split_data(df_labeled)
-    plot_column_pair(results, "scatter")
-    test = None
-
-
-def feature_engineering(args, result_dict):
-    """Testing function for exploring different features."""
-
-    def split_data():
-        detected_events = None  # df_comparison.dropna()
-        true_positives = detected_events[detected_events["EXT_CHM"] > 0]
-        true_negatives = detected_events[detected_events["EXT_CHM"] == 0]
-
-        return true_positives, true_negatives
-
-    def visualize_path(positives, negatives):
-
-        def generate_blank_img():
-            fq = FrameQueue(args)
-
-            blank = 127 * np.ones((fq.height, fq.width)).astype(np.uint8)
-            blank_w_roi = cv2.addWeighted(fq.roi_mask, 0.25, blank, 0.75, 0)
-
-            return blank_w_roi
-
-        def draw_centroids(img, centroid_list):
-            counter = 0
-            for centroid in centroid_list:
-                centroid = (int(centroid[1]), int(centroid[0]))
-                if counter == 0:
-                    prev = centroid
-                    pass
-
-                cv2.line(img, centroid, prev, 255, 2)
-                prev = centroid
-                counter += 1
-
-            return img
-
-        save_directory = (args.default_dir + args.custom_dir
-                         + "feature-testing/" + "centroids/")
-        if not os.path.isdir(save_directory):
-            try:
-                os.makedirs(save_directory)
-            except OSError:
-                print("[!] Creation of the directory {0} failed."
-                      .format(save_directory))
-
-        blank_img = generate_blank_img()
-
-        counter = 0
-        for index, row in positives.iterrows():
-            if row["CENTRDS"] is str:
-                centroid_img = draw_centroids(np.copy(blank_img),
-                                              literal_eval(row["CENTRDS"]))
-            else:
-                centroid_img = draw_centroids(np.copy(blank_img),
-                                              row["CENTRDS"])
-            # centroid_img = cv2.resize(centroid_img, (224, 224))
-            cv2.imwrite(save_directory + "1_{}.png".format(counter),
-                        centroid_img)
-            counter += 1
-
-        counter = 0
-        for index, row in negatives.iterrows():
-            if row["CENTRDS"] is str:
-                centroid_img = draw_centroids(np.copy(blank_img),
-                                              literal_eval(row["CENTRDS"]))
-            else:
-                centroid_img = draw_centroids(np.copy(blank_img),
-                                              row["CENTRDS"])
-            # centroid_img = cv2.resize(centroid_img, (224, 224))
-            cv2.imwrite(save_directory + "0_{}.png".format(counter),
-                        centroid_img)
-            counter += 1
-
-    def compute_feature_vectors(dataframe):
-        """Use centroid information to calculate row-by-row features."""
-
-        def avg_distance(centroid_list):
-            # If loading from csv, convert from str to list
-            if type(centroid_list) is str:
-                centroid_list = literal_eval(centroid_list)
-
-            dist_sum = 0
-            for i in range(len(centroid_list) - 2):
-                c1 = centroid_list[i + 1]
-                c2 = centroid_list[i + 2]
-                dist_sum += math.sqrt(
-                    (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
-                avg_distance = dist_sum / (len(centroid_list) - 2)
-
-            if dist_sum == 0:
-                for i in range(len(centroid_list) - 1):
-                    c1 = centroid_list[i]
-                    c2 = centroid_list[i + 1]
-                    dist_sum += math.sqrt(
-                        (c2[0] - c1[0]) ** 2 + (c2[1] - c2[1]) ** 2)
-                avg_distance = dist_sum / (len(centroid_list) - 1)
-
-            return avg_distance
-
-        def angle_hist_max(centroid_list):
-            if type(centroid_list) is str:
-                centroid_list = literal_eval(centroid_list)
-
-            bins = np.array([-180, -165, -150, -135, -120, -105,
-                             -90, -75, -60, -45, -30, -15,
-                             0,
-                             15, 30, 45, 60, 75, 90,
-                             105, 120, 135, 150, 165])
-
-            histogram = np.zeros(bins.shape)
-
-            for p1 in range(len(centroid_list)):
-                for p2 in range(p1 + 1, len(centroid_list)):
-                    del_y = centroid_list[p1][0] - centroid_list[p2][0]
-                    del_x = -1 * (centroid_list[p1][1] - centroid_list[p2][1])
-                    mag = math.sqrt(del_x**2 + del_y**2)
-                    angle = math.degrees(math.atan2(del_y, del_x))
-
-                    shifted_angle = angle + 180
-
-                    scaled_angle = shifted_angle / 15
-                    high_index = math.ceil(scaled_angle)
-                    if high_index == 24:
-                        high_index = 0
-                    low_index = high_index - 1
-
-                    high_ratio = scaled_angle - low_index
-                    low_ratio = 1 - high_ratio
-
-                    histogram[high_index] = high_ratio * mag
-                    histogram[low_index] = low_ratio * mag
-
-                    index_max = np.argmax(histogram)
-                    angle = bins[index_max]
-
-                    return angle
-
-        def full_angle(centroid_list):
-            # If loading from csv, convert from str to list
-            if type(centroid_list) is str:
-                centroid_list = literal_eval(centroid_list)
-
-            del_y = centroid_list[0][0] - centroid_list[-1][0]
-            del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
-            angle = math.degrees(math.atan2(del_y, del_x))
-
-            return angle
-
-        df_features = pd.DataFrame(index=dataframe.index)
-
-        # AVGDIST didn't distinguish any more than just the ANGLE_F feature
-        # df_features["AVGDIST"] = dataframe.apply(
-        #     lambda row: avg_distance(row["CENTRDS"]),
-        #     axis=1
-        # )
-
-        # Flight paths too erratic to consider every angle in path
-        # df_features["ANGLE_H"] = dataframe.apply(
-        #     lambda row: angle_hist_max(row["CENTRDS"]),
-        #     axis=1
-        # )
-
-        df_features["ANGLE_F"] = dataframe.apply(
-            lambda row: full_angle(row["CENTRDS"]),
-            axis=1
-        )
-
-        return df_features
-
-    def plot_column_pair(tp_col, tn_col, name):
-        save_directory = args.default_dir + args.custom_dir+"feature-testing/"
-        if not os.path.isdir(save_directory):
-            try:
-                os.makedirs(save_directory)
-            except OSError:
-                print("[!] Creation of the directory {0} failed."
-                      .format(save_directory))
-
-        plt.cla()
-
-        ax = tp_col.hist(bins=72, alpha=0.8)
-        ax = tn_col.hist(bins=72, alpha=0.5)
-
-        ax.set_axisbelow(True)
-        ax.minorticks_on()
-        ax.grid(which='major', linestyle='-', linewidth='0.5', color='black')
-        ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
-
-        ax.legend(["'Into Chimney' Samples", "'Not Into Chimney' Samples"],
-                  loc="upper right")
-        ax.set_title("Comparison in {} for Detected Segments".format(name))
-        ax.set_xlabel("Angle (Degrees)")
-        ax.set_ylabel("Total Segments")
-        fig = ax.get_figure()
-        fig.savefig(save_directory+'{}.png'.format(name))
-
-    test = None
-
-    # tp, tn = split_data()
-    # visualize_path(tp, tn)
-    #
-    # tp_features = compute_feature_vectors(tp)
-    # tn_features = compute_feature_vectors(tn)
-    # for column in tp_features.columns:
-    #     plot_column_pair(tp_features[column], tn_features[column], column)
+        counter += 1

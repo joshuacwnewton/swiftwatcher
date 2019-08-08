@@ -41,7 +41,8 @@ def main(args):
         set_parameters() function."""
 
     # Debugging/testing modes of functionality
-    results_dict = []
+    results_list = []
+    config_list = []
     for config_path in args.configs:
         with open(config_path) as json_file:
             config = json.load(json_file)
@@ -85,7 +86,10 @@ def main(args):
             data.export_dataframes(config["test_dir"], dfs)
             data.plot_result(config["test_dir"],  dfs["prediction"],
                              dfs["groundtruth"], flag="cumu_comparison")
-            results_dict.append(results)
+            results_list.append(results)
+            config_list.append(config)
+
+    data.feature_engineering(args, config_list, results_list)
 
     # The set of steps which would be run by an end-user
     if args._production:
