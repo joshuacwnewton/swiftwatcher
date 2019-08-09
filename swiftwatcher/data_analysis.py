@@ -24,6 +24,9 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
+import sys
+eps = sys.float_info.epsilon
+
 
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
@@ -137,10 +140,14 @@ def generate_classifications(df_features):
         df_labels = df_features.copy()
         df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                    # bins=[-180, -135, -55, 180]
-                                                   bins=[-180,
+                                                   bins=[-180 - eps,
                                                          left, right,
-                                                         180],
+                                                         180 + eps],
                                                    labels=False)]
+
+        # Correct errors from 3x3 opened non-birds
+        df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
+        test = None
 
         # Experimental classification using line-fitting
         # classifier = train_model()
@@ -410,11 +417,13 @@ def evaluate_results(test_directory, df_comparison):
             "\n",
             "FINAL EVALUATION\n",
             "   -Precision = {} TPs / ({} TPs + {} FPs)\n"
-            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fp"],
-                                           sums["precision"]),
+            "              = {:05.2f}%\n".format(sums["tp"],
+                                                 sums["tp"], sums["fp"],
+                                                 sums["precision"]),
             "   -Recall    = {} TPs / ({} TPs + {} FNs + {} MSs)\n"
-            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fn"],
-                                           sums["md"], sums["recall"])
+            "              = {:05.2f}%\n".format(sums["tp"],
+                                                 sums["tp"], sums["fn"],
+                                                 sums["md"], sums["recall"])
         ]
 
         file = open(fspath(save_directory/'results.txt'), 'w')
