@@ -180,7 +180,7 @@ if __name__ == "__main__":
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-07_full-video/"
+                            default="tests/2019-08-08_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",
