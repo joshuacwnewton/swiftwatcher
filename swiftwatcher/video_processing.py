@@ -678,10 +678,10 @@ class FrameQueue:
             cost_matrix -= cost_matrix.min()
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
-            seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
+            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
             # Apply Hungarian/Munkres algorithm using new method
-            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
+            seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
 
             # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):
