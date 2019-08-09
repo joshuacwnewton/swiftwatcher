@@ -121,9 +121,25 @@ def generate_classifications(df_features):
         return y1, y2
 
     if not df_features.empty:
+        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
+
+        # mode for continuous variables: https://www.mathstips.com/mode/
+        i_max = np.argmax(hist)
+        xl = bin_edges[i_max]
+        f0 = hist[i_max]
+        f_1 = hist[i_max - 1]
+        f1 = hist[i_max + 1]
+        w = abs(bin_edges[1] - bin_edges[0])
+        mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        left = mode - 40
+        right = mode + 40
+
         df_labels = df_features.copy()
         df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                                   bins=[-180, -125, -55, 180],
+                                                   # bins=[-180, -135, -55, 180]
+                                                   bins=[-180,
+                                                         left, right,
+                                                         180],
                                                    labels=False)]
 
         # Experimental classification using line-fitting
