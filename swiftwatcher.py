@@ -1,25 +1,22 @@
-# =================================== Ideas ================================= #
-# rpca-speed-increase:
+# ============================== If time permits ============================ #
 # -TODO: Smaller crop regions/resize regions (for RPCA)
 # -TODO: Smaller queue size (for RPCA)
 # -TODO: Alternate background subtraction technique
 #
-# testing-stage-modifications:
 # -TODO: Analyse all videos for shared sources of error
 #
-# -TODO: Test hard threshold at 10-15
-#
 # -TODO: Test different angle feature extraction (full vs. partial)
-# -TODO: Test different angle decision boundary
 #
-# -TODO: Test current cost matrix configuration
-# -TODO: Test distance cost vs. distance likelihood functions
-# -TODO: Test angle costs
 # -TODO: Test segment size/shape costs
 #
 # -TODO: Test polynomial-fitting (slope/y-int) with ML classifier
 # -TODO: Test position feature combined with angle feature
 # -TODO: Explore ML/data analysis theory
+# =========================================================================== #
+
+# ================================== TODOs ================================== #
+# -TODO: Test hard threshold at 10-15
+# -TODO: Test slightly larger resized frame.
 # =========================================================================== #
 
 import swiftwatcher.video_processing as vid
