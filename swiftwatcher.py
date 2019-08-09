@@ -150,7 +150,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=True
+                            default=False
                             )
         parser.add_argument("-a",
                             "--_analyse",

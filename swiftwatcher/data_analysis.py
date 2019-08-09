@@ -562,12 +562,32 @@ def feature_engineering(args, config, results):
 
         for dataframe in dataframe_list:
             if len(feature_list) == 1:
-                plt.hist(dataframe[feature_list[0]], bins=72)
                 feature = feature_list[0]
+                x = dataframe[feature].values
+
+                n, bins, patches = plt.hist(x, range=[-180, 180],
+                                            density=True,
+                                            histtype='stepfilled',
+                                            bins=36, alpha=0.5)
+
+                if plot_name is "positives":
+                    from scipy.stats import norm
+                    mu, std = norm.fit(x)
+                    test = None
+
+                ax = plt.gca()
+                ax.minorticks_on()
+                ax.grid(which='major', linestyle='-', linewidth='0.5',
+                        color='black')
+                ax.grid(which='minor', linestyle=':', linewidth='0.5',
+                        color='black')
+
+
             if len(feature_list) == 2:
+                feature = feature_list[0].join(feature_list[1])
                 plt.scatter(dataframe[feature_list[0]],
                             dataframe[feature_list[1]], s=0.5)
-                feature = feature_list[0].join(feature_list[1])
+
 
         save_directory = (Path.cwd()/"feature-engineering"
                           /args.custom_dir/config_dict["name"])
