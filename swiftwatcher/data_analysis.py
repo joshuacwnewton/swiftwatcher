@@ -316,6 +316,7 @@ def evaluate_results(test_directory, df_comparison):
 
         event_types["p"] = pd.concat([event_types["tp"], event_types["fn"]])
         event_types["n"] = pd.concat([event_types["fp"], event_types["tn"]])
+        event_types["all"] = pd.concat([event_types["p"], event_types["n"]])
 
         return event_types
 
@@ -604,11 +605,14 @@ def feature_engineering(args, config, results):
     results.append({
         "p": pd.concat([results[1]["p"], results[2]["p"]]),
         "n": pd.concat([results[1]["n"], results[2]["n"]]),
+        "all": pd.concat([results[1]["all"], results[2]["all"]]),
     })
     config.append({"name": "ch04 and NPD June 13 and June 14"})
     results.append({
         "p": pd.concat([results[0]["p"], results[1]["p"], results[2]["p"]]),
-        "n": pd.concat([results[0]["n"], results[1]["n"], results[2]["n"]])
+        "n": pd.concat([results[0]["n"], results[1]["n"], results[2]["n"]]),
+        "all": pd.concat([results[0]["all"], results[1]["all"],
+                          results[2]["all"]]),
     })
 
     counter = 0
@@ -624,5 +628,7 @@ def feature_engineering(args, config, results):
                           "negatives")
             plot_features([result_dict["p"], result_dict["n"]], features,
                           config[counter], "positives-negatives")
+            plot_features([result_dict["all"]], features,
+                          config[counter], "all-events")
 
         counter += 1
