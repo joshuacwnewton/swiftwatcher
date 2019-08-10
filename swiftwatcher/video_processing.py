@@ -748,6 +748,12 @@ class FrameQueue:
                     self.event_list.append(event_info)
 
 
+def select_corners():
+    corners = None
+
+    return corners
+
+
 def full_algorithm(args, video_dict):
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
