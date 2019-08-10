@@ -60,42 +60,6 @@ def generate_classifications(df_features):
 
     Note: currently this is done using a hard-coded values, but
     if time permits I would like to transition to a ML classifier."""
-    def train_model():
-        positives = pd.read_csv(fspath(Path.cwd()/"videos"/"positives.csv"))
-        negatives = pd.read_csv(
-            fspath(Path.cwd() / "videos" / "negatives.csv"))
-        X_p = np.array([positives["SLOPE"].values, positives["Y_INT"].values]).T
-        X_n = np.array([negatives["SLOPE"].values, negatives["Y_INT"].values]).T
-        y_p = np.ones((X_p.shape[0], 1))
-        y_n = np.zeros((X_n.shape[0], 1))
-        X = np.vstack([X_p, X_n])
-        y = np.vstack([y_p, y_n])
-
-        clf = GaussianProcessClassifier(1.0 * RBF(1.0))
-        # X = StandardScaler().fit_transform(X)
-        X_train, X_test, y_train, y_test = \
-            train_test_split(X, y, test_size=.4, random_state=42)
-        clf.fit(X_train, y_train)
-        score = clf.score(X_test, y_test)
-
-        return clf
-
-    def classify_feature_vectors(clf):
-        # Hand-crafted classification
-        df_labels["SLLABEL"] = np.array([0, 1, 0])[pd.cut(df_features["SLOPE"],
-                                                   bins=[-1e6, -1.5, 1.5, 1e6],
-                                                   labels=False)]
-        df_labels["YILABEL"] = np.array([0, 1, 0])[pd.cut(df_features["Y_INT"],
-                                                   bins=[-1e6, -250, 250, 1e6],
-                                                   labels=False)]
-        y1 = df_labels["YILABEL"] & df_labels["SLLABEL"]
-
-        # new method using classifier
-        classifier = train_model()
-        X = np.array([df_labels["SLOPE"].values, df_labels["Y_INT"].values]).T
-        # X = StandardScaler().fit_transform(X)
-        y2 = classifier.predict(X).T
-        return y1, y2
 
     if not df_features.empty:
         hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
@@ -121,15 +85,7 @@ def generate_classifications(df_features):
 
         # Correct errors from 3x3 opened non-birds
         df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
-        test = None
 
-        # Experimental classification using line-fitting
-        # classifier = train_model()
-        # df_labels["ENTERPR2"], df_labels["ENTERPR3"] \
-        #     = classify_feature_vectors(classifier)
-
-        # Give each classified event a value of 1, so that when multiple events
-        # on a single timestamp are merged, it will clearly show EVENTS = (>=2)
         df_labels["EVENTS"] = 1
     else:
         df_labels = df_features
