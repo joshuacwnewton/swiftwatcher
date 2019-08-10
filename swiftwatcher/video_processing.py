@@ -172,54 +172,17 @@ class FrameQueue:
 
             return timestamp
 
-        def load_frame_from_video():
-            """Insert next frame from stream into index 0 of queue."""
-            nonlocal new_timestamp, new_framenumber, new_frame, success
-
-            # Fetch new frame and update its attributes
+        if empty:
+            success = True
+        else:
             new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
             new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
             success, frame = self.stream.read()
             if success:
-                new_frame = np.array(frame)
                 self.frames_read += 1
-
-        def load_frame_from_file():
-            """Insert frame from file into index 0 of queue."""
-            nonlocal new_timestamp, new_framenumber, new_frame, success
-
-            new_framenumber = self.frame_to_load_next
-            new_timestamp = fn_to_ts(new_framenumber)
-
-            t = new_timestamp.time()
-            load_directory = (self.dir_base / "frames"
-                              / "{0:02d}:{1:02d}".format(t.hour, t.minute))
-
-            file_paths = list(load_directory.glob(
-                              "frame{}_*".format(new_framenumber)))
-            new_frame = np.array(cv2.imread(fspath(file_paths[0])))
-
-            if not new_frame.size == 0:
-                success = True
-                self.frames_read += 1
-
-            self.frame_to_load_next += 1
-
-        new_timestamp = ""
-        new_framenumber = ""
-        new_frame = ""
-        success = False
-
-        if empty:
-            pass
-        elif (self.dir_base/"frames").exists():
-            load_frame_from_file()
-        else:
-            load_frame_from_video()
-
-        self.timestamps.appendleft(new_timestamp)
-        self.framenumbers.appendleft(new_framenumber)
-        self.queue.appendleft(new_frame)
+                self.timestamps.appendleft(new_timestamp)
+                self.framenumbers.appendleft(new_framenumber)
+                self.queue.appendleft(frame)
 
         return success
 
@@ -737,6 +700,7 @@ def select_corners():
 
 
 def full_algorithm(config):
+
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
                                  columns=list(passed_list[0].keys())
