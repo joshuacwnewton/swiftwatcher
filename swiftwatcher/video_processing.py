@@ -43,8 +43,7 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, config=None, queue_size=1, desired_fps=False,
-                 test_dir="", visual=False):
+    def __init__(self, config, queue_size=21, desired_fps=False, visual=False):
 
         def assign_paths():
             self.src_filepath = config["src_filepath"]
@@ -754,7 +753,7 @@ def select_corners():
     return corners
 
 
-def full_algorithm(args, video_dict):
+def full_algorithm(config):
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
                                  columns=list(passed_list[0].keys())
@@ -765,11 +764,7 @@ def full_algorithm(args, video_dict):
 
         return dataframe
 
-    args.save_directory = args.default_dir
-    args.chimney = video_dict["corners"]
-    args.load = [0, 3000]
-
-    fq = FrameQueue(args, queue_size=21)
+    fq = FrameQueue(config)
 
     while fq.frames_processed < fq.total_frames:
         if fq.frames_read < (fq.queue_size - 1):
@@ -782,15 +777,15 @@ def full_algorithm(args, video_dict):
         elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
             fq.load_frame()
             fq.preprocess_frame()
-            fq.segment_frame(args)
-            fq.match_segments(args)
+            fq.segment_frame()
+            fq.match_segments()
             fq.analyse_matches()
 
         elif fq.frames_read == fq.total_frames:
             fq.load_frame(empty=True)
             # No preprocessing needed for empty frame
-            fq.segment_frame(args)
-            fq.match_segments(args)
+            fq.segment_frame()
+            fq.match_segments()
             fq.analyse_matches()
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:

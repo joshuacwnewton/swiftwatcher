@@ -32,8 +32,8 @@ def load_config(video_dir, config_dir):
             with config_filepath.open(mode="r") as read_file:
                 config = json.load(read_file)
 
-        config["src_filepath"] = fspath(filepath)
-        config["base_dir"] = fspath(filepath.parent / filepath.stem)
+        config["src_filepath"] = filepath
+        config["base_dir"] = filepath.parent / filepath.stem
         config_list.append(config)
 
     return config_list
@@ -50,8 +50,11 @@ def main():
 
     configs = load_config(video_dir=Path.cwd()/"videos",
                           config_dir=Path.cwd()/"videos"/"configs")
-
-    test = None
+    for config in configs:
+        events = vid.full_algorithm(config)
+        features = data.generate_feature_vectors(events)
+        labels = data.generate_classifications(features)
+        # export labeled events to .csv file
 
 
 if __name__ == "__main__":
