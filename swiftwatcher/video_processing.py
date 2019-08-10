@@ -398,7 +398,7 @@ class FrameQueue:
                                        cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             _, thresholded_image = cv2.threshold(smoothed_image,
-                                                 thresh=ret, maxval=255,
+                                                 thresh=15, maxval=255,
                                                  type=cv2.THRESH_TOZERO)
 
             return edge_image, mask_cp, thresholded_image
@@ -678,10 +678,10 @@ class FrameQueue:
             cost_matrix -= cost_matrix.min()
 
             # Apply Hungarian/Munkres algorithm to find optimal matches
-            seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
+            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
             # Apply Hungarian/Munkres algorithm using new method
-            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
+            seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
 
             # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):

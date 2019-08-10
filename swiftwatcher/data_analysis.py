@@ -24,6 +24,9 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
+import sys
+eps = sys.float_info.epsilon
+
 
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
@@ -121,10 +124,30 @@ def generate_classifications(df_features):
         return y1, y2
 
     if not df_features.empty:
+        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
+
+        # mode for continuous variables: https://www.mathstips.com/mode/
+        i_max = np.argmax(hist)
+        xl = bin_edges[i_max]
+        f0 = hist[i_max]
+        f_1 = hist[i_max - 1]
+        f1 = hist[i_max + 1]
+        w = abs(bin_edges[1] - bin_edges[0])
+        mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        left = mode - 45
+        right = mode + 45
+
         df_labels = df_features.copy()
         df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                                   bins=[-180, -125, -55, 180],
+                                                   # bins=[-180, -135, -55, 180]
+                                                   bins=[-180 - eps,
+                                                         left, right,
+                                                         180 + eps],
                                                    labels=False)]
+
+        # Correct errors from 3x3 opened non-birds
+        df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
+        test = None
 
         # Experimental classification using line-fitting
         # classifier = train_model()
@@ -316,6 +339,7 @@ def evaluate_results(test_directory, df_comparison):
 
         event_types["p"] = pd.concat([event_types["tp"], event_types["fn"]])
         event_types["n"] = pd.concat([event_types["fp"], event_types["tn"]])
+        event_types["all"] = pd.concat([event_types["p"], event_types["n"]])
 
         return event_types
 
@@ -393,11 +417,13 @@ def evaluate_results(test_directory, df_comparison):
             "\n",
             "FINAL EVALUATION\n",
             "   -Precision = {} TPs / ({} TPs + {} FPs)\n"
-            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fp"],
-                                           sums["precision"]),
+            "              = {:05.2f}%\n".format(sums["tp"],
+                                                 sums["tp"], sums["fp"],
+                                                 sums["precision"]),
             "   -Recall    = {} TPs / ({} TPs + {} FNs + {} MSs)\n"
-            "              = {}%\n".format(sums["tp"], sums["tp"], sums["fn"],
-                                           sums["md"], sums["recall"])
+            "              = {:05.2f}%\n".format(sums["tp"],
+                                                 sums["tp"], sums["fn"],
+                                                 sums["md"], sums["recall"])
         ]
 
         file = open(fspath(save_directory/'results.txt'), 'w')
@@ -562,12 +588,32 @@ def feature_engineering(args, config, results):
 
         for dataframe in dataframe_list:
             if len(feature_list) == 1:
-                plt.hist(dataframe[feature_list[0]], bins=72)
                 feature = feature_list[0]
+                x = dataframe[feature].values
+
+                n, bins, patches = plt.hist(x, range=[-180, 180],
+                                            density=True,
+                                            histtype='stepfilled',
+                                            bins=36, alpha=0.5)
+
+                if plot_name is "positives":
+                    from scipy.stats import norm
+                    mu, std = norm.fit(x)
+                    test = None
+
+                ax = plt.gca()
+                ax.minorticks_on()
+                ax.grid(which='major', linestyle='-', linewidth='0.5',
+                        color='black')
+                ax.grid(which='minor', linestyle=':', linewidth='0.5',
+                        color='black')
+
+
             if len(feature_list) == 2:
+                feature = feature_list[0].join(feature_list[1])
                 plt.scatter(dataframe[feature_list[0]],
                             dataframe[feature_list[1]], s=0.5)
-                feature = feature_list[0].join(feature_list[1])
+
 
         save_directory = (Path.cwd()/"feature-engineering"
                           /args.custom_dir/config_dict["name"])
@@ -584,11 +630,14 @@ def feature_engineering(args, config, results):
     results.append({
         "p": pd.concat([results[1]["p"], results[2]["p"]]),
         "n": pd.concat([results[1]["n"], results[2]["n"]]),
+        "all": pd.concat([results[1]["all"], results[2]["all"]]),
     })
     config.append({"name": "ch04 and NPD June 13 and June 14"})
     results.append({
         "p": pd.concat([results[0]["p"], results[1]["p"], results[2]["p"]]),
-        "n": pd.concat([results[0]["n"], results[1]["n"], results[2]["n"]])
+        "n": pd.concat([results[0]["n"], results[1]["n"], results[2]["n"]]),
+        "all": pd.concat([results[0]["all"], results[1]["all"],
+                          results[2]["all"]]),
     })
 
     counter = 0
@@ -604,5 +653,7 @@ def feature_engineering(args, config, results):
                           "negatives")
             plot_features([result_dict["p"], result_dict["n"]], features,
                           config[counter], "positives-negatives")
+            plot_features([result_dict["all"]], features,
+                          config[counter], "all-events")
 
         counter += 1
