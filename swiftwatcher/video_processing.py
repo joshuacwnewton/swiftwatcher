@@ -43,7 +43,7 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, config, queue_size=21, desired_fps=False, visual=False):
+    def __init__(self, config, queue_size=21, visual=False):
 
         def assign_paths():
             self.src_filepath = config["src_filepath"]
@@ -75,21 +75,8 @@ class FrameQueue:
             self.height = self.src_height
             self.width = self.src_width
 
-            if not desired_fps:
-                self.fps = self.src_fps
-            else:
-                self.fps = desired_fps
-            self.delay = round(
-                self.src_fps / self.fps) - 1  # For subsampling vid
+            self.total_frames = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            self.frame_to_load_next = config["start_frame"]
-            if config["end_frame"] == -1:
-                self.total_frames \
-                    = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
-            else:
-                self.total_frames = config["end_frame"]-config["start_frame"]+1
-
-            # Initialize "disappeared segment" event tracking list
             self.event_list = []
 
             self.visual = visual
@@ -180,7 +167,7 @@ class FrameQueue:
 
         def fn_to_ts(frame_number):
             """Helper function to convert an amount of frames into a timestamp."""
-            total_s = frame_number / self.fps
+            total_s = frame_number / self.src_fps
             timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
             return timestamp
@@ -196,10 +183,6 @@ class FrameQueue:
             if success:
                 new_frame = np.array(frame)
                 self.frames_read += 1
-
-            # Increments position for next read frame (for skipping frames)
-            for i in range(self.delay):
-                self.stream.grab()
 
         def load_frame_from_file():
             """Insert frame from file into index 0 of queue."""
@@ -220,7 +203,7 @@ class FrameQueue:
                 success = True
                 self.frames_read += 1
 
-            self.frame_to_load_next += (1+self.delay)
+            self.frame_to_load_next += 1
 
         new_timestamp = ""
         new_framenumber = ""

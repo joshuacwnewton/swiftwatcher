@@ -21,8 +21,6 @@ def load_config(video_dir, config_dir):
         if not config_filepath.exists():
             config = {
                 "name": filepath.name,
-                "start_frame": 0,
-                "end_frame": -1,
                 "timestamp": "00:00:00.000000",
                 "corners": vid.select_corners(),
             }
