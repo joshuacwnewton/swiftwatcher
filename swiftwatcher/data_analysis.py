@@ -134,8 +134,8 @@ def generate_classifications(df_features):
         f1 = hist[i_max + 1]
         w = abs(bin_edges[1] - bin_edges[0])
         mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
-        left = mode - 40
-        right = mode + 40
+        left = mode - 45
+        right = mode + 45
 
         df_labels = df_features.copy()
         df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
