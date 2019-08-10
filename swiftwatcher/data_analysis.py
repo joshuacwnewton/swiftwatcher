@@ -42,36 +42,10 @@ def generate_feature_vectors(df_eventinfo):
 
         return angle
 
-    def compute_poly_slope(centroid_list):
-        if type(centroid_list) is str:
-            centroid_list = literal_eval(centroid_list)
-
-        x, y = zip(*centroid_list)
-        slope, y_int = np.polyfit(x, y, 1)
-
-        return slope
-
-    def compute_poly_yint(centroid_list):
-        if type(centroid_list) is str:
-            centroid_list = literal_eval(centroid_list)
-
-        x, y = zip(*centroid_list)
-        slope, y_int = np.polyfit(x, y, 1)
-
-        return y_int
-
     if not df_eventinfo.empty:
         df_features = pd.DataFrame(index=df_eventinfo.index)
         df_features["ANGLE"] = df_eventinfo.apply(
             lambda row: compute_angle(row["CENTRDS"]),
-            axis=1
-        )
-        df_features["SLOPE"] = df_eventinfo.apply(
-            lambda row: compute_poly_slope(row["CENTRDS"]),
-            axis=1
-        )
-        df_features["Y_INT"] = df_eventinfo.apply(
-            lambda row: compute_poly_yint(row["CENTRDS"]),
             axis=1
         )
     else:
