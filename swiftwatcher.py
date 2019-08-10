@@ -1,23 +1,3 @@
-# ============================== If time permits ============================ #
-# -TODO: Smaller crop regions/resize regions (for RPCA)
-# -TODO: Smaller queue size (for RPCA)
-# -TODO: Alternate background subtraction technique
-#
-# -TODO: Analyse all videos for shared sources of error
-#
-# -TODO: Test different angle feature extraction (full vs. partial)
-#
-# -TODO: Test segment size/shape costs
-#
-# -TODO: Test polynomial-fitting (slope/y-int) with ML classifier
-# -TODO: Test position feature combined with angle feature
-# -TODO: Explore ML/data analysis theory
-# =========================================================================== #
-
-# ================================== TODOs ================================== #
-# -TODO: Test slightly larger resized frame.
-# =========================================================================== #
-
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
 import pandas as pd
