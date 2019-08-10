@@ -43,7 +43,7 @@ class FrameQueue:
     In other words, to generate a segmented version of frame 568,
     frames 565-571 are necessary, and are taken from the primary queue."""
 
-    def __init__(self, config, queue_size=21, visual=False):
+    def __init__(self, config, queue_size=21):
 
         def assign_paths():
             self.src_filepath = config["src_filepath"]
@@ -79,7 +79,7 @@ class FrameQueue:
 
             self.event_list = []
 
-            self.visual = visual
+            self.visual = False
 
         def assign_queue_properties():
             # Initialize primary queue for unaltered frames
@@ -186,50 +186,7 @@ class FrameQueue:
 
         return success
 
-    def save_frame(self, base_save_directory, frame=None, index=0,
-                   scale=1, single_folder=False, frame_folder="frames/",
-                   file_prefix="", file_suffix=""):
-        """Save an individual frame to an image file. If frame itself is not
-        provided, frame will be pulled from frame queue at specified index."""
-
-        base_save_directory = base_save_directory/frame_folder
-
-        if single_folder:
-            save_directory = base_save_directory
-        else:
-            t = self.timestamps[-1].time()
-            save_directory = (base_save_directory/"{0:02d}:{1:02d}"
-                              .format(t.hour, t.minute))
-
-        # Create save directory if it does not already exist
-        if not save_directory.exists():
-            try:
-                save_directory.mkdir(parents=True, exist_ok=True)
-                sleep(0.5)  # Sometimes frame 0 won't be saved without a delay
-            except OSError:
-                print("[!] Creation of the directory {0} failed."
-                      .format(save_directory))
-
-        # Extract frame from specified queue object as fallback
-        if frame is None:
-            frame = self.queue[index]
-
-        # Resize frame for viewing convenience
-        if scale is not 1:
-            frame = cv2.resize(frame,
-                               (round(frame.shape[1]*scale),
-                                round(frame.shape[0]*scale)),
-                               interpolation=cv2.INTER_AREA)
-
-        # Write frame to image file within save_directory
-        cv2.imwrite("{0}/{1}frame{2}_{3}{4}.jpg"
-                    .format(fspath(save_directory), file_prefix,
-                            self.framenumbers[index],
-                            self.timestamps[index].time(),
-                            file_suffix),
-                    frame)
-
-    def preprocess_frame(self, frame=None, index=0, iterations=1):
+    def preprocess_frame(self, frame=None, index=0):
 
         def convert_grayscale():
             """Convert to grayscale a frame at specified index of FrameQueue"""
