@@ -52,7 +52,7 @@ def main():
         events = vid.full_algorithm(config)
         features = data.generate_feature_vectors(events)
         labels = data.generate_classifications(features)
-        # export labeled events to .csv file
+        data.export_results(config, labels)
 
 
 if __name__ == "__main__":

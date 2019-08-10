@@ -91,3 +91,7 @@ def generate_classifications(df_features):
         df_labels = df_features
 
     return df_labels
+
+
+def export_results(df_labels):
+    test = None
