@@ -17,79 +17,8 @@ def main(args):
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    # Debugging/testing modes of functionality
-    results_list = []
-    config_list = []
-    for config_path in args.configs:
-        with open(config_path) as json_file:
-            config = json.load(json_file)
-        config["src_filepath"] = Path("videos", config["name"])
-        config["base_dir"] = Path(config["src_filepath"].parent,
-                                  config["src_filepath"].stem)
-
-        if args._extract:
-            vid.extract_frames(args)
-            pass
-        else:
-            config["base_dir"] = config["base_dir"] / "debug"
-            config["test_dir"] = config["base_dir"] / args.custom_dir
-
-        if args._process:
-            start = time.time()
-            df_eventinfo = vid.process_frames(args, config)
-            end = time.time()
-
-            elapsed_time = pd.to_timedelta((end - start), 's')
-            print("[-] Frame processing took {}.".format(elapsed_time))
-
-        if args._analyse:
-            if args._process:
-                dfs = data.import_dataframes(config["test_dir"],
-                                             ["groundtruth"])
-                dfs["eventinfo"] = df_eventinfo
-            else:
-                dfs = data.import_dataframes(config["test_dir"],
-                                             ["groundtruth", "eventinfo"])
-
-            dfs["features"] = data.generate_feature_vectors(dfs["eventinfo"])
-            dfs["prediction"] = data.generate_classifications(dfs["features"])
-            dfs["comparison_before"], dfs["comparison"] \
-                = data.generate_comparison(config,
-                                           dfs["prediction"],
-                                           dfs["groundtruth"])
-            results = data.evaluate_results(config["test_dir"],
-                                            dfs["comparison"])
-            dfs.update(results)
-            data.export_dataframes(config["test_dir"], dfs)
-            data.plot_result(config["test_dir"],  dfs["prediction"],
-                             dfs["groundtruth"], flag="cumu_comparison")
-            results_list.append(results)
-            config_list.append(config)
-
-    data.feature_engineering(args, config_list, results_list)
-
-    # The set of steps which would be run by an end-user
-    if args._production:
-        args.video_dir = "videos/"
-        args.custom_dir = ""
-        videos = configuration(args.video_dir)
-
-        for key, value in videos.items():
-            args.filename = key
-            args.default_dir = (args.video_dir +
-                                os.path.splitext(args.filename)[0] + "/")
-            videos[key]["eventinfo"] = \
-                vid.full_algorithm(args, value)
-
-            if not videos[key]["eventinfo"].empty:
-                videos[key]["features"] = \
-                    data.generate_feature_vectors(videos[key]["eventinfo"])
-                videos[key]["prediction"] = \
-                    data.generate_classifications(videos[key]["features"])
-                data.plot_result(args, "EXT_CHM", videos[key]["prediction"])
-
-
-def configuration(video_dir):
+    video_dir = "videos/"
+    args.custom_dir = ""
     files = [f for f in os.listdir(video_dir)
              if os.path.isfile(os.path.join(video_dir, f))]
 
@@ -109,7 +38,21 @@ def configuration(video_dir):
     with open(video_dir + "config.json", "w") as write_file:
         json.dump(video_dictionary, write_file, indent=4)
 
-    return video_dictionary
+    videos = video_dictionary
+
+    for key, value in videos.items():
+        args.filename = key
+        args.default_dir = (args.video_dir +
+                            os.path.splitext(args.filename)[0] + "/")
+        videos[key]["eventinfo"] = \
+            vid.full_algorithm(args, value)
+
+        if not videos[key]["eventinfo"].empty:
+            videos[key]["features"] = \
+                data.generate_feature_vectors(videos[key]["eventinfo"])
+            videos[key]["prediction"] = \
+                data.generate_classifications(videos[key]["features"])
+            data.plot_result(args, "EXT_CHM", videos[key]["prediction"])
 
 
 if __name__ == "__main__":
