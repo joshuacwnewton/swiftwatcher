@@ -49,10 +49,15 @@ def main():
     configs = load_config(video_dir=Path.cwd()/"videos",
                           config_dir=Path.cwd()/"videos"/"configs")
     for config in configs:
-        events = vid.full_algorithm(config)
-        features = data.generate_feature_vectors(events)
-        labels = data.generate_classifications(features)
-        data.export_results(config, labels)
+        events = vid.swift_counting_algorithm(config)
+
+        if len(events) > 0:
+            features = data.generate_feature_vectors(events)
+            labels = data.generate_classifications(features)
+            data.export_results(config, labels)
+
+        else:
+            print("No detected chimney swifts in specified video.")
 
 
 if __name__ == "__main__":
