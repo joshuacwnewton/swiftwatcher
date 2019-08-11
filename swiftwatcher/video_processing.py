@@ -78,6 +78,7 @@ class FrameQueue:
             self.total_frames = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
 
             self.event_list = []
+            self.failcount = 0
 
             self.visual = False
 
@@ -656,7 +657,7 @@ def select_corners():
     return corners
 
 
-def full_algorithm(config):
+def swift_counting_algorithm(config):
 
     def create_dataframe(passed_list):
         dataframe = pd.DataFrame(passed_list,
@@ -671,31 +672,60 @@ def full_algorithm(config):
     fq = FrameQueue(config)
 
     while fq.frames_processed < fq.total_frames:
-        if fq.frames_read < (fq.queue_size - 1):
-            fq.load_frame()
-            fq.preprocess_frame()
-            # No segmentation needed until queue is filled
-            # No matching needed until queue is filled
-            # No analysis needed until queue is filled
+        pos = fq.stream.get(cv2.CAP_PROP_POS_FRAMES)
+        read = fq.frames_read
+        proc = fq.frames_processed
+        success = False
 
-        elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
-            fq.load_frame()
-            fq.preprocess_frame()
-            fq.segment_frame()
-            fq.match_segments()
-            fq.analyse_matches()
+        try:
+            if fq.frames_read < (fq.queue_size - 1):
+                success = fq.load_frame()
+                fq.preprocess_frame()
+                # No segmentation needed until queue is filled
+                # No matching needed until queue is filled
+                # No analysis needed until queue is filled
 
-        elif fq.frames_read == fq.total_frames:
-            fq.load_frame(empty=True)
-            # No preprocessing needed for empty frame
-            fq.segment_frame()
-            fq.match_segments()
-            fq.analyse_matches()
+            elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
+                success = fq.load_frame()
+                fq.preprocess_frame()
+                fq.segment_frame()
+                fq.match_segments()
+                fq.analyse_matches()
+
+            elif fq.frames_read == fq.total_frames:
+                success = fq.load_frame(empty=True)
+                # No preprocessing needed for empty frame
+                fq.segment_frame()
+                fq.match_segments()
+                fq.analyse_matches()
+
+            if success:
+                fq.failcount = 0
+            else:
+                fq.failcount += 1
+
+        except Exception as e:
+            print("Error has occurred, see: '{}'.".format(e))
+            fq.failcount += 1
+            if fq.stream.get(cv2.CAP_PROP_POS_FRAMES) == pos:
+                fq.stream.grab()
+            if fq.frames_read == read:
+                fq.frames_read += 1
+            if fq.frames_processed == proc:
+                fq.frames_processed
 
         if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."
                   .format(fq.frames_processed, fq.total_frames))
 
-    df_eventinfo = create_dataframe(fq.event_list)
+        if fq.failcount >= 10:
+            print("Too many sequential errors have occurred. "
+                  "Halting algorithm...")
+            fq.frames_processed = fq.total_frames + 1
+
+    if fq.event_list:
+        df_eventinfo = create_dataframe(fq.event_list)
+    else:
+        df_eventinfo = None
 
     return df_eventinfo
