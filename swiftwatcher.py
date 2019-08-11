@@ -9,20 +9,22 @@ from pathlib import Path
 from os import fspath
 
 
-def load_config(video_dir, config_dir):
-    if not config_dir.exists():
-        config_dir.mkdir(parents=True, exist_ok=True)
+def load_config(video_dir):
 
     filepaths = [f for f in video_dir.iterdir() if f.is_file()]
 
     config_list = []
     for filepath in filepaths:
+        config_dir = filepath.parent/filepath.stem
+        if not config_dir.exists():
+            config_dir.mkdir(parents=True, exist_ok=True)
+
         config_filepath = config_dir/(filepath.stem + ".json")
         if not config_filepath.exists():
             config = {
                 "name": filepath.name,
                 "timestamp": "00:00:00.000000",
-                "corners": vid.select_corners(),
+                "corners": vid.select_corners(filepath),
             }
             with config_filepath.open(mode="w") as write_file:
                 json.dump(config, write_file, indent=4)
@@ -46,8 +48,7 @@ def main():
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    configs = load_config(video_dir=Path.cwd()/"videos",
-                          config_dir=Path.cwd()/"videos"/"configs")
+    configs = load_config(video_dir=Path.cwd()/"videos")
     for config in configs:
         events = vid.swift_counting_algorithm(config)
 

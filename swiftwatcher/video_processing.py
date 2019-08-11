@@ -651,10 +651,65 @@ class FrameQueue:
                     self.event_list.append(event_info)
 
 
-def select_corners():
-    corners = None
+def select_corners(filepath):
+    refPt = []
 
-    return corners
+    def click_and_crop(event, x, y, flags, param):
+        # grab references to the global variables
+        nonlocal refPt
+
+        # if the left mouse button was clicked, record the starting
+        # (x, y) coordinates and indicate that cropping is being
+        # performed
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if len(refPt) < 2:
+                refPt.append((x, y))
+                cv2.circle(image, refPt[-1], 5, (0, 0, 255), -1)
+                cv2.imshow("image", image)
+                cv2.resizeWindow('image', int(0.5*image.shape[1]),
+                                          int(0.5*image.shape[0]))
+            if len(refPt) == 1:
+                cv2.setWindowTitle("image",
+                                   "Click on corner 2")
+            if len(refPt) == 2:
+                cv2.setWindowTitle("image",
+                                   "Type 'y' to keep,"
+                                   " or 'n' to select different corners.")
+
+    stream = cv2.VideoCapture(fspath(filepath))
+    success, image = stream.read()
+
+    clone = image.copy()
+    cv2.namedWindow("image", cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback("image", click_and_crop)
+    cv2.setWindowTitle("image", "Click on corner 1")
+
+    # keep looping until the 'q' key is pressed
+    while True:
+        # display the image and wait for a keypress
+        cv2.imshow("image", image)
+        cv2.resizeWindow('image', int(0.5 * image.shape[1]),
+                                  int(0.5 * image.shape[0]))
+        cv2.waitKey(1)
+
+        if len(refPt) == 2:
+            key = cv2.waitKey(1) & 0xFF
+
+            # if the 'r' key is pressed, reset the cropping region
+            if key == ord("n"):
+                image = clone.copy()
+                refPt = []
+                cv2.setWindowTitle("image",
+                                   "Click on corner 1")
+
+            # if the 'c' key is pressed, break from the loop
+            elif key == ord("y"):
+                break
+
+    cv2.destroyAllWindows()
+
+    return refPt
 
 
 def swift_counting_algorithm(config):
@@ -671,6 +726,8 @@ def swift_counting_algorithm(config):
 
     fq = FrameQueue(config)
 
+    print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
+    print("[*] Status updates will be given every 100 frames.")
     while fq.frames_processed < fq.total_frames:
         pos = fq.stream.get(cv2.CAP_PROP_POS_FRAMES)
         read = fq.frames_read
@@ -714,7 +771,7 @@ def swift_counting_algorithm(config):
             if fq.frames_processed == proc:
                 fq.frames_processed
 
-        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
+        if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."
                   .format(fq.frames_processed, fq.total_frames))
 
