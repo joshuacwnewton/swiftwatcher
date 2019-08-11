@@ -93,5 +93,76 @@ def generate_classifications(df_features):
     return df_labels
 
 
-def export_results(df_labels):
-    test = None
+def export_results(config, df_labels):
+    def create_empty_dataframe():
+        # Create Series of DateTimeIndex indices (i.e. frame timestamps)
+        frame_queue = FrameQueue(config)
+        nano = (1 / frame_queue.src_fps) * 1e9
+        frame_queue.stream.release()  # Not needed once fps is extracted
+        num_timestamps = frame_queue.total_frames
+        duration = (num_timestamps - 1) * nano
+        timestamps = pd.date_range(start=config["timestamp"],
+                                   end=(pd.Timestamp(config["timestamp"]) +
+                                        pd.Timedelta(duration, 'ns')),
+                                   periods=num_timestamps)
+        timestamps = timestamps.round('us')
+
+        # Create a Series of frame numbers which correspond to the timestamps
+        framenumbers = np.array(range(num_timestamps))
+
+        tuples = list(zip(timestamps, framenumbers))
+        index = pd.MultiIndex.from_tuples(tuples,
+                                          names=['TMSTAMP', 'FRM_NUM'])
+
+        # Create an empty DataFrame for ground truth annotations to be put into
+        df_empty = pd.DataFrame(index=index)
+        df_empty["PREDICTED"] = None
+        df_empty["REJECTED"] = None
+
+        return df_empty
+
+    def split_labeled_events():
+        # split into >0 and 0 dataframes
+        df_rejected = df_labels[df_labels["ENTERPR"] == 0]
+        df_predicted = df_labels[df_labels["ENTERPR"] > 0]
+
+        # groupby sum
+        df_rejected = df_rejected.reset_index().groupby(['TMSTAMP',
+                                                   'FRM_NUM']).sum()
+        df_rejected = df_rejected.drop(columns=["ANGLE", "ENTERPR"])
+        df_rejected.columns = ["REJECTED"]
+
+        df_predicted = df_predicted.reset_index().groupby(['TMSTAMP',
+                                                     'FRM_NUM']).sum()
+        df_predicted = df_predicted.drop(columns=["ANGLE", "ENTERPR"])
+        df_predicted.columns = ["PREDICTED"]
+
+        return df_predicted, df_rejected
+
+    def fill_and_group(df_empty, df_predicted, df_rejected):
+        # fill none vlaues
+        df_empty = df_empty.combine_first(df_rejected)
+        df_empty = df_empty.combine_first(df_predicted)
+        df_empty = df_empty.fillna(0)
+
+        # create dataframes
+        df_exact = df_empty.copy(deep=True)
+        df_seconds = df_empty.copy(deep=True)
+        df_seconds = \
+            df_seconds.set_index(df_seconds.index.levels[0].floor('s'))
+        df_seconds = df_seconds.groupby(df_seconds.index).sum()
+        df_minutes = df_empty.copy(deep=True)
+        df_minutes = \
+            df_minutes.set_index(df_minutes.index.levels[0].floor('min'))
+        df_minutes = df_minutes.groupby(df_minutes.index).sum()
+        df_total = np.sum(df_exact["PREDICTED"])
+
+        return df_total, df_minutes, df_seconds, df_exact
+
+    def save_to_csv(total_count, df_minutes, df_seconds, df_exact):
+        test = None
+
+    empty = create_empty_dataframe()
+    predicted, rejected = split_labeled_events()
+    total, minutes, seconds, exact = fill_and_group(empty, predicted, rejected)
+    save_to_csv(total, minutes, seconds, exact)
