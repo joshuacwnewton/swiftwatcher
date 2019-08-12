@@ -33,6 +33,7 @@
 
 # Pycharm/Python build files
 venv
+venv/*
 *.egg-info
 __pycache__
 *.pyc
