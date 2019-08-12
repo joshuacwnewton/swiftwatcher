@@ -294,15 +294,16 @@ class FrameQueue:
             self.seg_properties.appendleft(measure.regionprops(labeled_frame))
             self.frames_processed += 1
 
-        # Apply Robust PCA method in batches
-        if self.frames_read % self.queue_size == 0:
-            rpca()
-
-        # Partial batch for remaining frames (total frames % queue size)
+        # Partial batch RPCA for remainder frames (total frames % queue size)
         if self.frames_read == self.src_framecount:
-            if self.frames_read-self.frames_processed == self.queue_size:
+            if self.frames_read - self.frames_processed == self.queue_size:
                 rem = self.src_framecount % self.queue_size
                 rpca(index=rem)
+
+        # Full batch RPCA (elif to prevent this from double-triggering if
+        # total video length happens to be a multiple of the queue size)
+        elif self.frames_read % self.queue_size == 0:
+            rpca()
 
         filtered = filter_rpca_output()
         store_segmentation(filtered)
