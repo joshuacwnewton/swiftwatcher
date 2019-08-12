@@ -79,8 +79,6 @@ class FrameQueue:
             self.event_list = []
             self.failcount = 0
 
-            self.visual = False
-
         def assign_queue_properties():
             # Initialize primary queue for unaltered frames
             self.queue_size = queue_size
@@ -232,7 +230,6 @@ class FrameQueue:
         convert_grayscale()
         crop_frame()
         resize_frame()
-        # pyramid_down()
 
         if not passed_frame:
             self.queue[index] = frame
@@ -278,88 +275,6 @@ class FrameQueue:
                 self.queue[i] = np.reshape(s_columns[:, i],
                                            (self.height, self.width))
 
-        def edge_based_otsu(image):
-            smoothed_image = cv2.bilateralFilter(image, d=7, sigmaColor=15,
-                                                 sigmaSpace=1)
-            edge_image = cv2.Canny(smoothed_image, 25, 50)
-            mask = cv2.dilate(edge_image, np.ones((7, 7), np.uint8),
-                              iterations=1).astype(np.int)
-            mask_cp = mask.astype(np.uint8)
-
-            # Extract pixel values in mask
-            mask[mask == 0] = (-256)
-            mask[mask == 255] = 0
-            masked_image = np.add(mask, smoothed_image).astype(np.int)
-            values = masked_image[masked_image >= 0].astype(np.uint8)
-
-            # Get a threshold value from only the edge (+ edge-adjacent) values
-            if values.size == 0:
-                ret = 255
-            else:
-                ret, _ = cv2.threshold(values, 0, 255,
-                                       cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-            _, thresholded_image = cv2.threshold(smoothed_image,
-                                                 thresh=15, maxval=255,
-                                                 type=cv2.THRESH_TOZERO)
-
-            return edge_image, mask_cp, thresholded_image
-
-        def segment_visualization():
-            # Add roi mask to each stage for visualization.
-            for keys, key_values in seg.items():
-                seg[keys] = cv2.addWeighted(self.roi_mask, 0.05,
-                                            key_values.astype(np.uint8), 0.95,
-                                            0)
-
-            # Add filler images if not enough stages to fill Nx3 grid
-            mod3remainder = len(seg) % 3
-            if mod3remainder > 0:
-                for i in range(3 - mod3remainder):
-                    seg["filler_{}".format(i + 1)] = np.zeros((self.height,
-                                                               self.width),
-                                                              dtype=np.int)
-
-            for keys, key_values in seg.items():
-                # Resize frame for visual clarity
-                scale = 4  # 400%
-                key_values = cv2.resize(key_values.astype(np.uint8),
-                                        (round(key_values.shape[1] * scale),
-                                         round(key_values.shape[0] * scale)),
-                                        interpolation=cv2.INTER_AREA)
-
-                # Apply label to frame
-                horizontal_bg = 183 * np.ones(
-                    shape=(40, key_values.shape[1]),
-                    dtype=np.uint8)
-                seg[keys] = np.vstack((key_values, horizontal_bg))
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(seg[keys], keys,
-                            (5, seg[keys].shape[0] - 10),  # Bottom-left corner
-                            font, 1, 0, 2)
-
-            # Concatenate images into Nx3 grid
-            rows = [None] * math.ceil((len(seg) / 3))
-            sep_h = 64 * np.ones(shape=(list(seg.values())[0].shape[0], 2),
-                                 dtype=np.uint8)
-            for i in range(len(rows)):
-                # Concatenate 3 images into 1x3 row
-                rows[i] = np.hstack((list(seg.values())[0 + (i * 3)], sep_h,
-                                     list(seg.values())[1 + (i * 3)], sep_h,
-                                     list(seg.values())[2 + (i * 3)]))
-                # If more than one row, stack rows together
-                if i > 0:
-                    sep_v = 64 * np.ones(shape=(2, rows[0].shape[1]),
-                                         dtype=np.uint8)
-                    rows[0] = np.vstack((rows[0], sep_v,
-                                         rows[i])).astype(np.uint8)
-
-            # Save to file
-            self.save_frame(self.dir_test,
-                            frame=rows[0],
-                            index=-1,
-                            frame_folder="visualizations/segmentation/")
-
         # Apply Robust PCA method in batches
         if self.frames_read % self.queue_size == 0:
             rpca()
@@ -380,13 +295,8 @@ class FrameQueue:
                                               size=(3, 3)).astype(np.uint8)
 
         # Segment using CC labeling, and scale so segments are visible
-        num_components, labeled_frame = \
+        _, labeled_frame = \
             cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
-        if num_components > 0:
-            seg["connected_c_255"] = \
-                labeled_frame * int(255 / num_components)
-        else:
-            seg["connected_c_255"] = labeled_frame
 
         # Append empty values first if queue is empty
         if self.seg_queue.__len__() is 0:
@@ -398,9 +308,6 @@ class FrameQueue:
         self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
         self.seg_properties.appendleft(measure.regionprops(labeled_frame))
         self.frames_processed += 1
-
-        if self.visual:
-            segment_visualization()
 
     def match_segments(self):
         """Analyze a pair of segmented frames and return conclusions about
@@ -430,84 +337,6 @@ class FrameQueue:
         single outcome (match, no match) to each segment in both frames. The
         total sum of likelihoods will be the maximum across all possible
         combinations of matches, as per the Assignment Problem."""
-
-        def match_visualization():
-            """Create visualizations from matching results and segmented frames."""
-            # Colormappings for tab20 colormap.
-            # See: https://matplotlib.org/examples/color/colormaps_reference.html
-            colors = [14, 40, 118, 144, 170, 222, 248,
-                      # non-G/R colors (pastel)
-                      1, 27, 105, 131, 157, 209,
-                      235]  # non-G/R colors (normal)
-            appeared_color = 53  # Green
-            fp_appeared_color = 66  # Pastel green
-            disappeared_color = 79  # Red
-            fp_disappeared_color = 82  # Pastel red
-            background_color = 196  # Light grey
-
-            # Replacing connected component labeling output (0 for background,
-            # 1, 2, 3... for segments) with matched colormapping. Grayscale values
-            # (0-255) correspond to colors in tab20 qualitative colormap.
-            frame = np.copy(self.seg_queue[0])
-            frame_prev = np.copy(self.seg_queue[1])
-            frame_prev[frame_prev == 0] = background_color
-            frame[frame == 0] = background_color
-            color_index = 0
-            for i in range(count_total):
-                j = seg_matches[i]
-                # Index condition if two segments are matching
-                if (i < j) and (i < count_prev):
-                    frame_prev[frame_prev == (i + 1)] = colors[
-                        color_index % 14]
-                    frame[frame == (j + 1 - count_prev)] = colors[
-                        color_index % 14]
-                    color_index += 1
-                # Index condition for when a previous segment has disappeared
-                elif (i == j) and (i < count_prev):
-                    frame_prev[frame_prev == (i + 1)] = disappeared_color
-                # Index condition for when a new segment has appeared
-                elif (i == j) and (i >= count_prev):
-                    frame[frame == (j + 1 - count_prev)] = appeared_color
-
-            # Resize frames for visual convenience
-            scale = 4
-            frame = cv2.resize(frame,
-                               (round(frame.shape[1] * scale),
-                                round(frame.shape[0] * scale)),
-                               interpolation=cv2.INTER_AREA)
-            frame_prev = cv2.resize(frame_prev,
-                                    (round(frame_prev.shape[1] * scale),
-                                     round(frame_prev.shape[0] * scale)),
-                                    interpolation=cv2.INTER_AREA)
-
-            # Combine both frames into single image
-            separator_v = 183 * np.ones(shape=(self.height * scale, 1),
-                                        dtype=np.uint8)
-            match_comparison = np.hstack((frame_prev, separator_v, frame))
-
-            # Combine two ROI masks into single image.
-            roi_mask = cv2.resize(self.roi_mask,
-                                  (round(self.roi_mask.shape[1] * scale),
-                                   round(self.roi_mask.shape[0] * scale)),
-                                  interpolation=cv2.INTER_AREA)
-            separator_v = np.zeros(shape=(self.height * scale, 1),
-                                   dtype=np.uint8)
-            roi_masks = np.hstack((roi_mask, separator_v, roi_mask))
-            roi_stacked = np.stack((roi_masks,) * 3, axis=-1).astype(np.uint8)
-
-            # Apply color mapping, then apply mask to colormapped image
-            match_comparison_color = cm.apply_custom_colormap(match_comparison,
-                                                              cmap="tab20")
-            match_comparison_color = \
-                cv2.addWeighted(roi_stacked, 0.10,
-                                match_comparison_color, 0.90, 0)
-
-            # Save completed visualization to folder
-            self.save_frame(self.dir_test,
-                            frame=match_comparison_color,
-                            index=-1,
-                            frame_folder="visualizations/matching/",
-                            scale=1)
 
         # Assign names to commonly used properties
         count_curr = len(self.seg_properties[0])
@@ -603,12 +432,6 @@ class FrameQueue:
                 # Condition if segment has appeared (assignment = "[A]")
                 if seg_labels[i+count_prev] == seg_matches[i+count_prev]:
                     self.seg_properties[0][i].__match = "A"
-        else:
-            seg_matches = []  # Empty list for visuals in case count_total = 0
-
-        # Create visualization of segment matches if requested
-        if self.visual:
-            match_visualization()
 
     def analyse_matches(self):
         """Use matching results to store history of RegionProperties through
