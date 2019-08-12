@@ -1,7 +1,5 @@
 # Stdlib imports
-import os
 from os import fspath
-import csv
 import math
 from ast import literal_eval
 
@@ -9,21 +7,8 @@ from ast import literal_eval
 import numpy as np
 import pandas as pd
 
-# Data visualization libraries
-import matplotlib.pyplot as plt
-
-# Needed to fetch video parameters for generating empty groundtruth file
+# Needed to generate empty timestamps for exporting results
 from swiftwatcher.video_processing import FrameQueue
-
-# Classifier modules
-from sklearn import svm
-import cv2
-from pathlib import Path
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-
 import sys
 eps = sys.float_info.epsilon
 

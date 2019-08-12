@@ -1,12 +1,10 @@
+# Algorithm components
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
-import pandas as pd
-import argparse as ap
-import os
-import time
+
+# File I/O
 import json
 from pathlib import Path
-from os import fspath
 
 
 def load_config(video_dir):

@@ -1,14 +1,8 @@
-# Stdlib imports
-from os import fspath
-import collections
-import math
-from time import sleep
-import sys
-eps = sys.float_info.epsilon
-
 # Imports used in numerous stages
 import cv2
 import numpy as np
+import collections
+import math
 
 # Necessary imports for segmentation stage
 from scipy import ndimage as img
@@ -20,6 +14,11 @@ from scipy.optimize import linear_sum_assignment
 from skimage import measure
 import utils.cm as cm
 import pandas as pd
+
+# Stdlib imports
+from os import fspath
+import sys
+eps = sys.float_info.epsilon
 
 
 class FrameQueue:
