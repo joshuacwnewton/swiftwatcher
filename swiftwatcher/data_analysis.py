@@ -27,14 +27,11 @@ def generate_feature_vectors(df_eventinfo):
 
         return angle
 
-    if not df_eventinfo.empty:
-        df_features = pd.DataFrame(index=df_eventinfo.index)
-        df_features["ANGLE"] = df_eventinfo.apply(
-            lambda row: compute_angle(row["CENTRDS"]),
-            axis=1
-        )
-    else:
-        df_features = df_eventinfo
+    df_features = pd.DataFrame(index=df_eventinfo.index)
+    df_features["ANGLE"] = df_eventinfo.apply(
+        lambda row: compute_angle(row["CENTRDS"]),
+        axis=1
+    )
 
     return df_features
 
@@ -46,7 +43,7 @@ def generate_classifications(df_features):
     Note: currently this is done using a hard-coded values, but
     if time permits I would like to transition to a ML classifier."""
 
-    if not df_features.empty:
+    def compute_mode():
         hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
 
         # mode for continuous variables: https://www.mathstips.com/mode/
@@ -57,23 +54,25 @@ def generate_classifications(df_features):
         f1 = hist[i_max + 1]
         w = abs(bin_edges[1] - bin_edges[0])
         mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
-        left = mode - 45
-        right = mode + 45
 
-        df_labels = df_features.copy()
-        df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
-                                                   # bins=[-180, -135, -55, 180]
-                                                   bins=[-180 - eps,
-                                                         left, right,
-                                                         180 + eps],
-                                                   labels=False)]
+        return mode
 
-        # Correct errors from 3x3 opened non-birds
-        df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
+    df_labels = df_features.copy()
 
-        df_labels["EVENTS"] = 1
-    else:
-        df_labels = df_features
+    mode = compute_mode()
+    df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
+                                               bins=[-180 - eps,
+                                                     mode - 45,
+                                                     mode + 45,
+                                                     180 + eps],
+                                               labels=False)]
+
+    # Correct errors from 3x3 opened non-birds
+    df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
+
+    # Add event count (used for when multiple events occur in a single
+    # timestamp -- when rows are combined, "EVENTS" can display as > 1)
+    df_labels["EVENTS"] = 1
 
     return df_labels
 

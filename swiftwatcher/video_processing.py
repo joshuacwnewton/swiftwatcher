@@ -92,6 +92,9 @@ class FrameQueue:
             self.queue_center = int((queue_size - 1) / 2)
             self.seg_queue = collections.deque([], self.queue_center)
             self.seg_properties = collections.deque([], self.queue_center)
+            self.seg_queue.appendleft(np.zeros((self.height, self.width))
+                                      .astype(np.uint8))
+            self.seg_properties.appendleft([])
 
         def generate_chimney_regions(alpha):
             """Generate rectangular regions (represented as top-left corner and
@@ -171,7 +174,11 @@ class FrameQueue:
             return timestamp
 
         if empty:
+            self.timestamps.appendleft("")
+            self.framenumbers.appendleft("")
+            self.queue.appendleft(np.array([]))
             success = True
+
         else:
             new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
             new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
@@ -219,22 +226,20 @@ class FrameQueue:
             self.height = frame.shape[0]
             self.width = frame.shape[1]
 
-        if frame is None:
-            passed_frame = False
-        else:
-            passed_frame = True
-
-        if not passed_frame:
-            frame = self.queue[index]
-
-        convert_grayscale()
-        crop_frame()
-        resize_frame()
-
-        if not passed_frame:
-            self.queue[index] = frame
-        else:
+        # Used when creating ROI mask (see __init__)
+        if frame is not None:
+            convert_grayscale()
+            crop_frame()
+            resize_frame()
             return frame
+
+        # Used when processing the video to determine swift counts
+        else:
+            frame = self.queue[index]
+            convert_grayscale()
+            crop_frame()
+            resize_frame()
+            self.queue[index] = frame
 
     def segment_frame(self):
         """Segment birds from one frame ("index") using information from other
@@ -270,44 +275,46 @@ class FrameQueue:
             s_columns = np.negative(s_columns)
             s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
 
-            # Reshape columns back into image dimensions
+            # Reshape columns back into image dimensions and store in queue
             for i in range(img_matrix.shape[0]):
                 self.queue[i] = np.reshape(s_columns[:, i],
                                            (self.height, self.width))
 
+        def filter_rpca_output():
+            rpca_output = self.queue[-1]
+            smoothed_frame = cv2.bilateralFilter(rpca_output,
+                                                 d=7,
+                                                 sigmaColor=15,
+                                                 sigmaSpace=1)
+            _, thresholded_frame = cv2.threshold(smoothed_frame,
+                                                 thresh=15, maxval=255,
+                                                 type=cv2.THRESH_TOZERO)
+            opened_frame = img.grey_opening(thresholded_frame,
+                                            size=(3, 3)).astype(np.uint8)
+
+            return opened_frame
+
+        def store_segmentation(frame):
+            # Segment using CC labeling
+            _, labeled_frame = cv2.connectedComponents(frame, connectivity=4)
+
+            # Append segmented frame (and information about frame) to queue
+            self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
+            self.seg_properties.appendleft(measure.regionprops(labeled_frame))
+            self.frames_processed += 1
+
         # Apply Robust PCA method in batches
         if self.frames_read % self.queue_size == 0:
             rpca()
+
+        # Partial batch for remaining frames (total frames % queue size)
         if self.frames_read == self.total_frames:
             if self.frames_read-self.frames_processed == self.queue_size:
                 rem = self.total_frames % self.queue_size
                 rpca(index=rem)
 
-        # Process each RPCA "sparse error" frame to remove non-swift details
-        seg = {}
-        seg["RPCA_output"] = self.queue[-1]
-        seg["RPCA_smoothed"] = cv2.bilateralFilter(list(seg.values())[-1], d=7,
-                                                   sigmaColor=15, sigmaSpace=1)
-        _, seg["RPCA_thresh"] = cv2.threshold(list(seg.values())[-1],
-                                              thresh=15, maxval=255,
-                                              type=cv2.THRESH_TOZERO)
-        seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
-                                              size=(3, 3)).astype(np.uint8)
-
-        # Segment using CC labeling, and scale so segments are visible
-        _, labeled_frame = \
-            cv2.connectedComponents(list(seg.values())[-1], connectivity=4)
-
-        # Append empty values first if queue is empty
-        if self.seg_queue.__len__() is 0:
-            self.seg_queue.appendleft(np.zeros((self.height, self.width))
-                                      .astype(np.uint8))
-            self.seg_properties.appendleft([])
-
-        # Append segmented frame (and information about frame) to queue
-        self.seg_queue.appendleft(labeled_frame.astype(np.uint8))
-        self.seg_properties.appendleft(measure.regionprops(labeled_frame))
-        self.frames_processed += 1
+        filtered = filter_rpca_output()
+        store_segmentation(filtered)
 
     def match_segments(self):
         """Analyze a pair of segmented frames and return conclusions about
@@ -338,28 +345,21 @@ class FrameQueue:
         total sum of likelihoods will be the maximum across all possible
         combinations of matches, as per the Assignment Problem."""
 
-        # Assign names to commonly used properties
-        count_curr = len(self.seg_properties[0])
-        count_prev = len(self.seg_properties[1])
-        count_total = count_curr + count_prev
-
-        if count_total > 0:
-            # Initialize likelihood matrix as (N+M)x(N+M)
-            likeilihood_matrix = np.zeros((count_total, count_total))
-            cost_matrix_new = (1+eps)*np.ones((count_total, count_total))
+        def generate_cost_matrix():
+            # Initialize cost matrix as (N+M)x(N+M)
+            cost_matrix = (1+eps)*np.ones((count_total, count_total))
 
             # Matrix values: likelihood of segments being a match
             for seg_prev in self.seg_properties[1]:
                 for seg in self.seg_properties[0]:
-                    # Convert segment labels to likelihood matrix indices
+                    # Convert segment labels to cost matrix indices
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
 
-                    # Previous method of calculating likelihoods
+                    # Compute "distance cost"
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
-                    likeilihood_matrix[index_v, index_h] = \
-                        math.exp(-1 * (((dist - 5) ** 2) / 40))
+                    dist_cost = 2 ** (dist - 20)
 
                     # Compute "angle cost"
                     if len(seg_prev.__centroids) > 1:
@@ -381,41 +381,18 @@ class FrameQueue:
                     else:
                         angle_cost = 1
 
-                    # Compute "distance cost"
-                    dist_cost = 2**(dist - 20)
-
-                    # Average costs for new cost matrix
+                    # Average costs for cost matrix entry
                     cost = 0.5*(dist_cost+angle_cost)
-                    cost_matrix_new[index_v, index_h] = cost
+                    cost_matrix[index_v, index_h] = cost
 
             # Matrix values: likelihood of segments having no match
             for i in range(count_total):
-                # Compute closest distance from segment to edge of frame
-                if i < count_prev:
-                    point = self.seg_properties[1][i].centroid
-                if count_prev <= i < (count_curr + count_prev):
-                    point = self.seg_properties[0][i - count_prev].centroid
-                edge_distance = min([point[0], point[1],
-                                     self.height - point[0],
-                                     self.width - point[1]])
+                cost_matrix[i, i] = 1
 
-                # Previous method of calculating likelihood
-                likeilihood_matrix[i, i] = \
-                    (1 / 8) * math.exp(-edge_distance / 10)
+            return cost_matrix
 
-                # New method
-                cost_matrix_new[i, i] = 1
-
-            # Convert likelihood matrix into cost matrix
-            # This is necessary because of scipy's default implementation
-            cost_matrix = -1*likeilihood_matrix
-            cost_matrix -= cost_matrix.min()
-
-            # Apply Hungarian/Munkres algorithm to find optimal matches
-            # seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
-
-            # Apply Hungarian/Munkres algorithm using new method
-            seg_labels, seg_matches = linear_sum_assignment(cost_matrix_new)
+        def assign_labels(cost_matrix):
+            seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
             # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):
@@ -428,10 +405,19 @@ class FrameQueue:
                     j = seg_matches[i] - count_prev  # Offset (see matrix eg.)
                     self.seg_properties[1][i].__match = j
                     self.seg_properties[0][j].__match = i
+
             for i in range(count_curr):
                 # Condition if segment has appeared (assignment = "[A]")
                 if seg_labels[i+count_prev] == seg_matches[i+count_prev]:
                     self.seg_properties[0][i].__match = "A"
+
+        count_curr = len(self.seg_properties[0])
+        count_prev = len(self.seg_properties[1])
+        count_total = count_curr + count_prev
+
+        if count_total > 0:
+            costs = generate_cost_matrix()
+            assign_labels(costs)
 
     def analyse_matches(self):
         """Use matching results to store history of RegionProperties through
@@ -553,19 +539,23 @@ def swift_counting_algorithm(config):
 
     print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
     print("[*] Status updates will be given every 100 frames.")
+
     while fq.frames_processed < fq.total_frames:
+        success = False
+
+        # Store state variables in case video processing glitch occurs
+        # (e.g. due to poorly encoded video)
         pos = fq.stream.get(cv2.CAP_PROP_POS_FRAMES)
         read = fq.frames_read
         proc = fq.frames_processed
-        success = False
 
         try:
             if fq.frames_read < (fq.queue_size - 1):
                 success = fq.load_frame()
                 fq.preprocess_frame()
-                # No segmentation needed until queue is filled
-                # No matching needed until queue is filled
-                # No analysis needed until queue is filled
+                # fq.segment_frame() (not needed until queue is filled)
+                # fq.match_segments() (not needed until queue is filled)
+                # fq.analyse_matches() (not needed until queue is filled)
 
             elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
                 success = fq.load_frame()
@@ -576,19 +566,16 @@ def swift_counting_algorithm(config):
 
             elif fq.frames_read == fq.total_frames:
                 success = fq.load_frame(empty=True)
-                # No preprocessing needed for empty frame
+                # fq.preprocess_frame() (not needed for empty frame)
                 fq.segment_frame()
                 fq.match_segments()
                 fq.analyse_matches()
 
-            if success:
-                fq.failcount = 0
-            else:
-                fq.failcount += 1
-
         except Exception as e:
             print("Error has occurred, see: '{}'.".format(e))
             fq.failcount += 1
+
+            # Increment state variables to ensure algorithm doesn't get stuck
             if fq.stream.get(cv2.CAP_PROP_POS_FRAMES) == pos:
                 fq.stream.grab()
             if fq.frames_read == read:
@@ -596,14 +583,19 @@ def swift_counting_algorithm(config):
             if fq.frames_processed == proc:
                 fq.frames_processed
 
-        if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
-            print("[-] {0}/{1} frames processed."
-                  .format(fq.frames_processed, fq.total_frames))
-
+        # Break if sequential errors are occurring
+        if success:
+            fq.failcount = 0
+        else:
+            fq.failcount += 1
         if fq.failcount >= 10:
             print("Too many sequential errors have occurred. "
                   "Halting algorithm...")
             fq.frames_processed = fq.total_frames + 1
+
+        if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
+            print("[-] {0}/{1} frames processed."
+                  .format(fq.frames_processed, fq.total_frames))
 
     if fq.event_list:
         df_eventinfo = create_dataframe(fq.event_list)
