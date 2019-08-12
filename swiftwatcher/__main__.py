@@ -81,19 +81,24 @@ def load_config():
 
         return extension in video_file_extensions
 
-    root = tk.Tk()
-    root.withdraw()
-    video_dir = Path(filedialog.askdirectory(parent=root, initialdir="/",
-                                             title='Please select a directory '
-                                                   'containing the videos you '
-                                                   'wish to analyse.'))
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        video_dir = Path(filedialog.askdirectory(parent=root, initialdir="/",
+                                                 title='Please select a '
+                                                       'directory containing '
+                                                       'the videos you '
+                                                       'wish to analyse.'))
+        filepaths = [f for f in video_dir.iterdir()
+                     if f.is_file() and is_video_file(f.suffix)]
 
-    filepaths = [f for f in video_dir.iterdir()
-                 if f.is_file() and is_video_file(f.suffix)]
+    except TypeError:
+        print("[!] No video directory selected.")
+        filepaths = []
 
     config_list = []
     if len(filepaths) is 0:
-        print("[!] Specified directory contains no videos. Please try again.")
+        print("[!] No videos to analyse. Please try again.")
     else:
         for filepath in filepaths:
             config_dir = filepath.parent/filepath.stem
