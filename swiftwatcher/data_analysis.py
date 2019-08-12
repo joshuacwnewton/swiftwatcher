@@ -17,7 +17,7 @@ def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
     def compute_angle(centroid_list):
-        # If loading from csv, convert from str to list
+        # If loading from csv, centroid list may be parsed as string -> fix
         if type(centroid_list) is str:
             centroid_list = literal_eval(centroid_list)
 
@@ -37,16 +37,14 @@ def generate_feature_vectors(df_eventinfo):
 
 
 def generate_classifications(df_features):
-    """Classify "segment disappeared" events based on associated feature
-    vectors.
-
-    Note: currently this is done using a hard-coded values, but
-    if time permits I would like to transition to a ML classifier."""
+    """Classify "segment disappeared" events based on corresponding feature
+    vectors."""
 
     def compute_mode():
-        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
+        """Mode for continuous variables. For more information, see:
+        https://www.mathstips.com/mode/ """
 
-        # mode for continuous variables: https://www.mathstips.com/mode/
+        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
         i_max = np.argmax(hist)
         xl = bin_edges[i_max]
         f0 = hist[i_max]
@@ -56,9 +54,9 @@ def generate_classifications(df_features):
 
         return xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
 
-    df_labels = df_features.copy()
-
     mode = compute_mode()
+
+    df_labels = df_features.copy()
     df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                bins=[-180 - eps,
                                                      mode - 45,
@@ -66,7 +64,7 @@ def generate_classifications(df_features):
                                                      180 + eps],
                                                labels=False)]
 
-    # Correct errors from 3x3 opened non-birds
+    # Correct false positive errors from small (3x3 opened) non-bird segments
     df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
 
     # Add event count (used for when multiple events occur in a single
@@ -77,7 +75,12 @@ def generate_classifications(df_features):
 
 
 def export_results(config, df_labels):
+    """Modify event classification dataframe into form that is more suitable
+    for output, then save results to csv files."""
+
     def create_empty_dataframe():
+        """Create empty dataframe containing every timestamp in video file."""
+
         # Create Series of DateTimeIndex indices (i.e. frame timestamps)
         frame_queue = FrameQueue(config)
         nano = (1 / frame_queue.src_fps) * 1e9
@@ -93,6 +96,7 @@ def export_results(config, df_labels):
         # Create a Series of frame numbers which correspond to the timestamps
         framenumbers = np.array(range(num_timestamps))
 
+        # Combine frame numbers and timestamps into multi-index
         tuples = list(zip(timestamps, framenumbers))
         index = pd.MultiIndex.from_tuples(tuples,
                                           names=['TMSTAMP', 'FRM_NUM'])
@@ -105,44 +109,57 @@ def export_results(config, df_labels):
         return df_empty
 
     def split_labeled_events():
-        # split into >0 and 0 dataframes
+        """Split event classification dataframes into seperate dataframes for
+        predicted and rejected events."""
+
+        # Split dataframe into two different dataframes.
         df_rejected = df_labels[df_labels["ENTERPR"] == 0]
         df_predicted = df_labels[df_labels["ENTERPR"] > 0]
 
-        # groupby sum
+        # Combine multiple events into single rows
         df_rejected = df_rejected.reset_index().groupby(['TMSTAMP',
                                                          'FRM_NUM']).sum()
-        df_rejected = df_rejected.drop(columns=["ANGLE", "ENTERPR"])
-        df_rejected.columns = ["REJECTED"]
-
         df_predicted = df_predicted.reset_index().groupby(['TMSTAMP',
                                                            'FRM_NUM']).sum()
+
+        # Drop unnecessary columns, and rename the remaining "EVENTS" column
+        df_rejected = df_rejected.drop(columns=["ANGLE", "ENTERPR"])
         df_predicted = df_predicted.drop(columns=["ANGLE", "ENTERPR"])
+        df_rejected.columns = ["REJECTED"]
         df_predicted.columns = ["PREDICTED"]
 
         return df_predicted, df_rejected
 
     def fill_and_group(df_empty, df_predicted, df_rejected):
-        # fill none vlaues
+        """Fill previously created empty dataframe with timestamps of detected
+        events. Then, create dataframes corresponding to different timestamp
+        groupings (e.g. per-minute counts, per-second counts, and exact
+        microsecond counts.)"""
+        # Fill empty values with detected events
         df_empty = df_empty.combine_first(df_rejected)
         df_empty = df_empty.combine_first(df_predicted)
         df_empty = df_empty.fillna(0)
 
-        # create dataframes
+        # Create dataframes for each time period grouping
         df_exact = df_empty.copy(deep=True)
+
         df_seconds = df_empty.copy(deep=True)
         df_seconds = \
             df_seconds.set_index(df_seconds.index.levels[0].floor('s'))
         df_seconds = df_seconds.groupby(df_seconds.index).sum()
+
         df_minutes = df_empty.copy(deep=True)
         df_minutes = \
             df_minutes.set_index(df_minutes.index.levels[0].floor('min'))
         df_minutes = df_minutes.groupby(df_minutes.index).sum()
+
+        # Calculate the total number of predicted swifts
         df_total = int(np.sum(df_exact["PREDICTED"]))
 
         return df_total, df_minutes, df_seconds, df_exact
 
     def save_to_csv(count, df_minutes, df_seconds, df_exact):
+        """Save counts to csv files in a variety of different formats."""
         nonlocal config
 
         save_directory \

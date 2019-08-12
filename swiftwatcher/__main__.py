@@ -9,11 +9,13 @@ import tkinter as tk
 from tkinter import filedialog
 
 
-def load_config():
-    """Load config files for videos in video directory, or create/save config
+def load_configs():
+    """Load config files for videos in video directory, or create+save config
     files if they do not yet exist."""
 
     def is_video_file(extension):
+        """Check if file extension belongs to list of video file extensions."""
+
         video_file_extensions = (
             '.264', '.3g2', '.3gp', '.3gp2', '.3gpp', '.3gpp2', '.3mm', '.3p2',
             '.60d', '.787', '.89', '.aaf', '.aec', '.aep', '.aepx',
@@ -81,63 +83,81 @@ def load_config():
 
         return extension in video_file_extensions
 
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        video_dir = Path(filedialog.askdirectory(parent=root, initialdir="/",
-                                                 title='Please select a '
-                                                       'directory containing '
-                                                       'the videos you '
-                                                       'wish to analyse.'))
-        filepaths = [f for f in video_dir.iterdir()
-                     if f.is_file() and is_video_file(f.suffix)]
+    def fetch_video_filepaths():
+        """Load list of filepaths (video files only) from user-chosen
+        directory."""
 
-    except TypeError:
-        print("[!] No video directory selected.")
-        filepaths = []
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            # /\ See: https://stackoverflow.com/questions/1406145/
+            video_dir = Path(filedialog.askdirectory(parent=root,
+                                                     initialdir="/",
+                                                     title='Please select '
+                                                           'a directory '
+                                                           'containing the '
+                                                           'videos you wish '
+                                                           'to analyse.'))
+            filepaths = [f for f in video_dir.iterdir()
+                         if f.is_file() and is_video_file(f.suffix)]
+        except TypeError:
+            print("[!] No video directory selected.")
+            filepaths = []
 
-    config_list = []
-    if len(filepaths) is 0:
-        print("[!] No videos to analyse. Please try again.")
-    else:
-        for filepath in filepaths:
-            config_dir = filepath.parent/filepath.stem
-            if not config_dir.exists():
-                config_dir.mkdir(parents=True, exist_ok=True)
+        return filepaths
 
-            config_filepath = config_dir/(filepath.stem + ".json")
-            if not config_filepath.exists():
-                config = {
-                    "name": filepath.name,
-                    "timestamp": "00:00:00.000000",
-                    "corners": vid.select_corners(filepath),
-                }
-                with config_filepath.open(mode="w") as write_file:
-                    json.dump(config, write_file, indent=4)
-            else:
-                with config_filepath.open(mode="r") as read_file:
-                    config = json.load(read_file)
+    def create_config_list(filepaths):
+        """Load a config file (or create one if it doesn't exist)
+        corresponding to each video filepath."""
 
-            config["src_filepath"] = filepath
-            config["base_dir"] = filepath.parent / filepath.stem
-            config_list.append(config)
+        config_list = []
+        if len(filepaths) is 0:
+            print("[!] No videos to analyse. Please try again.")
+        else:
+            for filepath in filepaths:
+                # "Result" csv files will also be stored in this directory
+                base_dir = filepath.parent/filepath.stem
+                if not base_dir.exists():
+                    base_dir.mkdir(parents=True, exist_ok=True)
 
-    return config_list
+                config_filepath = base_dir/(filepath.stem + ".json")
+
+                # Create and write config file
+                if not config_filepath.exists():
+                    config = {
+                        "src_filepath": filepath,
+                        "base_dir": base_dir,
+                        "name": filepath.name,
+                        "timestamp": "00:00:00.000000",
+                        "corners": vid.select_corners(filepath),
+                    }
+                    with config_filepath.open(mode="w") as write_file:
+                        json.dump(config, write_file, indent=4)
+
+                # Load previously created config file
+                else:
+                    with config_filepath.open(mode="r") as read_file:
+                        config = json.load(read_file)
+
+                config_list.append(config)
+
+                return config_list
+
+    video_paths = fetch_video_filepaths()
+    configs = create_config_list(video_paths)
+
+    return configs
 
 
 def main():
-    """To understand the current configuration of the algorithm, please look
-    to the following functions, which are outside of main() below:
+    """Execute each of the core functions of the swift-counting algorithm."""
 
-    - args: command-line arguments, used for file I/O, set by
-        if __name__ == "__main__": block of code.
-    - params: algorithm parameters, used to tweak processing stages, set by
-        set_parameters() function."""
+    configs = load_configs()
 
-    configs = load_config()
     for config in configs:
-
+        # "Events" are possible entering occurrences which must be classified
         events = vid.swift_counting_algorithm(config)
+
         if len(events) > 0:
             features = data.generate_feature_vectors(events)
             labels = data.generate_classifications(features)

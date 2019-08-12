@@ -21,29 +21,14 @@ eps = sys.float_info.epsilon
 
 
 class FrameQueue:
-    """Class for storing, describing, and manipulating frames from a video file
-    using two FIFO queues. More or less collections.deques with additional
-    attributes and methods specific to processing swift video files.
-
-    Example:
-         Below is a FrameQueue object (size=7), where the most recently read
-         frame had a framenumber of 571. Previously read frames were pushed
-         deeper into the queue:
-
-    queue:        [i_0][i_1][i_2][i_3][i_4][i_5][i_6] (indexes)
-    seg_queue:                   [i_0][i_1][i_2][i_3] (indexes)
-    framenumbers: [571][570][569][568][567][566][565] (labelframes in queues)
-
-    The primary queue ("queue") stores original frames, and the secondary queue
-    ("seg_queue") stores segmented versions of the frames. As segmentation
-    requires contextual information from past/future frames, the center index
-    of "queue" (index 3) will correspond to the 0th index in "seg_queue".
-    In other words, to generate a segmented version of frame 568,
-    frames 565-571 are necessary, and are taken from the primary queue."""
+    """Class which loads frames into a temporary queue, while also providing
+    methods for processing these frames. The methods can be used to detect
+    events where chimney swifts may have entered an in-frame chimney."""
 
     def __init__(self, config, queue_size=21):
         def assign_file_properties():
-            """Assign properties related to the source video file."""
+            """Assign properties related to the source video file, including
+            file properties and video frame properties."""
             
             self.src_filepath = config["src_filepath"]
             if not self.src_filepath.exists():
@@ -65,12 +50,13 @@ class FrameQueue:
                 self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
                 self.src_starttime = pd.Timestamp(config["timestamp"])
 
-            # Separate from src in case of cropping
+            # Separate from src for eventual cropping/resizing
             self.height = self.src_height
             self.width = self.src_width
 
         def assign_processing_properties():
-            """Assign properties relating to frame processing."""
+            """Assign properties relating to frame processing, including
+            motion analysis, segmentation, and event detection stages."""
             
             # Initialize primary queue for unaltered frames
             self.queue_size = queue_size
@@ -80,10 +66,12 @@ class FrameQueue:
             self.frames_read = 0
             self.frames_processed = 0
 
-            # Initialize secondary queue for segmented frames
-            self.queue_center = int((queue_size - 1) / 2)
-            self.seg_queue = collections.deque([], self.queue_center)
-            self.seg_properties = collections.deque([], self.queue_center)
+            # Initialize secondary queues for segmented frames (size=2 because
+            # when tracking swifts, only 2 frames are compared at a time.)
+            self.seg_queue = collections.deque([], 2)
+            self.seg_properties = collections.deque([], 2)
+            # Append empty values because otherwise the frame comparison would
+            # fail when only the first frame has been loaded.
             self.seg_queue.appendleft(np.zeros((self.height, self.width))
                                       .astype(np.uint8))
             self.seg_properties.appendleft([])
@@ -100,31 +88,33 @@ class FrameQueue:
                          (x1, y1) *-----------------* (x2, y2)
                                   |                 |
                                   |  chimney stack  |
-                                  |                 |                       """
+                                  |                 |
 
-            # Recording the outer-most coordinates from the two provided points
-            # because they may not be parallel.
-            bottom_corners = config["corners"]
-            left = min(bottom_corners[0][0], bottom_corners[1][0])
-            right = max(bottom_corners[0][0], bottom_corners[1][0])
-            top = min(bottom_corners[0][1], bottom_corners[1][1])
-            bottom = max(bottom_corners[0][1], bottom_corners[1][1])
+            Regions will be used for cropping and generating chimney ROI."""
+
+            # From provided corners, determine which coordinates are the
+            # outer-most ones.
+            left = min(config["corners"][0][0], config["corners"][1][0])
+            right = max(config["corners"][0][0], config["corners"][1][0])
+            bottom = max(config["corners"][0][1], config["corners"][1][1])
 
             width = right - left
-            height = round(0.25 * width)  # Fixed height/width ratio
-            self.crop_region = [(left - int(0.5*height),
-                                 top - 2*height),
-                                (right + int(0.5*height),
-                                 bottom + int(0.5*height))]
+
+            # Dimensions = (1.25 X 0.625) = (2 X 1) ratio of width to height
+            self.crop_region = [(left - int(0.125*width),
+                                 bottom - 0.5 * width),
+                                (right + int(0.125 * width),
+                                 bottom + int(0.125 * width))]
+
+            # Left and right brought in slightly as swifts don't enter at edge
             self.roi_region = [(int(left + 0.025 * width),
-                                int(bottom - height)),
+                                int(bottom - 0.25 * width)),
                                (int(right - 0.025 * width),
                                 int(bottom))]
 
         def generate_roi_mask():
-            """Generate a mask with the chimney's region of interest from the
-            specified chimney region. Mask will be the same dimensions as
-            "crop_region"."""
+            """Generate a mask that contains the chimney's region of interest.
+            The "roi_region" is determined in generate_chimney_regions()."""
 
             # Read first frame from video file, then reset index back to 0
             success, frame = self.stream.read()
@@ -147,7 +137,8 @@ class FrameQueue:
             frame_with_thr[self.roi_region[0][1]:self.roi_region[1][1],
                            self.roi_region[0][0]:self.roi_region[1][0]] = thr
 
-            # Crop/resample mask (identical preprocessing to the actual frames)
+            # Apply preprocessing to ROI mask image (identical to what would
+            # be applied to the frames themselves)
             frame_with_thr = self.preprocess_frame(frame_with_thr)
             _, self.roi_mask = cv2.threshold(frame_with_thr, 0, 255,
                                              cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -158,6 +149,7 @@ class FrameQueue:
         generate_roi_mask()
 
     def load_frame(self, empty=False):
+        """Load new frame into left side (index 0) of queue."""
 
         def fn_to_ts(frame_number):
             """Helper function to convert frame amount into a timestamp."""
@@ -166,12 +158,14 @@ class FrameQueue:
 
             return timestamp
 
+        # Used when queue has to be advanced but there are no more frames left.
         if empty:
             self.timestamps.appendleft("")
             self.framenumbers.appendleft("")
             self.queue.appendleft(np.array([]))
             success = True
 
+        # By default, read frames from video file.
         else:
             new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
             new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
@@ -185,16 +179,17 @@ class FrameQueue:
         return success
 
     def preprocess_frame(self, frame=None, index=0):
+        """Apply preprocessing to frame prior to motion analysis."""
 
         def convert_grayscale():
-            """Convert to grayscale a frame at specified index of FrameQueue"""
+            """Convert a frame from 3-channel RGB to grayscale."""
             nonlocal frame
 
             if len(frame.shape) is 3:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         def crop_frame():
-            """Crop frame at specified index of FrameQueue."""
+            """Crop frame to dimensions specified in __init__ of FrameQueue."""
             nonlocal frame
 
             corners = self.crop_region
@@ -209,6 +204,8 @@ class FrameQueue:
             self.width = frame.shape[1]
 
         def resize_frame():
+            """Resize frame so dimensions are fixed regardless of chimney
+            size. (Different chimneys produce different crop dimensions.)"""
             nonlocal frame
 
             frame = cv2.resize(frame, (300, 150))
@@ -224,7 +221,7 @@ class FrameQueue:
             resize_frame()
             return frame
 
-        # Used when processing the video to determine swift counts
+        # Used when processing the video's frames to determine swift counts
         else:
             frame = self.queue[index]
             convert_grayscale()
@@ -233,9 +230,9 @@ class FrameQueue:
             self.queue[index] = frame
 
     def segment_frame(self):
-        """Segment birds from one frame ("index") using information from other
-        frames in the FrameQueue object. Store segmented frame in secondary
-        queue."""
+        """Take the last frame of the queue and process it so birds are
+        segmented from the background. Store segmented frame (and its
+        properties) in a secondary queue."""
 
         def rpca(index=None):
             """Decompose set of images into corresponding low-rank and sparse
@@ -250,10 +247,10 @@ class FrameQueue:
             The size of the queue will determine the tradeoff between 
             computational efficiency and accuracy."""
 
+            # Reshape frames into column vector matrix, 1 vector for each frame
             img_matrix = np.array(self.queue)
             if index:
                 img_matrix = img_matrix[:index, :, :]
-
             col_matrix = np.transpose(img_matrix.reshape(img_matrix.shape[0],
                                                          img_matrix.shape[1] *
                                                          img_matrix.shape[2]))
@@ -272,6 +269,9 @@ class FrameQueue:
                                            (self.height, self.width))
 
         def filter_rpca_output():
+            """Take raw RPCA output (demonstrating motion in frame) and filter
+            out any non-swift motion."""
+
             rpca_output = self.queue[-1]
             smoothed_frame = cv2.bilateralFilter(rpca_output,
                                                  d=7,
@@ -286,6 +286,8 @@ class FrameQueue:
             return opened_frame
 
         def store_segmentation(frame):
+            """Apply connected component labeling, and store the image (and
+            its properties) in the secondary segmentation queues."""
             # Segment using CC labeling
             _, labeled_frame = cv2.connectedComponents(frame, connectivity=4)
 
@@ -327,17 +329,29 @@ class FrameQueue:
                      [ ][ ][ ][ ][ ][A][ ]
                      [ ][ ][ ][ ][ ][ ][A]
 
-        -The "!" values in the matrix are likelihoods of two segments matching.
-        -The "D" and "A" values in the matrix are likelihoods of that segment
-         having no match. (Disappeared and appeared respectively.)
-        -The " " values are irrelevant spaces.
+                          Cost Matrix
 
-        By using the Hungarian algorithm, this matrix is solved to give a
-        single outcome (match, no match) to each segment in both frames. The
-        total sum of likelihoods will be the maximum across all possible
-        combinations of matches, as per the Assignment Problem."""
+        -[!]: Costs associated with two segments matching. (A more unlikely
+            match has a higher associated cost.)
+        -[D]/[A]: Costs associated with two segments having no match.
+            (Disappeared and appeared respectively.)
+        -[ ]: Impossible spaces. (These are filled with values such that it is
+            impossible for them to be chosen by the matching algorithm.
+
+        By using the Hungarian algorithm, this matrix is solved to give an
+        ideal outcome (match, appear, disappear) for each segment in both
+        frames. The total sum of selected costs will be the minimum across all
+        possible combinations of matches, as per the Assignment Problem.
+
+        An example match could be: 0 (prev) -> 0 (curr) (! value selected),
+                                   1 (prev) -> 2 (curr) (! value selected),
+                                   2 (prev) -> 3 (curr) (! value selected),
+                                   and 1 (curr) appears (A value selected)."""
 
         def generate_cost_matrix():
+            """Compute entries in the cost matrix, corresponding to the
+            diagram provided in the match_segments() docstring."""
+
             # Initialize cost matrix as (N+M)x(N+M)
             cost_matrix = (1+eps)*np.ones((count_total, count_total))
 
@@ -348,12 +362,14 @@ class FrameQueue:
                     index_v = (seg_prev.label - 1)
                     index_h = (count_prev + seg.label - 1)
 
-                    # Compute "distance cost"
+                    # Compute "distance cost".
+                    # (distances > 20px will have much higher costs)
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
                     dist_cost = 2 ** (dist - 20)
 
-                    # Compute "angle cost"
+                    # Compute "angle cost" if previous angle exists.
+                    # (angles > 90* will have much higher costs.)
                     if len(seg_prev.__centroids) > 1:
                         centroid_list = seg_prev.__centroids
 
@@ -369,11 +385,12 @@ class FrameQueue:
 
                         angle_diff = min(360 - abs(angle - angle_prev),
                                          abs(angle-angle_prev))
+
                         angle_cost = 2**(angle_diff - 90)
                     else:
                         angle_cost = 1
 
-                    # Average costs for cost matrix entry
+                    # Average both costs to get cost matrix entry
                     cost = 0.5*(dist_cost+angle_cost)
                     cost_matrix[index_v, index_h] = cost
 
@@ -384,9 +401,11 @@ class FrameQueue:
             return cost_matrix
 
         def assign_labels(cost_matrix):
+            """ Assign results of Hungarian algorithm's matching to the
+            RegionProperties object for each segment"""
+
             seg_labels, seg_matches = linear_sum_assignment(cost_matrix)
 
-            # Assign results of matching to each segment's RegionProperties obj
             for i in range(count_prev):
                 # Condition if segment has disappeared (assignment = "[D]")
                 if seg_labels[i] == seg_matches[i]:
@@ -412,8 +431,10 @@ class FrameQueue:
             assign_labels(costs)
 
     def analyse_matches(self):
-        """Use matching results to store history of RegionProperties through
-        chain of matches."""
+        """Analyse matching results to do two things:
+            -Store centroid history in segment's RegionProperties object
+            -Determine whether a disappearing segment meets "event detection"
+            criteria.."""
 
         for seg_curr in self.seg_properties[0]:
             # Create an empty list to be filled with centroid history
@@ -455,7 +476,11 @@ class FrameQueue:
 
 
 def select_corners(filepath):
-    def click_and_crop(event, x, y, flags, param):
+    """OpenCV GUI function to select chimney corners from video frame."""
+
+    def click_and_update(event, x, y, flags, param):
+        """Callback function to record mouse coordinates on click, and to
+        update instructions to user."""
         nonlocal corners
 
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -481,28 +506,32 @@ def select_corners(filepath):
     clone = image.copy()
 
     cv2.namedWindow("image", cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback("image", click_and_crop)
+    cv2.setMouseCallback("image", click_and_update)
     cv2.setWindowTitle("image", "Click on corner 1")
 
     corners = []
 
     while True:
+        # Display image and wait for user input (click -> click_and_update())
         cv2.imshow("image", image)
         cv2.resizeWindow('image',
                          int(0.5 * image.shape[1]),
                          int(0.5 * image.shape[0]))
         cv2.waitKey(1)
 
+        # Condition for when two corners have been selected
         if len(corners) == 2:
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord("n"):
+                # Indicates selected corners are not good, so resets state
                 image = clone.copy()
                 corners = []
                 cv2.setWindowTitle("image",
                                    "Click on corner 1")
 
             elif key == ord("y"):
+                # Indicates selected corners are acceptable
                 break
 
     cv2.destroyAllWindows()
@@ -511,8 +540,11 @@ def select_corners(filepath):
 
 
 def swift_counting_algorithm(config):
+    """Full algorithm which uses FrameQueue methods to process an entire video
+    from start to finish."""
 
     def create_dataframe(passed_list):
+        """Convert list of events to pandas dataframe."""
         dataframe = pd.DataFrame(passed_list,
                                  columns=list(passed_list[0].keys())
                                  ).astype('object')
@@ -522,11 +554,10 @@ def swift_counting_algorithm(config):
 
         return dataframe
 
-    fq = FrameQueue(config)
-
     print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
     print("[*] Status updates will be given every 100 frames.")
 
+    fq = FrameQueue(config)
     while fq.frames_processed < fq.src_framecount:
         success = False
 
@@ -537,6 +568,7 @@ def swift_counting_algorithm(config):
         proc = fq.frames_processed
 
         try:
+            # Load frames until queue is filled
             if fq.frames_read < (fq.queue_size - 1):
                 success = fq.load_frame()
                 fq.preprocess_frame()
@@ -544,6 +576,7 @@ def swift_counting_algorithm(config):
                 # fq.match_segments() (not needed until queue is filled)
                 # fq.analyse_matches() (not needed until queue is filled)
 
+            # Process queue full of frames
             elif (fq.queue_size - 1) <= fq.frames_read < fq.src_framecount:
                 success = fq.load_frame()
                 fq.preprocess_frame()
@@ -551,9 +584,10 @@ def swift_counting_algorithm(config):
                 fq.match_segments()
                 fq.analyse_matches()
 
+            # Load blank frames until queue is empty
             elif fq.frames_read == fq.src_framecount:
-                success = fq.load_frame(empty=True)
-                # fq.preprocess_frame() (not needed for empty frame)
+                success = fq.load_frame(blank=True)
+                # fq.preprocess_frame() (not needed for blank frame)
                 fq.segment_frame()
                 fq.match_segments()
                 fq.analyse_matches()
@@ -575,11 +609,13 @@ def swift_counting_algorithm(config):
         else:
             fq.failcount += 1
 
+        # Break if too many sequential errors
         if fq.failcount >= 10:
             print("Too many sequential errors have occurred. "
                   "Halting algorithm...")
             fq.frames_processed = fq.src_framecount + 1
 
+        # Status updates
         if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."
                   .format(fq.frames_processed, fq.src_framecount))
@@ -587,6 +623,6 @@ def swift_counting_algorithm(config):
     if fq.event_list:
         df_eventinfo = create_dataframe(fq.event_list)
     else:
-        df_eventinfo = None
+        df_eventinfo = []
 
     return df_eventinfo
