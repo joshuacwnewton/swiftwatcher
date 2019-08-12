@@ -371,8 +371,11 @@ class FrameQueue:
         # Process each RPCA "sparse error" frame to remove non-swift details
         seg = {}
         seg["RPCA_output"] = self.queue[-1]
-        seg["edge_image"], seg["masked_image"], seg["RPCA_otsuthr"] = \
-            edge_based_otsu(list(seg.values())[-1])
+        seg["RPCA_smoothed"] = cv2.bilateralFilter(list(seg.values())[-1], d=7,
+                                                   sigmaColor=15, sigmaSpace=1)
+        _, seg["RPCA_thresh"] = cv2.threshold(list(seg.values())[-1],
+                                              thresh=15, maxval=255,
+                                              type=cv2.THRESH_TOZERO)
         seg["RPCA_opened"] = img.grey_opening(list(seg.values())[-1],
                                               size=(3, 3)).astype(np.uint8)
 
