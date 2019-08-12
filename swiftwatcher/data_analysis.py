@@ -53,9 +53,8 @@ def generate_classifications(df_features):
         f_1 = hist[i_max - 1]
         f1 = hist[i_max + 1]
         w = abs(bin_edges[1] - bin_edges[0])
-        mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
 
-        return mode
+        return xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
 
     df_labels = df_features.copy()
 
@@ -83,7 +82,7 @@ def export_results(config, df_labels):
         frame_queue = FrameQueue(config)
         nano = (1 / frame_queue.src_fps) * 1e9
         frame_queue.stream.release()  # Not needed once fps is extracted
-        num_timestamps = frame_queue.total_frames
+        num_timestamps = frame_queue.src_framecount
         duration = (num_timestamps - 1) * nano
         timestamps = pd.date_range(start=config["timestamp"],
                                    end=(pd.Timestamp(config["timestamp"]) +
@@ -112,12 +111,12 @@ def export_results(config, df_labels):
 
         # groupby sum
         df_rejected = df_rejected.reset_index().groupby(['TMSTAMP',
-                                                   'FRM_NUM']).sum()
+                                                         'FRM_NUM']).sum()
         df_rejected = df_rejected.drop(columns=["ANGLE", "ENTERPR"])
         df_rejected.columns = ["REJECTED"]
 
         df_predicted = df_predicted.reset_index().groupby(['TMSTAMP',
-                                                     'FRM_NUM']).sum()
+                                                           'FRM_NUM']).sum()
         df_predicted = df_predicted.drop(columns=["ANGLE", "ENTERPR"])
         df_predicted.columns = ["PREDICTED"]
 

@@ -12,7 +12,6 @@ from utils.rpca_ialm import inexact_augmented_lagrange_multiplier
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
-import utils.cm as cm
 import pandas as pd
 
 # Stdlib imports
@@ -43,14 +42,10 @@ class FrameQueue:
     frames 565-571 are necessary, and are taken from the primary queue."""
 
     def __init__(self, config, queue_size=21):
-
-        def assign_paths():
-            self.src_filepath = config["src_filepath"]
-            self.dir_base = config["base_dir"]
-            if "test_dir" in config:
-                self.dir_test = config["test_dir"]
-
         def assign_file_properties():
+            """Assign properties related to the source video file."""
+            
+            self.src_filepath = config["src_filepath"]
             if not self.src_filepath.exists():
                 raise Exception(
                     "[!] Filepath does not point to valid video file.")
@@ -64,22 +59,19 @@ class FrameQueue:
                 self.src_fps = self.stream.get(cv2.CAP_PROP_FPS)
                 self.src_framecount = int(self.stream.get
                                           (cv2.CAP_PROP_FRAME_COUNT))
+                self.src_framecount = 6000
                 self.src_height = int(
                     self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
                 self.src_starttime = pd.Timestamp(config["timestamp"])
 
-        def assign_processing_properties():
             # Separate from src in case of cropping
             self.height = self.src_height
             self.width = self.src_width
 
-            self.total_frames = int(self.stream.get(cv2.CAP_PROP_FRAME_COUNT))
-
-            self.event_list = []
-            self.failcount = 0
-
-        def assign_queue_properties():
+        def assign_processing_properties():
+            """Assign properties relating to frame processing."""
+            
             # Initialize primary queue for unaltered frames
             self.queue_size = queue_size
             self.queue = collections.deque([], queue_size)
@@ -96,11 +88,14 @@ class FrameQueue:
                                       .astype(np.uint8))
             self.seg_properties.appendleft([])
 
-        def generate_chimney_regions(alpha):
-            """Generate rectangular regions (represented as top-left corner and
-            bottom-right corner) from two provided points ("bottom_corners").
+            # Store detected events in this list
+            self.event_list = []
 
-            The two points provided are of the two edges of the chimney:
+            # Keep track of sequential errors to break if necessary
+            self.failcount = 0
+
+        def generate_chimney_regions():
+            """Generate rectangular regions from two corners of chimney:
 
                          (x1, y1) *-----------------* (x2, y2)
                                   |                 |
@@ -116,7 +111,7 @@ class FrameQueue:
             bottom = max(bottom_corners[0][1], bottom_corners[1][1])
 
             width = right - left
-            height = round(alpha * width)  # Fixed height/width ratio
+            height = round(0.25 * width)  # Fixed height/width ratio
             self.crop_region = [(left - int(0.5*height),
                                  top - 2*height),
                                 (right + int(0.5*height),
@@ -127,9 +122,9 @@ class FrameQueue:
                                 int(bottom))]
 
         def generate_roi_mask():
-            """Generate a mask with the chimney's region-of-interest from the
+            """Generate a mask with the chimney's region of interest from the
             specified chimney region. Mask will be the same dimensions as
-            "crop_region". Func called during __init__ and stored as a property."""
+            "crop_region"."""
 
             # Read first frame from video file, then reset index back to 0
             success, frame = self.stream.read()
@@ -137,7 +132,7 @@ class FrameQueue:
 
             # Crop frame, then blur and threshold the B channel to produce mask
             cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
-                      self.roi_region[0][0]:self.roi_region[1][0]]
+                            self.roi_region[0][0]:self.roi_region[1][0]]
             blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
             a, b, c = cv2.split(blur)
             ret, thr = cv2.threshold(a, 0, 255,
@@ -152,22 +147,20 @@ class FrameQueue:
             frame_with_thr[self.roi_region[0][1]:self.roi_region[1][1],
                            self.roi_region[0][0]:self.roi_region[1][0]] = thr
 
-            # Crop/resample mask (identical preprocessing to the actual frames).
+            # Crop/resample mask (identical preprocessing to the actual frames)
             frame_with_thr = self.preprocess_frame(frame_with_thr)
             _, self.roi_mask = cv2.threshold(frame_with_thr, 0, 255,
-                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                                             cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-        assign_paths()
         assign_file_properties()
         assign_processing_properties()
-        assign_queue_properties()
-        generate_chimney_regions(alpha=0.25)
+        generate_chimney_regions()
         generate_roi_mask()
 
     def load_frame(self, empty=False):
 
         def fn_to_ts(frame_number):
-            """Helper function to convert an amount of frames into a timestamp."""
+            """Helper function to convert frame amount into a timestamp."""
             total_s = frame_number / self.src_fps
             timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
@@ -197,7 +190,6 @@ class FrameQueue:
             """Convert to grayscale a frame at specified index of FrameQueue"""
             nonlocal frame
 
-            # OpenCV default, may use other methods in future (single HSV channel?)
             if len(frame.shape) is 3:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -206,7 +198,6 @@ class FrameQueue:
             nonlocal frame
 
             corners = self.crop_region
-
             try:
                 frame = frame[corners[0][1]:corners[1][1],
                               corners[0][0]:corners[1][0]]
@@ -256,8 +247,8 @@ class FrameQueue:
                           sparse  = "foreground" errors corrupting
                                     the "background" image
 
-            The size of the queue will determine the tradeoff between efficiency
-            and accuracy."""
+            The size of the queue will determine the tradeoff between 
+            computational efficiency and accuracy."""
 
             img_matrix = np.array(self.queue)
             if index:
@@ -308,9 +299,9 @@ class FrameQueue:
             rpca()
 
         # Partial batch for remaining frames (total frames % queue size)
-        if self.frames_read == self.total_frames:
+        if self.frames_read == self.src_framecount:
             if self.frames_read-self.frames_processed == self.queue_size:
-                rem = self.total_frames % self.queue_size
+                rem = self.src_framecount % self.queue_size
                 rpca(index=rem)
 
         filtered = filter_rpca_output()
@@ -463,64 +454,59 @@ class FrameQueue:
 
 
 def select_corners(filepath):
-    refPt = []
-
     def click_and_crop(event, x, y, flags, param):
-        # grab references to the global variables
-        nonlocal refPt
-
-        # if the left mouse button was clicked, record the starting
-        # (x, y) coordinates and indicate that cropping is being
-        # performed
+        nonlocal corners
 
         if event == cv2.EVENT_LBUTTONDOWN:
-            if len(refPt) < 2:
-                refPt.append((x, y))
-                cv2.circle(image, refPt[-1], 5, (0, 0, 255), -1)
+            if len(corners) < 2:
+                corners.append((x, y))
+                cv2.circle(image, corners[-1], 5, (0, 0, 255), -1)
                 cv2.imshow("image", image)
-                cv2.resizeWindow('image', int(0.5*image.shape[1]),
-                                          int(0.5*image.shape[0]))
-            if len(refPt) == 1:
+                cv2.resizeWindow('image',
+                                 int(0.5*image.shape[1]),
+                                 int(0.5*image.shape[0]))
+
+            if len(corners) == 1:
                 cv2.setWindowTitle("image",
                                    "Click on corner 2")
-            if len(refPt) == 2:
+
+            if len(corners) == 2:
                 cv2.setWindowTitle("image",
                                    "Type 'y' to keep,"
                                    " or 'n' to select different corners.")
 
     stream = cv2.VideoCapture(fspath(filepath))
     success, image = stream.read()
-
     clone = image.copy()
+
     cv2.namedWindow("image", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("image", click_and_crop)
     cv2.setWindowTitle("image", "Click on corner 1")
 
-    # keep looping until the 'q' key is pressed
+    corners = []
+
     while True:
-        # display the image and wait for a keypress
         cv2.imshow("image", image)
-        cv2.resizeWindow('image', int(0.5 * image.shape[1]),
-                                  int(0.5 * image.shape[0]))
+        cv2.resizeWindow('image',
+                         int(0.5 * image.shape[1]),
+                         int(0.5 * image.shape[0]))
         cv2.waitKey(1)
 
-        if len(refPt) == 2:
+        if len(corners) == 2:
             key = cv2.waitKey(1) & 0xFF
 
-            # if the 'r' key is pressed, reset the cropping region
             if key == ord("n"):
                 image = clone.copy()
-                refPt = []
+                corners = []
                 cv2.setWindowTitle("image",
                                    "Click on corner 1")
 
-            # if the 'c' key is pressed, break from the loop
             elif key == ord("y"):
                 break
 
     cv2.destroyAllWindows()
 
-    return refPt
+    return corners
 
 
 def swift_counting_algorithm(config):
@@ -540,7 +526,7 @@ def swift_counting_algorithm(config):
     print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
     print("[*] Status updates will be given every 100 frames.")
 
-    while fq.frames_processed < fq.total_frames:
+    while fq.frames_processed < fq.src_framecount:
         success = False
 
         # Store state variables in case video processing glitch occurs
@@ -557,14 +543,14 @@ def swift_counting_algorithm(config):
                 # fq.match_segments() (not needed until queue is filled)
                 # fq.analyse_matches() (not needed until queue is filled)
 
-            elif (fq.queue_size - 1) <= fq.frames_read < fq.total_frames:
+            elif (fq.queue_size - 1) <= fq.frames_read < fq.src_framecount:
                 success = fq.load_frame()
                 fq.preprocess_frame()
                 fq.segment_frame()
                 fq.match_segments()
                 fq.analyse_matches()
 
-            elif fq.frames_read == fq.total_frames:
+            elif fq.frames_read == fq.src_framecount:
                 success = fq.load_frame(empty=True)
                 # fq.preprocess_frame() (not needed for empty frame)
                 fq.segment_frame()
@@ -581,21 +567,21 @@ def swift_counting_algorithm(config):
             if fq.frames_read == read:
                 fq.frames_read += 1
             if fq.frames_processed == proc:
-                fq.frames_processed
+                fq.frames_processed += 1
 
-        # Break if sequential errors are occurring
         if success:
             fq.failcount = 0
         else:
             fq.failcount += 1
+
         if fq.failcount >= 10:
             print("Too many sequential errors have occurred. "
                   "Halting algorithm...")
-            fq.frames_processed = fq.total_frames + 1
+            fq.frames_processed = fq.src_framecount + 1
 
         if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
             print("[-] {0}/{1} frames processed."
-                  .format(fq.frames_processed, fq.total_frames))
+                  .format(fq.frames_processed, fq.src_framecount))
 
     if fq.event_list:
         df_eventinfo = create_dataframe(fq.event_list)
