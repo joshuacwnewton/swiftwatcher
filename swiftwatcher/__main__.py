@@ -5,8 +5,8 @@ import swiftwatcher.data_analysis as data
 # File I/O
 import json
 from pathlib import Path
-# import tkinter as tk
-# from tkinter import tkFileDialog
+import tkinter as tk
+from tkinter import filedialog
 
 
 def load_config(video_dir):
@@ -48,12 +48,14 @@ def main():
     - params: algorithm parameters, used to tweak processing stages, set by
         set_parameters() function."""
 
-    # root = tk.Tk()
-    # root.withdraw()
-    # dirname = tkFileDialog.askdirectory(parent=root, initialdir="/",
-    #                                     title='Please select a directory')
+    root = tk.Tk()
+    root.withdraw()
+    dirpath = Path(filedialog.askdirectory(parent=root, initialdir="/",
+                                           title='Please select a directory '
+                                                 'containing the videos you '
+                                                 'wish to analyse.'))
 
-    configs = load_config(video_dir=Path.cwd()/"videos")
+    configs = load_config(dirpath)
     for config in configs:
         events = vid.swift_counting_algorithm(config)
 
