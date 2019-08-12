@@ -142,43 +142,28 @@ def export_results(config, df_labels):
 
         return df_total, df_minutes, df_seconds, df_exact
 
-    def save_to_csv(total_count, df_minutes, df_seconds, df_exact):
+    def save_to_csv(count, df_minutes, df_seconds, df_exact):
         nonlocal config
 
         save_directory \
             = config["src_filepath"].parent/config["src_filepath"].stem
 
-        df_exact_short = df_exact[~((df_exact["PREDICTED"] == 0) &
-                                    (df_exact["REJECTED"] == 0))]
-        df_minutes_short = df_minutes[~((df_minutes["PREDICTED"] == 0) &
-                                        (df_minutes["REJECTED"] == 0))]
-        df_seconds_short = df_seconds[~((df_seconds["PREDICTED"] == 0) &
-                                        (df_seconds["REJECTED"] == 0))]
+        dfs = {
+            "full_usec": df_exact,
+            "events-only_usec": df_exact[~((df_exact["PREDICTED"] == 0) &
+                                           (df_exact["REJECTED"] == 0))],
+            "full_sec": df_seconds,
+            "events-only_sec": df_seconds[~((df_seconds["PREDICTED"] == 0) &
+                                            (df_seconds["REJECTED"] == 0))],
+            "full_min": df_minutes,
+            "events-only_min": df_minutes[~((df_minutes["PREDICTED"] == 0) &
+                                            (df_minutes["REJECTED"] == 0))]
+        }
 
-        df_exact_short.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-exact.csv".format(total_count)
-            ))
-        df_seconds_short.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-seconds.csv".format(total_count)
-            ))
-        df_minutes_short.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-minutes.csv".format(total_count)
-            ))
-        df_exact.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-exact_full.csv".format(total_count)
-            ))
-        df_seconds.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-seconds_full.csv".format(total_count)
-            ))
-        df_minutes.to_csv(fspath(
-                save_directory /
-                "{}-swifts_timestamps-minutes_full.csv".format(total_count)
-            ))
+        for df_name, df in dfs.items():
+            df.to_csv(fspath(
+                    save_directory/"{0}-swifts_{1}.csv".format(count, df_name)
+                ))
 
     empty = create_empty_dataframe()
     predicted, rejected = split_labeled_events()
