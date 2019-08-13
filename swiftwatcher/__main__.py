@@ -125,8 +125,6 @@ def load_configs():
                 # Create and write config file
                 if not config_filepath.exists():
                     config = {
-                        "src_filepath": filepath,
-                        "base_dir": base_dir,
                         "name": filepath.name,
                         "timestamp": "00:00:00.000000",
                         "corners": vid.select_corners(filepath),
@@ -139,9 +137,12 @@ def load_configs():
                     with config_filepath.open(mode="r") as read_file:
                         config = json.load(read_file)
 
+                config["src_filepath"] = filepath
+                config["base_dir"] = base_dir
+
                 config_list.append(config)
 
-                return config_list
+        return config_list
 
     video_paths = fetch_video_filepaths()
     configs = create_config_list(video_paths)
