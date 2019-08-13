@@ -17,9 +17,9 @@ a chimney.
 Please visit the 
 [Releases](https://github.com/joshuacwnewton/swiftwatcher/releases) page
 to download the newest release.
- * `swiftwatcher` for Linux-based 
+ * `swiftwatcher-linux.0.1.0` for Linux-based 
 operating systems
- * `swiftwatcher.exe` for Windows-based operating systems.
+ * `swiftwatcher-win.0.1.0.exe` for Windows-based operating systems.
 
 #### Usage
 
@@ -28,11 +28,11 @@ analyse into a single folder. Then, open up a terminal/command-line in
 the directory which the `swiftwatcher` application is saved to and type
 
 ```
-.\swiftwatcher
+.\swiftwatcher-linux.0.1.0
 ``` 
 for Linux-based operating systems, or
 ```
-swiftwatcher.exe
+swiftwatcher-win.0.1.0.exe
 ```
 for Windows-based operating systems.
 
