@@ -49,7 +49,6 @@ class FrameQueue:
                 self.src_fps = self.stream.get(cv2.CAP_PROP_FPS)
                 self.src_framecount = int(self.stream.get
                                           (cv2.CAP_PROP_FRAME_COUNT))
-                self.src_framecount = 6000
                 self.src_height = int(
                     self.stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 self.src_width = int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH))
