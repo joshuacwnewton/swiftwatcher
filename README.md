@@ -42,7 +42,7 @@ the application will prompt you to select the two corners of the
 chimney within each video. Once selected and confirmed with the `'y'` 
 key, the application will proceed to process each video file.
 
-![Swiftwatcher Demo](data/screenshots/demo.gif)
+<p align="center"><img src="data/screenshots/demo.gif"></p>
 
 Results will be outputted to a folder of the same name as the video 
 file. Within this folder, you will find `.csv` files in a number of 
@@ -53,10 +53,12 @@ swifts.
 * **PREDICTED:** What the application counts as a swift entering the 
 chimney.
 * **REJECTED:** A potential event that did not meet the 
-necessary criteria to be counted.
+necessary criteria to be counted. 
+
+<p align="center"><img src="data/screenshots/results.png"></p>
 
 Counts are only determined from **PREDICTED** swifts, but **REJECTED**
-counts are included for transparency. 
+counts are included for transparency.
 
 ## Links
 
