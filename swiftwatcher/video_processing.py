@@ -489,7 +489,7 @@ def select_corners(filepath):
 
         if event == cv2.EVENT_LBUTTONDOWN:
             if len(corners) < 2:
-                corners.append((x, y))
+                corners.append((int(x), int(y)))
                 cv2.circle(image, corners[-1], 5, (0, 0, 255), -1)
                 cv2.imshow("image", image)
                 cv2.resizeWindow('image',
