@@ -153,7 +153,7 @@ class FrameQueue:
         generate_chimney_regions()
         generate_roi_mask()
 
-    def load_frame(self, empty=False):
+    def load_frame(self, blank=False):
         """Load new frame into left side (index 0) of queue."""
 
         def fn_to_ts(frame_number):
@@ -164,7 +164,7 @@ class FrameQueue:
             return timestamp
 
         # Used when queue has to be advanced but there are no more frames left.
-        if empty:
+        if blank:
             self.timestamps.appendleft("")
             self.framenumbers.appendleft("")
             self.queue.appendleft(np.array([]))
