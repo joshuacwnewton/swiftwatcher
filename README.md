@@ -55,10 +55,11 @@ chimney.
 * **REJECTED:** A potential event that did not meet the 
 necessary criteria to be counted. 
 
-<p align="center"><img src="data/screenshots/results.png"></p>
-
 Counts are only determined from **PREDICTED** swifts, but **REJECTED**
 counts are included for transparency.
+
+
+<p align="center"><img src="data/screenshots/results.png"></p>
 
 ## Links
 
