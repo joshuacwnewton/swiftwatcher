@@ -197,11 +197,9 @@ class FrameQueue:
             nonlocal frame
 
             corners = self.crop_region
-            try:
-                frame = frame[corners[0][1]:corners[1][1],
-                              corners[0][0]:corners[1][0]]
-            except Exception as e:
-                print("[!] Frame cropping failed due to: {0}".format(str(e)))
+
+            frame = frame[corners[0][1]:corners[1][1],
+                          corners[0][0]:corners[1][0]]
 
             # Update frame attributes
             self.height = frame.shape[0]
