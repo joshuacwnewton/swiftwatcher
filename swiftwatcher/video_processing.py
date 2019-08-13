@@ -1,3 +1,8 @@
+# Bugfix for PyInstaller, see: https://github.com/numpy/numpy/issues/14163
+import numpy.random.common
+import numpy.random.bounded_integers
+import numpy.random.entropy
+
 # Imports used in numerous stages
 import cv2
 import numpy as np
