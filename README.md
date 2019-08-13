@@ -40,7 +40,7 @@ the application will prompt you to select the two corners of the
 chimney within each video. Once selected and confirmed with the `'y'` 
 key, the application will proceed to process each video file.
 
-![Swiftwatcher Demo](https://raw.githubusercontent.com/joshuacwnewton/swiftwatcher/master/data/screenshots/demo.gif)
+![Swiftwatcher Demo](data/screenshots/demo.gif)
 
 Results will be outputted to a folder of the same name as the video 
 file. Within this folder, you will find `.csv` files in a number of 
