@@ -107,7 +107,7 @@ class FrameQueue:
 
             # Dimensions = (1.25 X 0.625) = (2 X 1) ratio of width to height
             self.crop_region = [(left - int(0.125*width),
-                                 bottom - 0.5 * width),
+                                 bottom - int(0.5 * width)),
                                 (right + int(0.125 * width),
                                  bottom + int(0.125 * width))]
 
