@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import collections
 import math
+from os import fspath
 
 # Necessary imports for segmentation stage
 from scipy import ndimage as img
@@ -18,9 +19,6 @@ from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
 import pandas as pd
-
-# Stdlib imports
-from os import fspath
 import sys
 eps = sys.float_info.epsilon
 
