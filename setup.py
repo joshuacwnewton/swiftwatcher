@@ -7,7 +7,7 @@ from setuptools import setup
 HERE = os.path.abspath(os.path.dirname(__file__))
 
 # The text of the README file
-with open(os.path.join(HERE, "README.rst")) as fid:
+with open(os.path.join(HERE, "README.md")) as fid:
     README = fid.read()
 
 # This call to setup() does all the work
