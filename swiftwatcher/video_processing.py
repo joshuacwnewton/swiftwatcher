@@ -528,14 +528,14 @@ def select_corners(filepath):
         if len(corners) == 2:
             key = cv2.waitKey(1) & 0xFF
 
-            if key == ord("n"):
+            if key == ord("n") or key == ord("N"):
                 # Indicates selected corners are not good, so resets state
                 image = clone.copy()
                 corners = []
                 cv2.setWindowTitle("image",
                                    "Click on corner 1")
 
-            elif key == ord("y"):
+            elif key == ord("y") or key == ord("Y"):
                 # Indicates selected corners are acceptable
                 break
 
