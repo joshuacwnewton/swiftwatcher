@@ -1,4 +1,4 @@
-<img src="data/logo.png" align="right" style="width:200px;height:200px;"/>
+<img src="data/logo.png" align="right" style="width:100px;height:100px;"/>
 
 # swiftwatcher
 > A collaboration between the University of Victoria's Computer Vision 
