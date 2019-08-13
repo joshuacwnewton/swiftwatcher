@@ -4,8 +4,8 @@ import numpy.random.bounded_integers
 import numpy.random.entropy
 
 # Imports used in numerous stages
-import cv2
 import numpy as np
+import cv2
 import collections
 import math
 
