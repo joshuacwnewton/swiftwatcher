@@ -1,3 +1,5 @@
+<img src="data/logo.png" align="right" style="width:200px;height:200px;"/>
+
 # swiftwatcher
 > A collaboration between the University of Victoria's Computer Vision 
 Lab and Algoma SwiftWatch

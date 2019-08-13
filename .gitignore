@@ -176,7 +176,6 @@ videos
 videos/*
 *.jpg
 *.jpeg
-*.png
 *.mp4
 *.avi
 *.pdf
