@@ -12,41 +12,45 @@ a chimney.
 
 ## Getting Started
 
-#### Download
+Swiftwatcher is provided as a single executable file which can be run by
+itself. This file can be downloaded from the Releases page, 
+[found here](https://github.com/joshuacwnewton/swiftwatcher/releases). 
 
-Please visit the 
-[Releases](https://github.com/joshuacwnewton/swiftwatcher/releases) page
-to download the newest release.
- * `swiftwatcher-linux.0.1.0` for Linux-based 
-operating systems
- * `swiftwatcher-win.0.1.0.exe` for Windows-based operating systems.
+Each release on the Releases page has an "Assets" section containing 
+executable files for both Linux and Windows operating systems. These 
+files will contain `win` or `linux` in their names. A demo video is 
+also provided.
 
-#### Usage
+#### Usage Instructions
 
-Once downloaded, make sure you've put each video you want to
-analyse into a single folder. Then, open up a terminal/command-line in 
-the directory which the `swiftwatcher` application is saved to and type
+Once you have downloaded the file corresponding to your operating system, 
+please follow these steps to use swiftwatcher:
 
-```
-.\swiftwatcher-linux.0.1.0
-``` 
-for Linux-based operating systems, or
-```
-swiftwatcher-win.0.1.0.exe
-```
-for Windows-based operating systems.
+1. Place each video you wish to analyse inside a single folder.
+2. Run the program you downloaded from the Releases page. 
+    * **Linux:** swiftwatcher can be run from the command line by typing
 
-Doing so will prompt you to select a video directory, so choose the 
-folder which contains the videos you want to analyse. Once selected, 
-the application will prompt you to select the two corners of the 
-chimney within each video. Once selected and confirmed with the `'y'` 
-key, the application will proceed to process each video file.
+        `./swiftwatcher-linux.0.1.0`
+    * **Windows:** swiftwatcher can be run by double-clicking it, or
+    from the command line by typing 
+    
+        `swiftwatcher-win-0.1.0.exe`
+3. You will be prompted to select a folder which contains the video
+files. Please select the folder created in Step 1.
+4. If the folder you selected contains valid video files, you will be
+shown a frame from each video, and prompted to select the two corners 
+of the chimney in the video. When two points are selected, you can 
+proceed with the 'y' key or select again with the 'n' key.
+5. When the chimney has been identified for all videos, 
+the application will begin to process them to look for swifts.
+
+This process can be viewed in the demonstration below.
 
 <p align="center"><img src="data/screenshots/demo.gif"></p>
 
 Results will be outputted to a folder of the same name as the video 
 file. Within this folder, you will find `.csv` files in a number of 
-different time formats. Each contains three columns: 
+different time formats. Each `.csv` file contains three columns: 
 
 * **TMSTAMP:** The in-video timestamp corresponding to the counted 
 swifts.
