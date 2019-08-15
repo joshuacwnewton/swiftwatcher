@@ -92,7 +92,7 @@ def load_configs():
                              ([Path(f) for f in list(root.tk.splitlist(files))
                               if (is_video_file(Path(f).suffix)
                                   and Path(f) not in filepaths)]))
-                filenames = ["[-]     {}".format(f.stem) for f in filepaths]
+                filenames = ["[-]     {}".format(f.name) for f in filepaths]
                 print("[*] Video files to be analysed: ")
                 print(*filenames, sep="\n")
                 ipt = input("[*] Are there additional files you would like to "
