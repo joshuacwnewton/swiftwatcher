@@ -26,8 +26,7 @@ also provided.
 Once you have downloaded the file corresponding to your operating system, 
 please follow these steps to use swiftwatcher:
 
-1. Place each video you wish to analyse inside a single folder.
-2. Run the program you downloaded from the Releases page. 
+1. Run the program you downloaded from the Releases page. 
     * **Linux:** swiftwatcher can be run from the command line by typing
 
         `./swiftwatcher-linux.0.1.0`
@@ -35,12 +34,17 @@ please follow these steps to use swiftwatcher:
     from the command line by typing 
     
         `swiftwatcher-win-0.1.0.exe`
-3. You will be prompted to select a folder which contains the video
-files. Please select the folder created in Step 1.
-4. If the folder you selected contains valid video files, you will be
-shown a frame from each video, and prompted to select the two corners 
-of the chimney in the video. When two points are selected, you can 
-proceed with the 'y' key or select again with the 'n' key.
+2. You will be prompted to select the video files you wish to analyse.
+Hold `shift` + `click` to select multiple videos.
+3. Once all videos have been selected and confirmed, you will be 
+prompted to decide whether or not to re-use the chimney that was 
+identified in the first video. (Use this option if the chimney position
+does not change across all videos you wish to analyse.)
+4. If the file(s) you selected are valid video files, you will then
+be shown a frame from the first video, and prompted to select the two 
+corners which represent the chimney in the video. When two points are 
+selected, you can proceed with the 'y' key or select again with the 'n' 
+key. If there are more chimneys to define, this process will repeat.
 5. When the chimney has been identified for all videos, 
 the application will begin to process them to look for swifts.
 
