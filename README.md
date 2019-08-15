@@ -17,23 +17,23 @@ itself. This file can be downloaded from the Releases page,
 [found here](https://github.com/joshuacwnewton/swiftwatcher/releases). 
 
 Each release on the Releases page has an "Assets" section containing 
-executable files for both Linux and Windows operating systems. These 
-files will contain `win` or `linux` in their names. A demo video is 
-also provided.
+compressed archives for both Linux and Windows operating systems. These 
+archives are be named `win` or `linux`, and contain `swiftwatcher` 
+executable files.
 
 #### Usage Instructions
 
 Once you have downloaded the file corresponding to your operating system, 
 please follow these steps to use swiftwatcher:
 
-1. Run the program you downloaded from the Releases page. 
+1. Extract and run the program you downloaded from the Releases page. 
     * **Linux:** swiftwatcher can be run from the command line by typing
 
-        `./swiftwatcher-linux.0.1.0`
+        `./swiftwatcher`
     * **Windows:** swiftwatcher can be run by double-clicking it, or
     from the command line by typing 
     
-        `swiftwatcher-win-0.1.0.exe`
+        `swiftwatcher.exe`
 2. You will be prompted to select the video files you wish to analyse.
 Hold `shift` + `click` to select multiple videos.
 3. Once all videos have been selected and confirmed, you will be 
