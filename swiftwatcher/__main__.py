@@ -119,6 +119,10 @@ def load_configs():
         if len(filepaths) is 0:
             print("[!] No videos to analyse. Please try again.")
         else:
+            ipt = input("\nWould you like to re-use the first selected "
+                        "corners? (Y/N) \n"
+                        "Input: ")
+
             for filepath in filepaths:
                 # "Result" csv files will also be stored in this directory
                 base_dir = filepath.parent/filepath.stem
@@ -132,8 +136,13 @@ def load_configs():
                     config = {
                         "name": filepath.name,
                         "timestamp": "00:00:00.000000",
-                        "corners": vid.select_corners(filepath),
+
                     }
+                    if (len(config_list) > 0) and (ipt == "y" or ipt == "Y"):
+                        config["corners"] = config_list[0]["corners"]
+                    else:
+                        config["corners"] = vid.select_corners(filepath)
+
                     with config_filepath.open(mode="w") as write_file:
                         json.dump(config, write_file, indent=4)
 
