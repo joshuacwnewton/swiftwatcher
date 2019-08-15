@@ -167,7 +167,7 @@ def main():
             else:
                 print("[*] No detected chimney swifts in specified video.")
         else:
-            print("[!] Corners not selected for video. Halting program.")
+            print("[!] Corners not selected for video. Cannot process.")
 
 
 if __name__ == "__main__":
