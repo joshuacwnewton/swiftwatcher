@@ -119,8 +119,8 @@ def load_configs():
         if len(filepaths) is 0:
             print("[!] No videos to analyse. Please try again.")
         else:
-            ipt = input("\nWould you like to re-use the first selected "
-                        "corners? (Y/N) \n"
+            ipt = input("\nWould you like to re-use the first video's "
+                        "corners for each video? (Y/N) \n"
                         "Input: ")
 
             for filepath in filepaths:
@@ -131,25 +131,17 @@ def load_configs():
 
                 config_filepath = base_dir/(filepath.stem + ".json")
 
-                # Create and write config file
-                if not config_filepath.exists():
-                    config = {
-                        "name": filepath.name,
-                        "timestamp": "00:00:00.000000",
-
-                    }
-                    if (len(config_list) > 0) and (ipt == "y" or ipt == "Y"):
-                        config["corners"] = config_list[0]["corners"]
-                    else:
-                        config["corners"] = vid.select_corners(filepath)
-
-                    with config_filepath.open(mode="w") as write_file:
-                        json.dump(config, write_file, indent=4)
-
-                # Load previously created config file
+                # Create config file
+                config = {
+                    "name": filepath.name,
+                    "timestamp": "00:00:00.000000",
+                    "src_filepath": filepath,
+                    "base_dir": base_dir
+                }
+                if (len(config_list) > 0) and (ipt == "y" or ipt == "Y"):
+                    config["corners"] = config_list[0]["corners"]
                 else:
-                    with config_filepath.open(mode="r") as read_file:
-                        config = json.load(read_file)
+                    config["corners"] = vid.select_corners(filepath)
 
                 config["src_filepath"] = filepath
                 config["base_dir"] = base_dir
