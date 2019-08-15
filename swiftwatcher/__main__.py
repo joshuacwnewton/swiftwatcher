@@ -90,13 +90,14 @@ def load_configs():
                                                           'analyse.')
                 filepaths = (filepaths +
                              ([Path(f) for f in list(root.tk.splitlist(files))
-                              if is_video_file(Path(f).suffix)]))
-                filenames = [f.stem for f in filepaths]
-                print("Video files to be analysed: ")
+                              if (is_video_file(Path(f).suffix)
+                                  and Path(f) not in filepaths)]))
+                filenames = ["[-]     {}".format(f.name) for f in filepaths]
+                print("[*] Video files to be analysed: ")
                 print(*filenames, sep="\n")
-                ipt = input("\nAre there additional files you would like to "
+                ipt = input("[*] Are there additional files you would like to "
                             "select? (Y/N) \n"
-                            "Input: ")
+                            "[-]     Input: ")
                 if (ipt is not "y") and (ipt is not "Y"):
                     break
         except TypeError:
@@ -109,13 +110,10 @@ def load_configs():
         corresponding to each video filepath."""
 
         config_list = []
+        ipt = None
         if len(filepaths) is 0:
             print("[!] No videos to analyse. Please try again.")
         else:
-            ipt = input("\nWould you like to re-use the first video's "
-                        "corners for each video? (Y/N) \n"
-                        "Input: ")
-
             for filepath in filepaths:
                 # "Result" csv files will also be stored in this directory
                 base_dir = filepath.parent/filepath.stem
@@ -129,7 +127,7 @@ def load_configs():
                     "src_filepath": filepath,
                     "base_dir": base_dir
                 }
-                if (len(config_list) > 0) and (ipt == "y" or ipt == "Y"):
+                if ipt == "y" or ipt == "Y":
                     config["corners"] = config_list[0]["corners"]
                 else:
                     config["corners"] = vid.select_corners(filepath)
@@ -138,6 +136,13 @@ def load_configs():
                 config["base_dir"] = base_dir
 
                 config_list.append(config)
+
+                if ((len(filepaths) > 1)
+                    and (filepath == filepaths[0])
+                    and (len(config["corners"]) == 2)):
+                    ipt = input("[*] Would you like to re-use the first "
+                                "video's corners for each video? (Y/N) \n"
+                                "[-]     Input: ")
 
         return config_list
 
@@ -153,16 +158,19 @@ def main():
     configs = load_configs()
 
     for config in configs:
-        # "Events" are possible entering occurrences which must be classified
-        events = vid.swift_counting_algorithm(config)
+        if len(config["corners"]) == 2:
+            events = vid.swift_counting_algorithm(config)
 
-        if len(events) > 0:
-            features = data.generate_feature_vectors(events)
-            labels = data.generate_classifications(features)
-            data.export_results(config, labels)
+            if len(events) > 0:
+                features = data.generate_feature_vectors(events)
+                labels = data.generate_classifications(features)
+                data.export_results(config, labels)
 
+            else:
+                print("[*] No detected chimney swifts in specified video.")
         else:
-            print("No detected chimney swifts in specified video.")
+            print("[!] Corners not selected for {}. Cannot process."
+                  .format(config["name"]))
 
 
 if __name__ == "__main__":

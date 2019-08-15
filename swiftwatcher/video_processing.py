@@ -521,7 +521,7 @@ def select_corners(filepath):
 
         # Condition for when two corners have been selected
         if len(corners) == 2:
-            key = cv2.waitKey(1) & 0xFF
+            key = cv2.waitKey(2000) & 0xFF
 
             if key == ord("n") or key == ord("N"):
                 # Indicates selected corners are not good, so resets state
@@ -533,6 +533,11 @@ def select_corners(filepath):
             elif key == ord("y") or key == ord("Y"):
                 # Indicates selected corners are acceptable
                 break
+
+        if cv2.getWindowProperty('image', cv2.WND_PROP_VISIBLE) == 0:
+            # Indicates window has been closed
+            corners = []
+            break
 
     cv2.destroyAllWindows()
 
@@ -554,8 +559,8 @@ def swift_counting_algorithm(config):
 
         return dataframe
 
-    print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
-    print("[*] Status updates will be given every 100 frames.")
+    print("[*] Now processing {}.".format(config["name"]))
+    print("[-]     Status updates will be given every 100 frames.")
 
     fq = FrameQueue(config)
     while fq.frames_processed < fq.src_framecount:
@@ -593,7 +598,7 @@ def swift_counting_algorithm(config):
                 fq.analyse_matches()
 
         except Exception as e:
-            print("Error has occurred, see: '{}'.".format(e))
+            print("[!] Error has occurred, see: '{}'.".format(e))
             fq.failcount += 1
 
             # Increment state variables to ensure algorithm doesn't get stuck
@@ -611,13 +616,13 @@ def swift_counting_algorithm(config):
 
         # Break if too many sequential errors
         if fq.failcount >= 10:
-            print("Too many sequential errors have occurred. "
+            print("[!] Too many sequential errors have occurred. "
                   "Halting algorithm...")
             fq.frames_processed = fq.src_framecount + 1
 
         # Status updates
         if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
-            print("[-] {0}/{1} frames processed."
+            print("[-]     {0}/{1} frames processed."
                   .format(fq.frames_processed, fq.src_framecount))
 
     if fq.event_list:
