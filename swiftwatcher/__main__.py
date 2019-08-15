@@ -90,13 +90,14 @@ def load_configs():
                                                           'analyse.')
                 filepaths = (filepaths +
                              ([Path(f) for f in list(root.tk.splitlist(files))
-                              if is_video_file(Path(f).suffix)]))
-                filenames = [f.stem for f in filepaths]
-                print("Video files to be analysed: ")
+                              if (is_video_file(Path(f).suffix)
+                                  and Path(f) not in filepaths)]))
+                filenames = ["[-]     {}".format(f.stem) for f in filepaths]
+                print("[*] Video files to be analysed: ")
                 print(*filenames, sep="\n")
-                ipt = input("\nAre there additional files you would like to "
+                ipt = input("[*] Are there additional files you would like to "
                             "select? (Y/N) \n"
-                            "Input: ")
+                            "[-]     Input: ")
                 if (ipt is not "y") and (ipt is not "Y"):
                     break
         except TypeError:
@@ -112,9 +113,9 @@ def load_configs():
         if len(filepaths) is 0:
             print("[!] No videos to analyse. Please try again.")
         else:
-            ipt = input("\nWould you like to re-use the first video's "
+            ipt = input("[*] Would you like to re-use the first video's "
                         "corners for each video? (Y/N) \n"
-                        "Input: ")
+                        "[-]     Input: ")
 
             for filepath in filepaths:
                 # "Result" csv files will also be stored in this directory
