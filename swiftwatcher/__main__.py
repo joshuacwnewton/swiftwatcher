@@ -91,15 +91,10 @@ def load_configs():
             root = tk.Tk()
             root.withdraw()
             # /\ See: https://stackoverflow.com/questions/1406145/
-            video_dir = Path(filedialog.askdirectory(parent=root,
-                                                     initialdir="/",
-                                                     title='Please select '
-                                                           'a directory '
-                                                           'containing the '
-                                                           'videos you wish '
-                                                           'to analyse.'))
-            filepaths = [f for f in video_dir.iterdir()
-                         if f.is_file() and is_video_file(f.suffix)]
+            files = filedialog.askopenfilenames(parent=root,
+                                                title='Choose a file')
+            filepaths = [Path(f) for f in list(root.tk.splitlist(files))
+                         if is_video_file(Path(f).suffix)]
         except TypeError:
             print("[!] No video directory selected.")
             filepaths = []
