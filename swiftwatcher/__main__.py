@@ -137,7 +137,9 @@ def load_configs():
 
                 config_list.append(config)
 
-                if (len(filepaths) > 1) and (filepath == filepaths[0]):
+                if ((len(filepaths) > 1)
+                    and (filepath == filepaths[0])
+                    and (len(config["corners"]) == 2)):
                     ipt = input("[*] Would you like to re-use the first "
                                 "video's corners for each video? (Y/N) \n"
                                 "[-]     Input: ")
