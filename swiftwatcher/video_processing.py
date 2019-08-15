@@ -559,7 +559,7 @@ def swift_counting_algorithm(config):
 
         return dataframe
 
-    print("[*] Now processing {}.".format(fspath(config["src_filepath"].stem)))
+    print("[*] Now processing {}.".format(config["name"]))
     print("[-]     Status updates will be given every 100 frames.")
 
     fq = FrameQueue(config)
