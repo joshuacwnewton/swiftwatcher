@@ -87,17 +87,27 @@ def load_configs():
         """Load list of filepaths (video files only) from user-chosen
         directory."""
 
+        filepaths = []
         try:
             root = tk.Tk()
             root.withdraw()
             # /\ See: https://stackoverflow.com/questions/1406145/
-            files = filedialog.askopenfilenames(parent=root,
-                                                title='Choose a file')
-            filepaths = [Path(f) for f in list(root.tk.splitlist(files))
-                         if is_video_file(Path(f).suffix)]
+            while True:
+                files = filedialog.askopenfilenames(parent=root,
+                                                    title='Choose a file')
+                filepaths = (filepaths +
+                             ([Path(f) for f in list(root.tk.splitlist(files))
+                              if is_video_file(Path(f).suffix)]))
+                filenames = [f.stem for f in filepaths]
+                print("Video files to be analysed: ")
+                print(*filenames, sep="\n")
+                ipt = input("\nAre there additional files you would like to "
+                            "select? (Y/N) \n"
+                            "Input: ")
+                if (ipt is not "y") and (ipt is not "Y"):
+                    break
         except TypeError:
             print("[!] No video directory selected.")
-            filepaths = []
 
         return filepaths
 
