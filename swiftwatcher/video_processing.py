@@ -521,7 +521,7 @@ def select_corners(filepath):
 
         # Condition for when two corners have been selected
         if len(corners) == 2:
-            key = cv2.waitKey() & 0xFF
+            key = cv2.waitKey(1) & 0xFF
 
             if key == ord("n") or key == ord("N"):
                 # Indicates selected corners are not good, so resets state
