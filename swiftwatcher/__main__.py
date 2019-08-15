@@ -85,7 +85,9 @@ def load_configs():
             # /\ See: https://stackoverflow.com/questions/1406145/
             while True:
                 files = filedialog.askopenfilenames(parent=root,
-                                                    title='Choose a file')
+                                                    title='Choose the files '
+                                                          'you wish to '
+                                                          'analyse.')
                 filepaths = (filepaths +
                              ([Path(f) for f in list(root.tk.splitlist(files))
                               if is_video_file(Path(f).suffix)]))
