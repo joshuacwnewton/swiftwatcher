@@ -517,11 +517,11 @@ def select_corners(filepath):
         cv2.resizeWindow('image',
                          int(0.5 * image.shape[1]),
                          int(0.5 * image.shape[0]))
-        cv2.waitKey(1000)
+        cv2.waitKey(1)
 
         # Condition for when two corners have been selected
         if len(corners) == 2:
-            key = cv2.waitKey(1000) & 0xFF
+            key = cv2.waitKey(2000) & 0xFF
 
             if key == ord("n") or key == ord("N"):
                 # Indicates selected corners are not good, so resets state
@@ -533,6 +533,11 @@ def select_corners(filepath):
             elif key == ord("y") or key == ord("Y"):
                 # Indicates selected corners are acceptable
                 break
+
+        if cv2.getWindowProperty('image', cv2.WND_PROP_VISIBLE) == 0:
+            # Indicates window has been closed
+            corners = []
+            break
 
     cv2.destroyAllWindows()
 

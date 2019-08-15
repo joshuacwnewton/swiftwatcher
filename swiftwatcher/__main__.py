@@ -153,16 +153,18 @@ def main():
     configs = load_configs()
 
     for config in configs:
-        # "Events" are possible entering occurrences which must be classified
-        events = vid.swift_counting_algorithm(config)
+        if len(config["corners"]) == 2:
+            events = vid.swift_counting_algorithm(config)
 
-        if len(events) > 0:
-            features = data.generate_feature_vectors(events)
-            labels = data.generate_classifications(features)
-            data.export_results(config, labels)
+            if len(events) > 0:
+                features = data.generate_feature_vectors(events)
+                labels = data.generate_classifications(features)
+                data.export_results(config, labels)
 
+            else:
+                print("[*] No detected chimney swifts in specified video.")
         else:
-            print("No detected chimney swifts in specified video.")
+            print("[!] Corners not selected for video. Halting program.")
 
 
 if __name__ == "__main__":
