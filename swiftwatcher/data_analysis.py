@@ -182,6 +182,7 @@ def export_results(config, df_labels):
                     save_directory/"{0}-swifts_{1}.csv".format(count, df_name)
                 ))
 
+    print("[*] Saving results to csv files...")
     empty = create_empty_dataframe()
     predicted, rejected = split_labeled_events()
     total, minutes, seconds, exact = fill_and_group(empty, predicted, rejected)

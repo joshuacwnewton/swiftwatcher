@@ -559,8 +559,8 @@ def swift_counting_algorithm(config):
 
         return dataframe
 
-    print("[!] Now processing {}.".format(fspath(config["src_filepath"].stem)))
-    print("[*] Status updates will be given every 100 frames.")
+    print("[*] Now processing {}.".format(fspath(config["src_filepath"].stem)))
+    print("[-] Status updates will be given every 100 frames.")
 
     fq = FrameQueue(config)
     while fq.frames_processed < fq.src_framecount:
@@ -598,7 +598,7 @@ def swift_counting_algorithm(config):
                 fq.analyse_matches()
 
         except Exception as e:
-            print("Error has occurred, see: '{}'.".format(e))
+            print("[!] Error has occurred, see: '{}'.".format(e))
             fq.failcount += 1
 
             # Increment state variables to ensure algorithm doesn't get stuck
@@ -616,7 +616,7 @@ def swift_counting_algorithm(config):
 
         # Break if too many sequential errors
         if fq.failcount >= 10:
-            print("Too many sequential errors have occurred. "
+            print("[!] Too many sequential errors have occurred. "
                   "Halting algorithm...")
             fq.frames_processed = fq.src_framecount + 1
 
