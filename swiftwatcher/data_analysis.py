@@ -44,15 +44,24 @@ def generate_classifications(df_features):
         """Mode for continuous variables. For more information, see:
         https://www.mathstips.com/mode/ """
 
-        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
+        hist, bin_edges = np.histogram(df_features["ANGLE"], bins=36,
+                                       range=[-180 - eps, 180 + eps])
+
+        # mode for continuous variables: https://www.mathstips.com/mode/
         i_max = np.argmax(hist)
         xl = bin_edges[i_max]
-        f0 = hist[i_max]
-        f_1 = hist[i_max - 1]
-        f1 = hist[i_max + 1]
-        w = abs(bin_edges[1] - bin_edges[0])
 
-        return xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        if -135 < xl < -45:  # Bugfix to ensure mode is not calculated for
+                             # impossible angles
+            f0 = hist[i_max]
+            f_1 = hist[i_max - 1]
+            f1 = hist[i_max + 1]
+            w = abs(bin_edges[1] - bin_edges[0])
+            estimated_mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        else:
+            estimated_mode = -90
+
+        return estimated_mode
 
     mode = compute_mode()
 
