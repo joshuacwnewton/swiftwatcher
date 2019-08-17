@@ -63,6 +63,10 @@ def generate_classifications(df_features):
 
         return estimated_mode
 
+    # Correct false positive errors from small (3x3 opened) non-bird segments
+    df_features = df_features.drop(
+        df_features[(df_features["ANGLE"] % 15 == 0)].index)
+
     mode = compute_mode()
 
     df_labels = df_features.copy()
@@ -72,9 +76,6 @@ def generate_classifications(df_features):
                                                      mode + 45,
                                                      180 + eps],
                                                labels=False)]
-
-    # Correct false positive errors from small (3x3 opened) non-bird segments
-    df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
 
     # Add event count (used for when multiple events occur in a single
     # timestamp -- when rows are combined, "EVENTS" can display as > 1)
