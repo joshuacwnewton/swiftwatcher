@@ -197,3 +197,5 @@ def export_results(config, df_labels):
     predicted, rejected = split_labeled_events()
     total, minutes, seconds, exact = fill_and_group(empty, predicted, rejected)
     save_to_csv(total, minutes, seconds, exact)
+
+    return total

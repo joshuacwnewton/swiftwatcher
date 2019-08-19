@@ -164,10 +164,13 @@ def main():
             if len(events) > 0:
                 features = data.generate_feature_vectors(events)
                 labels = data.generate_classifications(features)
-                data.export_results(config, labels)
-
+                total = data.export_results(config, labels)
+                print("\n[*]     {} detected chimney swifts "
+                      "in specified video.".format(total))
+                
             else:
-                print("[*] No detected chimney swifts in specified video.")
+                print("\n[*]     No detected chimney swifts "
+                      "in specified video.")
         else:
             print("[!] Corners not selected for {}. Cannot process."
                   .format(config["name"]))
