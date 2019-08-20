@@ -64,8 +64,10 @@ def generate_classifications(df_features):
         return estimated_mode
 
     # Correct false positive errors from small (3x3 opened) non-bird segments
-    df_features = df_features.drop(
-        df_features[(df_features["ANGLE"] % 15 == 0)].index)
+    index_to_drop = df_features[(df_features["ANGLE"] % 15 == 0)].index
+    if not index_to_drop.empty:
+        df_features = df_features.drop(
+            df_features[(df_features["ANGLE"] % 15 == 0)].index)
 
     mode = compute_mode()
 
