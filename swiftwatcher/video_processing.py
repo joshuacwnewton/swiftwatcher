@@ -630,5 +630,6 @@ def swift_counting_algorithm(config):
         df_eventinfo = create_dataframe(fq.event_list)
     else:
         df_eventinfo = []
+    print("")
 
     return df_eventinfo
