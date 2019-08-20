@@ -44,15 +44,30 @@ def generate_classifications(df_features):
         """Mode for continuous variables. For more information, see:
         https://www.mathstips.com/mode/ """
 
-        hist, bin_edges = np.histogram(df_features["ANGLE"], 36)
+        hist, bin_edges = np.histogram(df_features["ANGLE"], bins=36,
+                                       range=[-180 - eps, 180 + eps])
+
+        # mode for continuous variables: https://www.mathstips.com/mode/
         i_max = np.argmax(hist)
         xl = bin_edges[i_max]
-        f0 = hist[i_max]
-        f_1 = hist[i_max - 1]
-        f1 = hist[i_max + 1]
-        w = abs(bin_edges[1] - bin_edges[0])
 
-        return xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        if -135 < xl < -45:  # Bugfix to ensure mode is not calculated for
+                             # impossible angles
+            f0 = hist[i_max]
+            f_1 = hist[i_max - 1]
+            f1 = hist[i_max + 1]
+            w = abs(bin_edges[1] - bin_edges[0])
+            estimated_mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+        else:
+            estimated_mode = -90
+
+        return estimated_mode
+
+    # Correct false positive errors from small (3x3 opened) non-bird segments
+    index_to_drop = df_features[(df_features["ANGLE"] % 15 == 0)].index
+    if not index_to_drop.empty:
+        df_features = df_features.drop(
+            df_features[(df_features["ANGLE"] % 15 == 0)].index)
 
     mode = compute_mode()
 
@@ -63,9 +78,6 @@ def generate_classifications(df_features):
                                                      mode + 45,
                                                      180 + eps],
                                                labels=False)]
-
-    # Correct false positive errors from small (3x3 opened) non-bird segments
-    df_labels.loc[(df_labels["ANGLE"] % 15 == 0), "ENTERPR"] = 0
 
     # Add event count (used for when multiple events occur in a single
     # timestamp -- when rows are combined, "EVENTS" can display as > 1)
@@ -182,8 +194,10 @@ def export_results(config, df_labels):
                     save_directory/"{0}-swifts_{1}.csv".format(count, df_name)
                 ))
 
-    print("[*] Saving results to csv files...")
+    print("[-]     Saving results to csv files...")
     empty = create_empty_dataframe()
     predicted, rejected = split_labeled_events()
     total, minutes, seconds, exact = fill_and_group(empty, predicted, rejected)
     save_to_csv(total, minutes, seconds, exact)
+
+    return total

@@ -560,7 +560,7 @@ def swift_counting_algorithm(config):
         return dataframe
 
     print("[*] Now processing {}.".format(config["name"]))
-    print("[-]     Status updates will be given every 100 frames.")
+    # print("[-]     Status updates will be given every 100 frames.")
 
     fq = FrameQueue(config)
     while fq.frames_processed < fq.src_framecount:
@@ -598,7 +598,9 @@ def swift_counting_algorithm(config):
                 fq.analyse_matches()
 
         except Exception as e:
-            print("[!] Error has occurred, see: '{}'.".format(e))
+            # TODO: Print statements here should be replaced with logging
+            # Previous: print("[!] Error has occurred, see: '{}'.".format(e))
+            # I'm not satisfied with how unexpected errors are handled
             fq.failcount += 1
 
             # Increment state variables to ensure algorithm doesn't get stuck
@@ -616,18 +618,22 @@ def swift_counting_algorithm(config):
 
         # Break if too many sequential errors
         if fq.failcount >= 10:
-            print("[!] Too many sequential errors have occurred. "
-                  "Halting algorithm...")
+            # TODO: Print statements here should be replaced with logging
+            # Previous: print("[!] Too many sequential errors have occurred. "
+            #                 "Halting algorithm...")
+            # I'm not satisfied with how unexpected errors are handled
             fq.frames_processed = fq.src_framecount + 1
 
         # Status updates
-        if fq.frames_processed % 100 is 0 and fq.frames_processed is not 0:
-            print("[-]     {0}/{1} frames processed."
-                  .format(fq.frames_processed, fq.src_framecount))
+        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
+            sys.stdout.write("\r[-]     {0}/{1} frames processed.".format(
+                fq.frames_processed, fq.src_framecount))
+            sys.stdout.flush()
 
     if fq.event_list:
         df_eventinfo = create_dataframe(fq.event_list)
     else:
         df_eventinfo = []
+    print("")
 
     return df_eventinfo
