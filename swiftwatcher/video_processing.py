@@ -598,7 +598,9 @@ def swift_counting_algorithm(config):
                 fq.analyse_matches()
 
         except Exception as e:
-            # print("[!] Error has occurred, see: '{}'.".format(e))
+            # TODO: Print statements here should be replaced with logging
+            # Previous: print("[!] Error has occurred, see: '{}'.".format(e))
+            # I'm not satisfied with how unexpected errors are handled
             fq.failcount += 1
 
             # Increment state variables to ensure algorithm doesn't get stuck
@@ -616,8 +618,10 @@ def swift_counting_algorithm(config):
 
         # Break if too many sequential errors
         if fq.failcount >= 10:
-            # print("[!] Too many sequential errors have occurred. "
-            #       "Halting algorithm...")
+            # TODO: Print statements here should be replaced with logging
+            # Previous: print("[!] Too many sequential errors have occurred. "
+            #                 "Halting algorithm...")
+            # I'm not satisfied with how unexpected errors are handled
             fq.frames_processed = fq.src_framecount + 1
 
         # Status updates
