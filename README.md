@@ -18,7 +18,7 @@ itself. This file can be downloaded from the Releases page,
 
 Each release on the Releases page has an "Assets" section containing 
 compressed archives for both Linux and Windows operating systems. These 
-archives are be named `win` or `linux`, and contain `swiftwatcher` 
+archives are named `win` or `linux`, and contain `swiftwatcher` 
 executable files.
 
 #### Usage Instructions
