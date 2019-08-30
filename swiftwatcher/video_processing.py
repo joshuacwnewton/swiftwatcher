@@ -151,13 +151,18 @@ class FrameQueue:
             # Crop frame, then blur and threshold the B channel to produce mask
             cropped = frame[self.roi_region[0][1]:self.roi_region[1][1],
                       self.roi_region[0][0]:self.roi_region[1][0]]
+            cv2.imwrite("original.png", cropped)
             blur = cv2.medianBlur(cv2.medianBlur(cropped, 9), 9)
+            cv2.imwrite("blur.png", blur)
             a, b, c = cv2.split(blur)
             ret, thr = cv2.threshold(a, 0, 255,
                                      cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            cv2.imwrite("thresh.png", thr)
             thr = cv2.Canny(thr, 0, 256)
+            cv2.imwrite("edge.png", thr)
             thr = cv2.dilate(thr, kernel=np.ones((20, 1), np.uint8),
                              anchor=(0, 0))
+            cv2.imwrite("dilated.png", thr)
 
             # Add roi to empty image of the same size as the frame
             frame_with_thr = np.zeros_like(
@@ -169,6 +174,11 @@ class FrameQueue:
             frame_with_thr = self.preprocess_frame(frame_with_thr)
             _, self.roi_mask = cv2.threshold(frame_with_thr, 0, 255,
                                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            # thr = cv2.bitwise_not(thr)
+            thr = np.stack((thr,)*3, axis=-1)
+            overlay = cv2.addWeighted(thr, 0.4, cropped, 1, 0)
+            cv2.imwrite("roi.png", overlay)
+            test = None
 
         assign_paths()
         assign_file_properties()
@@ -631,15 +641,16 @@ class FrameQueue:
                     if len(seg_prev.__centroids) > 1:
                         centroid_list = seg_prev.__centroids
 
-                        del_y = centroid_list[0][0] - centroid_list[-1][0]
-                        del_x = -1 * (
+                        del_y_full = centroid_list[0][0] - centroid_list[-1][0]
+                        del_x_full = -1 * (
                                     centroid_list[0][1] - centroid_list[-1][1])
-                        angle_prev = math.degrees(math.atan2(del_y, del_x))
+                        angle_prev = math.degrees(math.atan2(del_y_full,
+                                                             del_x_full))
 
-                        del_y = centroid_list[1][0] - seg.centroid[0]
-                        del_x = -1 * (
-                                    centroid_list[1][1] - seg.centroid[1])
-                        angle = math.degrees(math.atan2(del_y, del_x))
+                        del_y_new = centroid_list[-1][0] - seg.centroid[0]
+                        del_x_new = -1 * (
+                                    centroid_list[-1][1] - seg.centroid[1])
+                        angle = math.degrees(math.atan2(del_y_new, del_x_new))
 
                         angle_diff = min(360 - abs(angle - angle_prev),
                                          abs(angle-angle_prev))
@@ -648,7 +659,7 @@ class FrameQueue:
                         angle_cost = 1
 
                     # Compute "distance cost"
-                    dist_cost = 2**(dist - 20)
+                    dist_cost = 2**(dist - 25)
 
                     # Average costs for new cost matrix
                     cost = 0.5*(dist_cost+angle_cost)

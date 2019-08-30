@@ -146,7 +146,7 @@ if __name__ == "__main__":
                             "--_process",
                             help="Load and process frames from HH:MM folders",
                             action="store_true",
-                            default=False
+                            default=True
                             )
         parser.add_argument("-a",
                             "--_analyse",
@@ -169,17 +169,17 @@ if __name__ == "__main__":
                             "--configs",
                             help="Config files for tests to be run",
                             default=[
-                                "videos/configs/ch04_partial.json",
+                                # "videos/configs/ch04_partial.json",
                                 # "videos/configs/june13_partial.json",
                                 # "videos/configs/june14_partial.json",
-                                "videos/configs/june13_full-video.json",
+                                # "videos/configs/june13_full-video.json",
                                 "videos/configs/june14_full-video.json"
                             ]
                             )
         parser.add_argument("-c",
                             "--custom_dir",
                             help="Custom directory for saving various things",
-                            default="tests/2019-08-09_full-video/"
+                            default="tests/2019-08-26_full-video/"
                             )
         parser.add_argument("-v",
                             "--visual",
