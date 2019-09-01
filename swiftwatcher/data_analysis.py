@@ -74,8 +74,8 @@ def generate_classifications(df_features):
     df_labels = df_features.copy()
     df_labels["ENTERPR"] = np.array([0, 1, 0])[pd.cut(df_features["ANGLE"],
                                                bins=[-180 - eps,
-                                                     mode - 45,
-                                                     mode + 45,
+                                                     mode - 30,
+                                                     mode + 30,
                                                      180 + eps],
                                                labels=False)]
 
