@@ -366,7 +366,7 @@ class FrameQueue:
                     # (distances > 20px will have much higher costs)
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
-                    dist_cost = 2 ** (dist - 20)
+                    dist_cost = 2 ** (dist - 25)
 
                     # Compute "angle cost" if previous angle exists.
                     # (angles > 90* will have much higher costs.)
