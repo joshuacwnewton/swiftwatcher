@@ -363,7 +363,7 @@ class FrameQueue:
                     index_h = (count_prev + seg.label - 1)
 
                     # Compute "distance cost".
-                    # (distances > 20px will have much higher costs)
+                    # (distances > 25px will have much higher costs)
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
                     dist_cost = 2 ** (dist - 25)
