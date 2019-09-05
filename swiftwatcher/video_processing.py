@@ -363,25 +363,26 @@ class FrameQueue:
                     index_h = (count_prev + seg.label - 1)
 
                     # Compute "distance cost".
-                    # (distances > 20px will have much higher costs)
+                    # (distances > 25px will have much higher costs)
                     dist = distance.euclidean(seg_prev.centroid,
                                               seg.centroid)
-                    dist_cost = 2 ** (dist - 20)
+                    dist_cost = 2 ** (dist - 25)
 
                     # Compute "angle cost" if previous angle exists.
                     # (angles > 90* will have much higher costs.)
                     if len(seg_prev.__centroids) > 1:
                         centroid_list = seg_prev.__centroids
 
-                        del_y = centroid_list[0][0] - centroid_list[-1][0]
-                        del_x = -1 * (
+                        del_y_full = centroid_list[0][0] - centroid_list[-1][0]
+                        del_x_full = -1 * (
                                     centroid_list[0][1] - centroid_list[-1][1])
-                        angle_prev = math.degrees(math.atan2(del_y, del_x))
+                        angle_prev = math.degrees(math.atan2(del_y_full,
+                                                             del_x_full))
 
-                        del_y = centroid_list[1][0] - seg.centroid[0]
-                        del_x = -1 * (
-                                    centroid_list[1][1] - seg.centroid[1])
-                        angle = math.degrees(math.atan2(del_y, del_x))
+                        del_y_new = centroid_list[-1][0] - seg.centroid[0]
+                        del_x_new = -1 * (
+                                    centroid_list[-1][1] - seg.centroid[1])
+                        angle = math.degrees(math.atan2(del_y_new, del_x_new))
 
                         angle_diff = min(360 - abs(angle - angle_prev),
                                          abs(angle-angle_prev))

@@ -110,7 +110,7 @@ def load_configs():
         corresponding to each video filepath."""
 
         config_list = []
-        ipt = None
+        ipt = None  # Input asking whether corners should be reused
         if len(filepaths) is 0:
             print("[!] No videos to analyse. Please try again.")
         else:
@@ -131,7 +131,6 @@ def load_configs():
                     config["corners"] = config_list[0]["corners"]
                 else:
                     config["corners"] = vid.select_corners(filepath)
-
                 config["src_filepath"] = filepath
                 config["base_dir"] = base_dir
 
@@ -167,7 +166,6 @@ def main():
                 total = data.export_results(config, labels)
                 print("[-]     Analysis complete. {} detected chimney swifts "
                       "in specified video.".format(total))
-
             else:
                 print("[-]     Analysis complete. No detected chimney swifts "
                       "in specified video.")
