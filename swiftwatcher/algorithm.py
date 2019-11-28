@@ -1,5 +1,5 @@
 """
-    algorithm.py contains functions which take individual image
+    algorithm.py contains functions which take individual frame
     processing stages in video_processing.py and combine them to create
     coherent algorithms.
 """
@@ -39,9 +39,13 @@ def swift_counting_algorithm(config):
         proc = fq.frames_processed
 
         try:
+            success, frame = fq.stream.read()
+            frame_number = int(fq.stream.get(cv2.CAP_PROP_POS_FRAMES))
+            timestamp = fq.fn_to_ts(fq.stream.get(cv2.CAP_PROP_POS_FRAMES))
+
             # Load frames until queue is filled
             if fq.frames_read < (fq.queue_size - 1):
-                success = fq.load_frame()
+                fq.load_frame(frame, frame_number, timestamp)
                 fq.preprocess_frame()
                 # fq.segment_frame() (not needed until queue is filled)
                 # fq.match_segments() (not needed until queue is filled)
@@ -49,7 +53,7 @@ def swift_counting_algorithm(config):
 
             # Process queue full of frames
             elif (fq.queue_size - 1) <= fq.frames_read < fq.src_framecount:
-                success = fq.load_frame()
+                fq.load_frame(frame, frame_number, timestamp)
                 fq.preprocess_frame()
                 fq.segment_frame()
                 fq.match_segments()
@@ -57,7 +61,7 @@ def swift_counting_algorithm(config):
 
             # Load blank frames until queue is empty
             elif fq.frames_read == fq.src_framecount:
-                success = fq.load_frame(blank=True)
+                fq.load_frame(None, None, None)
                 # fq.preprocess_frame() (not needed for blank frame)
                 fq.segment_frame()
                 fq.match_segments()
@@ -107,6 +111,8 @@ def swift_counting_algorithm(config):
 
 def swift_counting_algorithm_from_frames(config, start, end):
     """"""
+
+    fq = vid.FrameQueue(config)
 
     df_eventinfo = None
 

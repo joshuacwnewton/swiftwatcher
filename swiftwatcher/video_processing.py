@@ -150,35 +150,26 @@ class FrameQueue:
         generate_chimney_regions()
         generate_roi_mask()
 
-    def load_frame(self, blank=False):
-        """Load new frame into left side (index 0) of queue."""
-
-        def fn_to_ts(frame_number):
+    def fn_to_ts(self, frame_number):
             """Helper function to convert frame amount into a timestamp."""
             total_s = frame_number / self.src_fps
             timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
             return timestamp
 
-        # Used when queue has to be advanced but there are no more frames left.
-        if blank:
-            self.timestamps.appendleft("")
-            self.framenumbers.appendleft("")
-            self.queue.appendleft(np.array([]))
-            success = True
+    def load_frame(self, frame, timestamp, frame_number):
+        """Load new frame into left side (index 0) of queue."""
 
-        # By default, read frames from video file.
+        if frame is not None:
+            self.framenumbers.appendleft(frame_number)
+            self.timestamps.appendleft(timestamp)
+            self.queue.appendleft(frame)
+            self.frames_read += 1
         else:
-            new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-            new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-            success, frame = self.stream.read()
-            if success:
-                self.frames_read += 1
-                self.timestamps.appendleft(new_timestamp)
-                self.framenumbers.appendleft(new_framenumber)
-                self.queue.appendleft(frame)
-
-        return success
+            # Used when queue has to be advanced but there are no frames left.
+            self.framenumbers.appendleft("")
+            self.timestamps.appendleft("")
+            self.queue.appendleft(np.array([]))
 
     def preprocess_frame(self, frame=None, index=0):
         """Apply preprocessing to frame prior to motion analysis."""
