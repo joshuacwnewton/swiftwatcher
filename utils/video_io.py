@@ -276,6 +276,12 @@ def config_from_file(base_dir):
     load frames from files."""
     with open(fspath(base_dir / "config.json")) as json_file:
         config = json.load(json_file)
+        config["base_dir"] = Path(config["base_dir"])
+        config["src_filepath"] = Path(config["src_filepath"])
+        config["corners"] = [(int(config["corners"][0][0]),
+                              int(config["corners"][0][1])),
+                             (int(config["corners"][1][0]),
+                              int(config["corners"][1][1]))]
 
     return config
 
