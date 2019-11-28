@@ -3,6 +3,7 @@ from swiftwatcher import gui as gui
 import cv2
 
 from pathlib import Path
+from os import fspath
 import datetime
 
 import tkinter as tk
@@ -10,6 +11,8 @@ from tkinter import filedialog
 
 import argparse
 import sys
+
+import json
 
 
 def gui_select_files():
@@ -246,10 +249,33 @@ def validate_framerange(frame_dir, start, end):
     files."""
 
 
-def config_from_file(base_directory):
+def create_config_file(filepath):
+    base_dir = filepath.parent / filepath.stem / "frames"
+    if not base_dir.exists():
+        Path.mkdir(base_dir, parents=True)
+
+    l_x = input("[*] Input the x coordinate of the left corner: ")
+    l_y = input("[*] Input the y coordinate of the left corner: ")
+    r_x = input("[*] Input the x coordinate of the right corner: ")
+    r_y = input("[*] Input the y coordinate of the right corner: ")
+
+    config_dict = {
+        "name": fspath(filepath.name),
+        "timestamp": "00:00:00.000000",
+        "src_filepath": fspath(filepath),
+        "base_dir": fspath(base_dir),
+        "corners": [(l_x, l_y), (r_x, r_y)]
+    }
+
+    with open(fspath(base_dir / "config.json"), 'w') as fp:
+        json.dump(config_dict, fp)
+
+
+def config_from_file(base_dir):
     """Loads "config" dictionary from json file for experiments that
     load frames from files."""
-    config = None
+    with open(fspath(base_dir / "config.json")) as json_file:
+        config = json.load(json_file)
 
     return config
 
