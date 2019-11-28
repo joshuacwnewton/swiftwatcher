@@ -1,6 +1,7 @@
 # Algorithm components
 import swiftwatcher.video_processing as vid
 import swiftwatcher.data_analysis as data
+import utils.gui as gui
 
 # File I/O
 from pathlib import Path
@@ -135,7 +136,7 @@ def load_configs():
                 if ipt == "y" or ipt == "Y":
                     config["corners"] = config_list[0]["corners"]
                 else:
-                    config["corners"] = vid.select_corners(filepath)
+                    config["corners"] = gui.select_corners(filepath)
                 config["src_filepath"] = filepath
                 config["base_dir"] = base_dir
 
