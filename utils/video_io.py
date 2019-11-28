@@ -231,9 +231,9 @@ def parse_filepath_and_framerange():
     frame.."""
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--filepath", nargs="*")
-    parser.add_argument("-s", "--start", nargs="*")
-    parser.add_argument("-e", "--end", nargs="*")
+    parser.add_argument("--filepath")
+    parser.add_argument("--start")
+    parser.add_argument("--end")
     args = parser.parse_args()
 
     args.filepath = Path(args.filepath)
