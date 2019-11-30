@@ -8,6 +8,7 @@ import swiftwatcher.video_processing as vid
 import pandas as pd
 import cv2
 import sys
+import glob
 
 
 def create_dataframe(passed_list):
@@ -113,8 +114,53 @@ def swift_counting_algorithm(config):
 def swift_counting_algorithm_from_frames(config, start, end):
     """"""
 
-    fq = vid.FrameQueue(config)
+    print("[*] Now processing {}.".format(config["name"]))
 
-    df_eventinfo = None
+    # Initialize frame queue and starting values
+    fq = vid.FrameQueue(config)
+    frame_number = start
+
+    total_frames = end - start + 1
+    while fq.frames_processed < total_frames:
+        # Load frame from file
+        frame_list = glob.glob(str(config["base_dir"]/"frames"/"*"/
+                                   ("*_" + str(frame_number) + "_*" + ".png")))
+        frame = cv2.imread(frame_list[0])
+
+        # Load frames until queue is filled
+        if fq.frames_read < (fq.queue_size - 1):
+            fq.load_frame(frame, frame_number, fq.fn_to_ts(frame_number))
+            fq.preprocess_frame()
+            # fq.segment_frame() (not needed until queue is filled)
+            # fq.match_segments() (not needed until queue is filled)
+            # fq.analyse_matches() (not needed until queue is filled)
+
+        # Process queue full of frames
+        elif (fq.queue_size - 1) <= fq.frames_read < total_frames:
+            fq.load_frame(frame, frame_number, fq.fn_to_ts(frame_number))
+            fq.preprocess_frame()
+            fq.segment_frame()
+            fq.match_segments()
+            fq.analyse_matches()
+
+        # Load blank frames until queue is empty
+        elif fq.frames_read == total_frames:
+            fq.load_frame(None, None, None)
+            # fq.preprocess_frame() (not needed for blank frame)
+            fq.segment_frame()
+            fq.match_segments()
+            fq.analyse_matches()
+
+        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
+            sys.stdout.write("\r[-]     {0}/{1} frames processed.".format(
+                fq.frames_processed, total_frames))
+            sys.stdout.flush()
+
+        frame_number += 1
+
+    if fq.event_list:
+        df_eventinfo = create_dataframe(fq.event_list)
+    else:
+        df_eventinfo = []
 
     return df_eventinfo
