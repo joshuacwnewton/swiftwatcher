@@ -10,20 +10,21 @@ import cv2
 import sys
 
 
+def create_dataframe(passed_list):
+    """Convert list of events to pandas dataframe."""
+    dataframe = pd.DataFrame(passed_list,
+                             columns=list(passed_list[0].keys())
+                             ).astype('object')
+    dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+    dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+    dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+
+    return dataframe
+
+
 def swift_counting_algorithm(config):
     """Full algorithm which uses FrameQueue methods to process an entire video
     from start to finish."""
-
-    def create_dataframe(passed_list):
-        """Convert list of events to pandas dataframe."""
-        dataframe = pd.DataFrame(passed_list,
-                                 columns=list(passed_list[0].keys())
-                                 ).astype('object')
-        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
-        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
-        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-
-        return dataframe
 
     print("[*] Now processing {}.".format(config["name"]))
     # print("[-]     Status updates will be given every 100 frames.")
