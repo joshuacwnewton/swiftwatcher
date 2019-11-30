@@ -241,7 +241,7 @@ def parse_filepath_and_framerange():
 
     args.filepath = Path(args.filepath)
 
-    return args.filepath, args.start, args.end
+    return args.filepath, int(args.start), int(args.end)
 
 
 def validate_framerange(frame_dir, start, end):
