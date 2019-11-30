@@ -174,15 +174,15 @@ def extract_video_frames(video_filepath,
 
     stream = cv2.VideoCapture(str(video_filepath))
     while True:
+        # Determine attributes associated with frame
+        frame_number = int(stream.get(cv2.CAP_PROP_POS_FRAMES))
+        frame_ms = int(stream.get(cv2.CAP_PROP_POS_MSEC))
+        timestamp = start_time + datetime.timedelta(milliseconds=frame_ms)
+
         # Attempt to load new frame
         success, frame = stream.read()
         if not success:
             break
-
-        # Determine attributes associated with frame
-        frame_number = stream.get(cv2.CAP_PROP_POS_FRAMES)
-        frame_ms = stream.get(cv2.CAP_PROP_POS_MSEC)
-        timestamp = start_time + datetime.timedelta(milliseconds=frame_ms)
 
         # Create sub directory string
         sub_dir = ""
