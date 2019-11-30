@@ -13,6 +13,7 @@ import argparse
 import sys
 
 import json
+import glob
 
 
 def gui_select_files():
@@ -247,6 +248,25 @@ def parse_filepath_and_framerange():
 def validate_framerange(frame_dir, start, end):
     """Validate if start and end frame numbers point to valid frame
     files."""
+    # Validate that frame directory is valid
+    frame_dir = Path(frame_dir)
+    if not frame_dir.is_dir():
+        sys.stderr.write("Error: Frame_dir path doesn't point to directory.")
+        sys.exit()
+
+    # Ensure that ordering of start/end values are correct
+    if not end > start > 0:
+        sys.stderr.write("Error: Start/end values not correct."
+                         " (non-zero with end > start).")
+        sys.exit()
+
+    # Validate that files exist with provided frame numbers
+    if not glob.glob(str(frame_dir/"*"/("*_" + str(start) + "_*" + ".png"))):
+        sys.stderr.write("Error: Start frame does not point to valid file.")
+        sys.exit()
+    if not glob.glob(str(frame_dir/"*"/("*_" + str(end) + "_*" + ".png"))):
+        sys.stderr.write("Error: End frame does not point to valid file.")
+        sys.exit()
 
 
 def create_config_file(filepath):
