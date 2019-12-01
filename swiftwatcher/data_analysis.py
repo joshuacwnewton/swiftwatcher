@@ -86,7 +86,7 @@ def generate_classifications(df_features):
     return df_labels
 
 
-def export_results(config, df_labels):
+def export_results(save_directory, config, df_labels):
     """Modify event classification dataframe into form that is more suitable
     for output, then save results to csv files."""
 
@@ -172,10 +172,7 @@ def export_results(config, df_labels):
 
     def save_to_csv(count, df_minutes, df_seconds, df_exact):
         """Save counts to csv files in a variety of different formats."""
-        nonlocal config
-
-        save_directory \
-            = config["src_filepath"].parent/config["src_filepath"].stem
+        nonlocal save_directory
 
         dfs = {
             "full_usec": df_exact,

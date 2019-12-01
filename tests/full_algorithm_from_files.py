@@ -23,6 +23,7 @@ events = alg.swift_counting_algorithm_from_frames(config, start, end)
 test.dataframe_to_csv(test_dir, events)
 
 # Apply data analysis functions
-features = data.generate_feature_vectors(events)
-labels = data.generate_classifications(features)
-total = data.export_results(config, labels)
+if not events.empty:
+    features = data.generate_feature_vectors(events)
+    labels = data.generate_classifications(features)
+    total = data.export_results(test_dir, config, labels)

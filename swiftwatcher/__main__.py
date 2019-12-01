@@ -16,7 +16,9 @@ def main():
             if len(events) > 0:
                 features = data.generate_feature_vectors(events)
                 labels = data.generate_classifications(features)
-                total = data.export_results(config, labels)
+                total = data.export_results(config["src_filepath"].parent /
+                                            config["src_filepath"].stem,
+                                            config, labels)
                 print("[-]     Analysis complete. {} detected chimney swifts "
                       "in specified video.".format(total))
             else:
