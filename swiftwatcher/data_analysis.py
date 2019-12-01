@@ -13,6 +13,21 @@ import sys
 eps = sys.float_info.epsilon
 
 
+def create_dataframe(passed_list):
+    """Convert list of events to pandas dataframe."""
+    if passed_list:
+        dataframe = pd.DataFrame(passed_list,
+                                 columns=list(passed_list[0].keys())
+                                 ).astype('object')
+        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    else:
+        dataframe = pd.DataFrame(columns=[])
+
+    return dataframe
+
+
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
@@ -86,7 +101,7 @@ def generate_classifications(df_features):
     return df_labels
 
 
-def export_results(config, df_labels):
+def export_results(save_directory, config, df_labels):
     """Modify event classification dataframe into form that is more suitable
     for output, then save results to csv files."""
 
@@ -172,10 +187,7 @@ def export_results(config, df_labels):
 
     def save_to_csv(count, df_minutes, df_seconds, df_exact):
         """Save counts to csv files in a variety of different formats."""
-        nonlocal config
-
-        save_directory \
-            = config["src_filepath"].parent/config["src_filepath"].stem
+        nonlocal save_directory
 
         dfs = {
             "full_usec": df_exact,

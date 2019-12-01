@@ -150,35 +150,26 @@ class FrameQueue:
         generate_chimney_regions()
         generate_roi_mask()
 
-    def load_frame(self, blank=False):
-        """Load new frame into left side (index 0) of queue."""
-
-        def fn_to_ts(frame_number):
+    def fn_to_ts(self, frame_number):
             """Helper function to convert frame amount into a timestamp."""
             total_s = frame_number / self.src_fps
             timestamp = self.src_starttime + pd.Timedelta(total_s, 's')
 
             return timestamp
 
-        # Used when queue has to be advanced but there are no more frames left.
-        if blank:
-            self.timestamps.appendleft("")
-            self.framenumbers.appendleft("")
-            self.queue.appendleft(np.array([]))
-            success = True
+    def load_frame(self, frame, frame_number, timestamp):
+        """Load new frame into left side (index 0) of queue."""
 
-        # By default, read frames from video file.
+        if frame is not None:
+            self.framenumbers.appendleft(frame_number)
+            self.timestamps.appendleft(timestamp)
+            self.queue.appendleft(frame)
+            self.frames_read += 1
         else:
-            new_framenumber = int(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-            new_timestamp = fn_to_ts(self.stream.get(cv2.CAP_PROP_POS_FRAMES))
-            success, frame = self.stream.read()
-            if success:
-                self.frames_read += 1
-                self.timestamps.appendleft(new_timestamp)
-                self.framenumbers.appendleft(new_framenumber)
-                self.queue.appendleft(frame)
-
-        return success
+            # Used when queue has to be advanced but there are no frames left.
+            self.framenumbers.appendleft("")
+            self.timestamps.appendleft("")
+            self.queue.appendleft(np.array([]))
 
     def preprocess_frame(self, frame=None, index=0):
         """Apply preprocessing to frame prior to motion analysis."""
@@ -476,165 +467,5 @@ class FrameQueue:
                     self.event_list.append(event_info)
 
 
-def select_corners(filepath):
-    """OpenCV GUI function to select chimney corners from video frame."""
-
-    def click_and_update(event, x, y, flags, param):
-        """Callback function to record mouse coordinates on click, and to
-        update instructions to user."""
-        nonlocal corners
-
-        if event == cv2.EVENT_LBUTTONDOWN:
-            if len(corners) < 2:
-                corners.append((int(x), int(y)))
-                cv2.circle(image, corners[-1], 5, (0, 0, 255), -1)
-                cv2.imshow("image", image)
-                cv2.resizeWindow('image',
-                                 int(0.5*image.shape[1]),
-                                 int(0.5*image.shape[0]))
-
-            if len(corners) == 1:
-                cv2.setWindowTitle("image",
-                                   "Click on corner 2")
-
-            if len(corners) == 2:
-                cv2.setWindowTitle("image",
-                                   "Type 'y' to keep,"
-                                   " or 'n' to select different corners.")
-
-    stream = cv2.VideoCapture(fspath(filepath))
-    success, image = stream.read()
-    clone = image.copy()
-
-    cv2.namedWindow("image", cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback("image", click_and_update)
-    cv2.setWindowTitle("image", "Click on corner 1")
-
-    corners = []
-
-    while True:
-        # Display image and wait for user input (click -> click_and_update())
-        cv2.imshow("image", image)
-        cv2.resizeWindow('image',
-                         int(0.5 * image.shape[1]),
-                         int(0.5 * image.shape[0]))
-        cv2.waitKey(1)
-
-        # Condition for when two corners have been selected
-        if len(corners) == 2:
-            key = cv2.waitKey(2000) & 0xFF
-
-            if key == ord("n") or key == ord("N"):
-                # Indicates selected corners are not good, so resets state
-                image = clone.copy()
-                corners = []
-                cv2.setWindowTitle("image",
-                                   "Click on corner 1")
-
-            elif key == ord("y") or key == ord("Y"):
-                # Indicates selected corners are acceptable
-                break
-
-        if cv2.getWindowProperty('image', cv2.WND_PROP_VISIBLE) == 0:
-            # Indicates window has been closed
-            corners = []
-            break
-
-    cv2.destroyAllWindows()
-
-    return corners
 
 
-def swift_counting_algorithm(config):
-    """Full algorithm which uses FrameQueue methods to process an entire video
-    from start to finish."""
-
-    def create_dataframe(passed_list):
-        """Convert list of events to pandas dataframe."""
-        dataframe = pd.DataFrame(passed_list,
-                                 columns=list(passed_list[0].keys())
-                                 ).astype('object')
-        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
-        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
-        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
-
-        return dataframe
-
-    print("[*] Now processing {}.".format(config["name"]))
-    # print("[-]     Status updates will be given every 100 frames.")
-
-    fq = FrameQueue(config)
-    while fq.frames_processed < fq.src_framecount:
-        success = False
-
-        # Store state variables in case video processing glitch occurs
-        # (e.g. due to poorly encoded video)
-        pos = fq.stream.get(cv2.CAP_PROP_POS_FRAMES)
-        read = fq.frames_read
-        proc = fq.frames_processed
-
-        try:
-            # Load frames until queue is filled
-            if fq.frames_read < (fq.queue_size - 1):
-                success = fq.load_frame()
-                fq.preprocess_frame()
-                # fq.segment_frame() (not needed until queue is filled)
-                # fq.match_segments() (not needed until queue is filled)
-                # fq.analyse_matches() (not needed until queue is filled)
-
-            # Process queue full of frames
-            elif (fq.queue_size - 1) <= fq.frames_read < fq.src_framecount:
-                success = fq.load_frame()
-                fq.preprocess_frame()
-                fq.segment_frame()
-                fq.match_segments()
-                fq.analyse_matches()
-
-            # Load blank frames until queue is empty
-            elif fq.frames_read == fq.src_framecount:
-                success = fq.load_frame(blank=True)
-                # fq.preprocess_frame() (not needed for blank frame)
-                fq.segment_frame()
-                fq.match_segments()
-                fq.analyse_matches()
-
-        except Exception as e:
-            # TODO: Print statements here should be replaced with logging
-            # Previous: print("[!] Error has occurred, see: '{}'.".format(e))
-            # I'm not satisfied with how unexpected errors are handled
-            fq.failcount += 1
-
-            # Increment state variables to ensure algorithm doesn't get stuck
-            if fq.stream.get(cv2.CAP_PROP_POS_FRAMES) == pos:
-                fq.stream.grab()
-            if fq.frames_read == read:
-                fq.frames_read += 1
-            if fq.frames_processed == proc:
-                fq.frames_processed += 1
-
-        if success:
-            fq.failcount = 0
-        else:
-            fq.failcount += 1
-
-        # Break if too many sequential errors
-        if fq.failcount >= 10:
-            # TODO: Print statements here should be replaced with logging
-            # Previous: print("[!] Too many sequential errors have occurred. "
-            #                 "Halting algorithm...")
-            # I'm not satisfied with how unexpected errors are handled
-            fq.frames_processed = fq.src_framecount + 1
-
-        # Status updates
-        if fq.frames_processed % 25 is 0 and fq.frames_processed is not 0:
-            sys.stdout.write("\r[-]     {0}/{1} frames processed.".format(
-                fq.frames_processed, fq.src_framecount))
-            sys.stdout.flush()
-
-    if fq.event_list:
-        df_eventinfo = create_dataframe(fq.event_list)
-    else:
-        df_eventinfo = []
-    print("")
-
-    return df_eventinfo
