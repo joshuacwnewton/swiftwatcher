@@ -1,33 +1,17 @@
-# Algorithm components
-import swiftwatcher.data_analysis as data
-import swiftwatcher.algorithm as alg
-import utils.video_io as vio
+import swiftwatcher_refactor.io.ui as ui
+import swiftwatcher_refactor.io.data_io as dio
+import swiftwatcher_refactor.io.video_io as vio
+import swiftwatcher_refactor.image_processing.composite_algorithms as alg
+import swiftwatcher_refactor.data_analysis.event_classification as ec
 
 
-def main():
-    """Execute each of the core functions of the swift-counting algorithm."""
+video_filepaths = ui.select_video_files()
+video_attr_list = vio.get_video_attributes(video_filepaths)
 
-    configs = vio.load_configs()
+for video_attr in video_attr_list:
+    events = alg.swift_counting_algorithm(filepath=video_attr["filepath"],
+                                          corners=video_attr["corners"])
+    label_dataframes = ec.classify_events(events)
+    for label_dataframe in label_dataframes:
+        dio.dataframe_to_csv(label_dataframe)
 
-    for config in configs:
-        if len(config["corners"]) == 2:
-            events = alg.swift_counting_algorithm(config)
-
-            if len(events) > 0:
-                features = data.generate_feature_vectors(events)
-                labels = data.generate_classifications(features)
-                total = data.export_results(config["src_filepath"].parent /
-                                            config["src_filepath"].stem,
-                                            config, labels)
-                print("[-]     Analysis complete. {} detected chimney swifts "
-                      "in specified video.".format(total))
-            else:
-                print("[-]     Analysis complete. No detected chimney swifts "
-                      "in specified video.")
-        else:
-            print("[!] Corners not selected for {}. Cannot process."
-                  .format(config["name"]))
-
-
-if __name__ == "__main__":
-    main()
