@@ -13,6 +13,21 @@ import sys
 eps = sys.float_info.epsilon
 
 
+def create_dataframe(passed_list):
+    """Convert list of events to pandas dataframe."""
+    if passed_list:
+        dataframe = pd.DataFrame(passed_list,
+                                 columns=list(passed_list[0].keys())
+                                 ).astype('object')
+        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    else:
+        dataframe = pd.DataFrame(columns=[])
+
+    return dataframe
+
+
 def generate_feature_vectors(df_eventinfo):
     """Use segment information to generate feature vectors for each event."""
 
