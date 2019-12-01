@@ -255,7 +255,7 @@ def validate_framerange(frame_dir, start, end):
         sys.exit()
 
     # Ensure that ordering of start/end values are correct
-    if not end > start > 0:
+    if not end > start > -1:
         sys.stderr.write("Error: Start/end values not correct."
                          " (non-zero with end > start).")
         sys.exit()
