@@ -157,7 +157,7 @@ class FrameQueue:
 
             return timestamp
 
-    def load_frame(self, frame, timestamp, frame_number):
+    def load_frame(self, frame, frame_number, timestamp):
         """Load new frame into left side (index 0) of queue."""
 
         if frame is not None:
