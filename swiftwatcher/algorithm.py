@@ -13,12 +13,15 @@ import glob
 
 def create_dataframe(passed_list):
     """Convert list of events to pandas dataframe."""
-    dataframe = pd.DataFrame(passed_list,
-                             columns=list(passed_list[0].keys())
-                             ).astype('object')
-    dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
-    dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
-    dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    if passed_list:
+        dataframe = pd.DataFrame(passed_list,
+                                 columns=list(passed_list[0].keys())
+                                 ).astype('object')
+        dataframe["TMSTAMP"] = pd.to_datetime(dataframe["TMSTAMP"])
+        dataframe["TMSTAMP"] = dataframe["TMSTAMP"].dt.round('us')
+        dataframe.set_index(["TMSTAMP", "FRM_NUM"], inplace=True)
+    else:
+        dataframe = pd.DataFrame(columns=[])
 
     return dataframe
 
@@ -158,9 +161,6 @@ def swift_counting_algorithm_from_frames(config, start, end):
 
         frame_number += 1
 
-    if fq.event_list:
-        df_eventinfo = create_dataframe(fq.event_list)
-    else:
-        df_eventinfo = []
+    df_eventinfo = create_dataframe(fq.event_list)
 
     return df_eventinfo
