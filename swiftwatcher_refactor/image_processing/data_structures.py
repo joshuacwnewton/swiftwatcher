@@ -28,18 +28,8 @@ class FrameQueue(deque):
     """Class which extends Python's stdlib queue class, adding methods
     specifically for handling Frame objects."""
 
-    def __init__(self, src_path, total_frames=0, start_frame=0, queue_size=21):
+    def __init__(self, queue_size=21):
         deque.__init__(self, maxlen=queue_size)
-
-        self.src_path = src_path
-        if self.src_path.is_file():
-            self.stream = None
-            self.start_frame = start_frame
-            self.total_frames = total_frames
-
-        else:
-            self.start_frame = start_frame
-            self.total_frames = total_frames
 
         self.frames_read = 0
         self.frames_processed = 0
@@ -49,33 +39,32 @@ class FrameQueue(deque):
         super(FrameQueue, self).append(new_frame)
         self.frames_read += 1
 
-    def get_frame(self, pos=-1):
-        return self[pos].frame
+    def set_queue(self, frame_list, frame_number_list):
+        for frame, frame_number in zip(frame_list, frame_number_list):
+            self.set_frame(frame, frame_number)
 
     def set_processed_frame(self, input_frame, process_name, pos=-1):
         self[pos].processed_frames[process_name] = input_frame
 
+    def set_processed_queue(self, frame_list, process_name):
+        for pos, frame in enumerate(frame_list):
+            self[pos].processed_frames[process_name] = frame
+
+    def get_frame(self, pos=-1):
+        return self[pos].frame
+
+    def get_queue(self):
+        return [frame_obj.frame for frame_obj in self]
+
     def get_processed_frame(self, process_name, pos=-1):
         return self[pos].processed_frames[process_name]
 
-    def fill_queue(self):
-        for i in range(self.maxlen):
-            # Fetch frame from file if directory was passed
-            if self.src_path.is_dir():
-                frame_number = self.start_frame + self.frames_read
-                frame = vio.get_frame_from_file(self.src_path, frame_number)
-
-            # Fetch frame from stream if video file was passed
-            elif self.src_path.is_file():
-                do_file_stream_reading = None
-
-            self.set_frame(frame, frame_number)
-
     def preprocess_queue(self, crop_region, resize_dim):
-        for i in range(len(self)):
-            preproc_frame = img.preprocess_frame(self.get_frame(i),
-                                                 crop_region, resize_dim)
-            self.set_processed_frame(preproc_frame, "preprocessed", pos=i)
+        preprocessed_frames = \
+            [img.preprocess_frame(frame, crop_region, resize_dim)
+             for frame in self.get_queue()]
+
+        self.set_processed_queue(preprocessed_frames, "preprocessed")
 
     def segment_queue(self):
         test = None

@@ -11,7 +11,7 @@ from glob import glob
 from datetime import date
 
 from swiftwatcher_refactor.image_processing.data_structures import FrameQueue
-
+from swiftwatcher_refactor.io.video_io import FrameReader
 
 
 def generate_test_dir(parent_dir):
@@ -54,7 +54,7 @@ def get_corners_from_file(parent_directory):
     return video_attributes["corners"]
 
 
-def swift_counting_algorithm(filepath, crop_region, resize_dim, roi_mask,
+def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
                              start, end):
     """A modified version of the swift_counting_algorithm() found in
     image_processing/primary_algorithm.py that allows the following
@@ -64,13 +64,14 @@ def swift_counting_algorithm(filepath, crop_region, resize_dim, roi_mask,
         -Saving visualizations at intermediate stages of the
         algorithm"""
 
-    print("[*] Now processing {}.".format(filepath.name))
+    print("[*] Now processing {}.".format(frame_path.parent.stem))
 
-    fq = FrameQueue(src_path=filepath.parent/filepath.stem/"frames",
-                    total_frames=(end-start+1), start_frame=start)
+    fq = FrameQueue()
+    fr = FrameReader(frame_path, start, end)
 
-    while fq.frames_read < fq.total_frames:
-        fq.fill_queue()
+    while fr.frames_read < fr.total_frames:
+        frames, frame_numbers = fr.get_n_frames(n=fq.maxlen)
+        fq.set_queue(frames, frame_numbers)
         fq.preprocess_queue(crop_region, resize_dim)
         fq.segment_queue()
 
