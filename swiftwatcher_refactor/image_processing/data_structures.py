@@ -60,17 +60,25 @@ class FrameQueue(deque):
     def get_processed_frame(self, process_name, pos=-1):
         return self[pos].processed_frames[process_name]
 
+    def get_processed_queue(self, process_name):
+        return [frame_obj.processed_frames[process_name] for frame_obj in self]
+
+    def get_last_processed_queue(self):
+        # next(reversed()) is a way of accessing the last entry in ordereddicts
+        return [next(reversed(frame_obj.processed_frames.values()))
+                for frame_obj in self]
+
     def preprocess_queue(self, crop_region, resize_dim):
         grayscale_frames = [img.convert_grayscale(frame)
                             for frame in self.get_queue()]
         self.set_processed_queue(grayscale_frames, "grayscale")
 
         cropped_frames = [img.crop_frame(frame, crop_region)
-                          for frame in grayscale_frames]
+                          for frame in self.get_last_processed_queue()]
         self.set_processed_queue(cropped_frames, "crop")
 
         preprocessed_frames = [img.resize_frame(frame, resize_dim)
-                               for frame in cropped_frames]
+                               for frame in self.get_last_processed_queue()]
         self.set_processed_queue(preprocessed_frames, "resize")
 
     def segment_queue(self):
