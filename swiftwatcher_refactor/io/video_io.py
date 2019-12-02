@@ -156,6 +156,14 @@ def validate_frame_range(frame_dir, start, end):
 ###############################################################################
 
 
+def get_first_video_frame(filepath):
+    vidcap = cv2.VideoCapture(str(filepath))
+    retval, frame = vidcap.read()
+    vidcap.release()
+
+    return frame
+
+
 def get_frame_from_file(path, frame_number):
     frame_list = glob(str(path/"*"/("*_" + str(frame_number) + "_*.png")))
     frame = cv2.imread(frame_list[0])
@@ -163,9 +171,37 @@ def get_frame_from_file(path, frame_number):
     return frame
 
 
-def get_first_frame(filepath):
-    vidcap = cv2.VideoCapture(str(filepath))
-    retval, frame = vidcap.read()
-    vidcap.release()
+class FrameReader:
+    """An alternative to OpenCV's VideoCapture class. Fetches frames
+    from image files rather than a video file. This allows tests
+    to be run on specific sequences of frames if they're extracted
+    ahead of time, which is useful for hours-long video files."""
 
-    return frame
+    def __init__(self, frame_dir, start, end):
+        self.frame_dir = frame_dir
+
+        self.start_frame = start
+        self.end_frame = end
+        self.total_frames = end - start + 1
+
+        self.frames_read = 0
+        self.next_frame_number = self.start_frame
+
+    def get_frame(self):
+        frame_list = glob(str(self.frame_dir/"*"/
+                              ("*_"+str(self.next_frame_number)+"_*.png")))
+        frame = cv2.imread(frame_list[0])
+        if frame.data:
+            self.frames_read += 1
+            self.next_frame_number += 1
+
+        return frame, self.next_frame_number - 1
+
+    def get_n_frames(self, n):
+        frames, frame_numbers = [], []
+        for _ in range(n):
+            frame, frame_number = self.get_frame()
+            frames.append(frame)
+            frame_numbers.append(frame_number)
+
+        return frames, frame_numbers
