@@ -165,6 +165,10 @@ def get_first_video_frame(filepath):
 
 
 def get_frame_from_file(path, frame_number):
+    """Generic function for reading a numbered frame from a file.
+    Assumes that frames are stored within a subfolder. Ideally, should
+    be rewritten w/ regular expressions to make subfolders optional."""
+
     frame_list = glob(str(path/"*"/("*_" + str(frame_number) + "_*.png")))
     frame = cv2.imread(frame_list[0])
 
