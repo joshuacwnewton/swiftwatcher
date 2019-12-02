@@ -8,7 +8,6 @@
 from collections import OrderedDict, deque
 
 import swiftwatcher_refactor.image_processing.image_filtering as img
-import swiftwatcher_refactor.io.video_io as vio
 
 
 class Frame:
@@ -51,6 +50,10 @@ class FrameQueue(deque):
         for pos, frame in enumerate(frame_list):
             self[pos].processed_frames[process_name] = frame
 
+    def set_queue_segments(self, list_of_frame_segments):
+        for pos, segment_list in enumerate(list_of_frame_segments):
+            self[pos].segment_properties = segment_list
+
     def get_frame(self, pos=-1):
         return self[pos].frame
 
@@ -82,4 +85,25 @@ class FrameQueue(deque):
         self.set_processed_queue(preprocessed_frames, "resize")
 
     def segment_queue(self):
-        test = None
+        rpca_frames = img.rpca(self.get_last_processed_queue())
+        self.set_processed_queue(rpca_frames, "RPCA")
+
+        bilateral_frames = [img.bilateral_blur(frame, 7, 15, 1)
+                            for frame in self.get_last_processed_queue()]
+        self.set_processed_queue(bilateral_frames, "bilateral")
+
+        thresh_frames = [img.thresh_to_zero(frame, 15)
+                         for frame in self.get_last_processed_queue()]
+        self.set_processed_queue(thresh_frames, "thresh_15")
+
+        opened_frames = [img.grayscale_opening(frame, (3, 3))
+                         for frame in self.get_last_processed_queue()]
+        self.set_processed_queue(opened_frames, "opened")
+
+        labeled_frames = [img.cc_labeling(frame, 4)
+                          for frame in self.get_last_processed_queue()]
+        self.set_processed_queue(labeled_frames, "cc_labeling")
+
+        segments_lists = [img.get_segment_properties(frame)
+                          for frame in self.get_last_processed_queue()]
+        self.set_queue_segments(segments_lists)

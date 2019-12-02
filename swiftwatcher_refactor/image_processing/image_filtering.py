@@ -5,8 +5,11 @@
 
 import cv2
 import numpy as np
+from numpy.linalg import norm, svd
 
 import swiftwatcher_refactor.io.video_io as vio
+from scipy import ndimage
+from skimage import measure
 
 
 ###############################################################################
@@ -213,3 +216,120 @@ def resize_frame(frame, dimensions):
 ###############################################################################
 #                      SEGMENTATION FUNCTIONS BEGIN HERE                      #
 ###############################################################################
+
+
+def rpca(frame_list):
+    """Decompose set of images into corresponding low-rank and sparse
+    images. Method expects images to have been reshaped to matrix of
+    column vectors.
+
+    Note: frame = lowrank + sparse, where:
+                  lowrank = "background" image
+                  sparse  = "foreground" errors corrupting
+                            the "background" image
+
+    The size of the queue will determine the tradeoff between
+    computational efficiency and accuracy."""
+
+    # Reshape frames into column vector matrix, 1 vector for each frame
+    img_matrix = np.array(frame_list)
+    col_matrix = np.transpose(img_matrix.reshape(img_matrix.shape[0],
+                                                 img_matrix.shape[1] *
+                                                 img_matrix.shape[2]))
+
+    # Algorithm for the IALM approximation of Robust PCA method.
+    lr_columns, s_columns = \
+        inexact_augmented_lagrange_multiplier(col_matrix)
+
+    # Bring pixels that are darker than background to [0, 255] range
+    s_columns = np.negative(s_columns)
+    s_columns = np.clip(s_columns, 0, 255).astype(np.uint8)
+
+    # Reshape columns back into image dimensions and store in list
+    output_frames = [np.reshape(s_columns[:, i],
+                                (img_matrix.shape[1],
+                                 img_matrix.shape[2]))
+                     for i in range(img_matrix.shape[0])]
+
+    return output_frames
+
+
+def inexact_augmented_lagrange_multiplier(X, lmbda=0.01, tol=0.001,
+                                          maxiter=100, verbose=False):
+    """Inexact Augmented Lagrange Multiplier algorithm for Robust PCA.
+    matrix decomposition. Decomposes an input matrix X into a
+    low-rank approximation and sparse components.
+
+    Can be used for background subtraction in image sequences if images
+    are shaped into column vectors of X.
+
+    Implementation borrowed directly from:
+        https://github.com/kastnerkyle"""
+
+    Y = X
+    norm_two = norm(Y.ravel(), 2)
+    norm_inf = norm(Y.ravel(), np.inf) / lmbda
+    dual_norm = np.max([norm_two, norm_inf])
+    Y = Y / dual_norm
+    A = np.zeros(Y.shape)
+    E = np.zeros(Y.shape)
+    dnorm = norm(X, 'fro')
+    mu = 1.25 / norm_two
+    rho = 1.5
+    sv = 10.
+    n = Y.shape[0]
+    itr = 0
+    while True:
+        Eraw = X - A + (1 / mu) * Y
+        Eupdate = np.maximum(Eraw - lmbda / mu, 0) + np.minimum(Eraw + lmbda / mu, 0)
+        U, S, V = svd(X - Eupdate + (1 / mu) * Y, full_matrices=False)
+        svp = (S > 1 / mu).shape[0]
+        if svp < sv:
+            sv = np.min([svp + 1, n])
+        else:
+            sv = np.min([svp + round(.05 * n), n])
+        Aupdate = np.dot(np.dot(U[:, :svp], np.diag(S[:svp] - 1 / mu)), V[:svp, :])
+        A = Aupdate
+        E = Eupdate
+        Z = X - A - E
+        Y = Y + mu * Z
+        mu = np.min([mu * rho, mu * 1e7])
+        itr += 1
+        if ((norm(Z, 'fro') / dnorm) < tol) or (itr >= maxiter):
+            break
+    if verbose:
+        print("Finished at iteration %d" % (itr))
+    return A, E
+
+
+def bilateral_blur(frame, d, sigmaColor, sigmaSpace):
+    blurred_frame = cv2.bilateralFilter(frame, d, sigmaColor, sigmaSpace)
+
+    return blurred_frame.astype(np.uint8)
+
+
+def thresh_to_zero(frame, thresh):
+    _, thresholded_frame = cv2.threshold(frame,
+                                         thresh=thresh,
+                                         maxval=255,
+                                         type=cv2.THRESH_TOZERO)
+
+    return thresholded_frame.astype(np.uint8)
+
+
+def grayscale_opening(frame, SE):
+    opened_frame = ndimage.grey_opening(frame, size=SE)
+
+    return opened_frame.astype(np.uint8)
+
+
+def cc_labeling(frame, connectivity):
+    # Segment using CC labeling
+    _, labeled_frame = cv2.connectedComponents(frame, connectivity)
+
+    return labeled_frame.astype(np.uint8)
+
+
+def get_segment_properties(frame):
+
+    return measure.regionprops(frame)
