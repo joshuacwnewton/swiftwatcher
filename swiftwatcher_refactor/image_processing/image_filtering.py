@@ -112,9 +112,10 @@ def generate_roi_mask(filepath, corners, crop_region, resize_dim):
     unprocessed_mask = create_mask(dilated_frame, roi_region, frame)
 
     # Apply same preprocessing as the frames themselves, then threshold again
-    preprocessed_mask = preprocess_frame(unprocessed_mask, crop_region,
-                                         resize_dim)
-    roi_mask = threshold_channel(preprocessed_mask)
+    grayscale_mask = convert_grayscale(unprocessed_mask)
+    cropped_mask = crop_frame(grayscale_mask, crop_region)
+    resized_mask = resize_frame(cropped_mask, resize_dim)
+    roi_mask = threshold_channel(resized_mask)
 
     return roi_mask
 
@@ -180,16 +181,6 @@ def create_mask(mask, frame_region, frame):
 ###############################################################################
 #                     PREPROCESSING FUNCTIONS BEGIN HERE                      #
 ###############################################################################
-
-
-def preprocess_frame(frame, crop_region, resize_dim):
-    """Apply preprocessing to frame prior to motion analysis."""
-
-    grayscale_frame = convert_grayscale(frame)
-    cropped_frame = crop_frame(grayscale_frame, crop_region)
-    resized_frame = resize_frame(cropped_frame, resize_dim)
-
-    return resized_frame
 
 
 def convert_grayscale(frame):

@@ -26,7 +26,8 @@ class Frame:
 
 class FrameQueue(deque):
     """Class which extends Python's stdlib queue class, adding methods
-    specifically for handling Frame objects."""
+    specifically for handling Frame objects. (Getters, setters, and
+    image processing methods)."""
 
     def __init__(self, queue_size=21):
         deque.__init__(self, maxlen=queue_size)
@@ -60,11 +61,17 @@ class FrameQueue(deque):
         return self[pos].processed_frames[process_name]
 
     def preprocess_queue(self, crop_region, resize_dim):
-        preprocessed_frames = \
-            [img.preprocess_frame(frame, crop_region, resize_dim)
-             for frame in self.get_queue()]
+        grayscale_frames = [img.convert_grayscale(frame)
+                            for frame in self.get_queue()]
+        self.set_processed_queue(grayscale_frames, "grayscale")
 
-        self.set_processed_queue(preprocessed_frames, "preprocessed")
+        cropped_frames = [img.crop_frame(frame, crop_region)
+                          for frame in grayscale_frames]
+        self.set_processed_queue(cropped_frames, "crop")
+
+        preprocessed_frames = [img.resize_frame(frame, resize_dim)
+                               for frame in cropped_frames]
+        self.set_processed_queue(preprocessed_frames, "resize")
 
     def segment_queue(self):
         test = None
