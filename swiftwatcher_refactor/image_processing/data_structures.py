@@ -20,7 +20,6 @@ class Frame:
 
         self.frame = frame
         self.processed_frames = OrderedDict()
-        self.segment_properties = []
         
     def get_frame(self):
         return self.frame
