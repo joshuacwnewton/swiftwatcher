@@ -192,14 +192,24 @@ class FrameReader:
         self.next_frame_number = self.start_frame
 
     def get_frame(self):
-        frame_list = glob(str(self.frame_dir/"*"/
-                              ("*_"+str(self.next_frame_number)+"_*.png")))
-        frame = cv2.imread(frame_list[0])
-        if frame.data:
-            self.frames_read += 1
-            self.next_frame_number += 1
+        # This is for the case when frames are requested in batches of N, but
+        # total_frames is not a multiple of N. In that case, self.end_frame
+        # will be exceeded, so return null values.
+        if self.next_frame_number > self.end_frame:
+            frame = None  # TODO: Should be np.empty
+            frame_number = -1
 
-        return frame, self.next_frame_number - 1
+        else:
+            frame_list = glob(str(self.frame_dir/"*"/
+                                  ("*_"+str(self.next_frame_number)+"_*.png")))
+            frame = cv2.imread(frame_list[0])
+            frame_number = self.next_frame_number
+
+            if frame.data:
+                self.frames_read += 1
+                self.next_frame_number += 1
+
+        return frame, frame_number
 
     def get_n_frames(self, n):
         frames, frame_numbers = [], []
