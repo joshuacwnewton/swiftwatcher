@@ -40,7 +40,7 @@ class FrameQueue(deque):
         else:
             return False
 
-    def set_frame(self, input_frame, frame_number):
+    def push_frame(self, input_frame, frame_number):
         new_frame = Frame(input_frame, frame_number)
         super(FrameQueue, self).append(new_frame)
         self.frames_read += 1
@@ -49,9 +49,9 @@ class FrameQueue(deque):
         self.frames_processed += 1
         return super(FrameQueue, self).pop()
 
-    def set_queue(self, frame_list, frame_number_list):
+    def fill_queue(self, frame_list, frame_number_list):
         for frame, frame_number in zip(frame_list, frame_number_list):
-            self.set_frame(frame, frame_number)
+            self.push_frame(frame, frame_number)
 
     def set_processed_frame(self, input_frame, process_name, pos=-1):
         self[pos].processed_frames[process_name] = input_frame
@@ -77,7 +77,7 @@ class FrameQueue(deque):
         return [frame_obj.processed_frames[process_name] for frame_obj in self]
 
     def get_last_processed_queue(self):
-        # next(reversed()) is a way of accessing the last entry in ordereddicts
+        # next(reversed()) accesses the last entry in an OrderedDict
         return [next(reversed(frame_obj.processed_frames.values()))
                 for frame_obj in self]
 

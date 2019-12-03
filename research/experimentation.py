@@ -10,8 +10,9 @@ from pathlib import Path
 from glob import glob
 from datetime import date
 
-from swiftwatcher_refactor.image_processing.data_structures import FrameQueue
-from swiftwatcher_refactor.io.video_io import FrameReader
+import swiftwatcher_refactor.image_processing.data_structures as ds
+import swiftwatcher_refactor.io.video_io as vio
+
 
 
 def generate_test_dir(parent_dir):
@@ -66,14 +67,14 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
 
     print("[*] Now processing {}.".format(frame_path.parent.stem))
 
-    fq = FrameQueue()
-    fr = FrameReader(frame_path, start, end)
+    reader = vio.FrameReader(frame_path, start, end)
+    queue = ds.FrameQueue()
 
-    while fr.frames_read < fr.total_frames:
-        frames, frame_numbers = fr.get_n_frames(n=fq.maxlen)
-        fq.set_queue(frames, frame_numbers)
-        fq.preprocess_queue(crop_region, resize_dim)
-        fq.segment_queue()
+    while queue.frames_processed < reader.total_frames:
+        frames, frame_numbers = reader.get_n_frames(n=queue.maxlen)
+        queue.fill_queue(frames, frame_numbers)
+        queue.preprocess_queue(crop_region, resize_dim)
+        queue.segment_queue()
 
         while not queue.is_empty():
             current_frame = queue.pop_frame()
