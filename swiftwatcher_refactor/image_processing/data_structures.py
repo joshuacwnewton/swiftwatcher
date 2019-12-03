@@ -10,6 +10,16 @@ from collections import OrderedDict, deque
 import swiftwatcher_refactor.image_processing.image_filtering as img
 
 
+class Segment:
+    """Class for representing a segment found within a frame. Stores
+    various attributes of the segment, as well as its visual
+    representation. This information is used to analyze the segments."""
+
+    def __init__(self, regionprops):
+        self.regionprops = regionprops
+        self.segment_image = None
+
+
 class Frame:
     """Class for storing a frame from a video, as well as processed
     versions of that frame and its various properties."""
@@ -20,12 +30,16 @@ class Frame:
 
         self.frame = frame
         self.processed_frames = OrderedDict()
+        self.segments = []
         
     def get_frame(self):
         return self.frame
         
     def get_processed_frame(self, process_name):
         return self.processed_frames[process_name]
+
+    def get_num_segments(self):
+        return len(self.segments)
 
 
 class FrameQueue(deque):
@@ -61,6 +75,10 @@ class FrameQueue(deque):
     def process_queue(self, processed_frame_list, process_name):
         for pos, frame in enumerate(processed_frame_list):
             self[pos].processed_frames[process_name] = frame
+
+    def store_segments_queue(self, regionprops_lists):
+        for pos, regionprop_list in enumerate(regionprops_lists):
+            self[pos].segments = [Segment(rp) for rp in regionprop_list]
 
     def get_queue(self):
         return [frame_obj.frame for frame_obj in self]
@@ -105,3 +123,7 @@ class FrameQueue(deque):
         labeled_frames = [img.cc_labeling(frame, 4)
                           for frame in self.get_last_processed_queue()]
         self.process_queue(labeled_frames, "cc_labeling")
+
+        regionprops_lists = [img.get_segment_properties(frame)
+                             for frame in self.get_last_processed_queue()]
+        self.store_segments_queue(regionprops_lists)
