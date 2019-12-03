@@ -75,4 +75,5 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
         fq.preprocess_queue(crop_region, resize_dim)
         fq.segment_queue()
 
-    return fq
+        while not queue.is_empty():
+            current_frame = queue.pop_frame()

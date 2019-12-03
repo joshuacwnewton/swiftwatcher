@@ -34,10 +34,20 @@ class FrameQueue(deque):
         self.frames_read = 0
         self.frames_processed = 0
 
+    def is_empty(self):
+        if len(self) == 0:
+            return True
+        else:
+            return False
+
     def set_frame(self, input_frame, frame_number):
         new_frame = Frame(input_frame, frame_number)
         super(FrameQueue, self).append(new_frame)
         self.frames_read += 1
+
+    def pop_frame(self):
+        self.frames_processed += 1
+        return super(FrameQueue, self).pop()
 
     def set_queue(self, frame_list, frame_number_list):
         for frame, frame_number in zip(frame_list, frame_number_list):
