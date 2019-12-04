@@ -42,6 +42,10 @@ class Frame:
     def get_num_segments(self):
         return len(self.segments)
 
+    def set_segments(self, regionprops_list):
+        self.segments = [Segment(rp, self.frame_number)
+                         for rp in regionprops_list]
+
 
 class FrameQueue(deque):
     """Class which extends Python's stdlib queue class, adding methods
@@ -78,8 +82,8 @@ class FrameQueue(deque):
             self[pos].processed_frames[process_name] = frame
 
     def store_segments_queue(self, regionprops_lists):
-        for pos, regionprop_list in enumerate(regionprops_lists):
-            self[pos].segments = [Segment(rp) for rp in regionprop_list]
+        for pos, regionprops_list in enumerate(regionprops_lists):
+            self[pos].set_segments(regionprops_list)
 
     def get_queue(self):
         return [frame_obj.frame for frame_obj in self]
