@@ -12,13 +12,15 @@ import research.experimentation as exp
 
 # Generate necessary input parameters for swift counting algorithm
 filepath, start, end = ui.parse_filepath_and_framerange()
-frame_dir = filepath.parent/filepath.stem/"frames"
 vio.validate_video_filepath(filepath)
+
+frame_dir = filepath.parent/filepath.stem/"frames"
 vio.validate_frame_range(frame_dir, start, end)
+
 corners = exp.get_corners_from_file(frame_dir)
 crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 
-# Apply algorithm to detect events and then classify them
+# Apply algorithm to detect events, then classify detected events
 events = exp.swift_counting_algorithm(frame_dir,
                                       crop_region, resize_dim, roi_mask,
                                       start, end)
