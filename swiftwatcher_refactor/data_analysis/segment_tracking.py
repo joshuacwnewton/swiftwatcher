@@ -111,7 +111,9 @@ class SegmentTracker:
                 if len(segment.segment_history) >= 2:
                     pos = segment.regionprops.centroid
                     if self.roi_mask[int(pos[0]), int(pos[1])] == 255:
-                        self.detected_events.append(segment)
+                        event_motion_path = segment.segment_history
+                        event_motion_path.append(segment)
+                        self.detected_events.append(event_motion_path)
 
 
 def intialize_cost_matrix(n_curr, n_prev):
