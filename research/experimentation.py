@@ -66,7 +66,7 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
         -Saving visualizations at intermediate stages of the
         algorithm"""
 
-    print("[*] Now processing {}.".format(frame_path.parent.stem))
+    ui.start_status(frame_path.parent.name)
 
     reader = vio.FrameReader(frame_path, start, end)
     queue = ds.FrameQueue()
@@ -75,7 +75,6 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
     while queue.frames_processed < reader.total_frames:
         frames, frame_numbers = reader.get_n_frames(n=queue.maxlen)
         queue.fill_queue(frames, frame_numbers)
-
         queue.preprocess_queue(crop_region, resize_dim)
         queue.segment_queue()
 
@@ -90,5 +89,7 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
             # tracker.check_for_events()
 
             tracker.cache_current_frame()
+
+        ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 
     return tracker.detected_events
