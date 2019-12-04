@@ -19,6 +19,8 @@ class Segment:
         self.parent_frame_number = frame_number
         self.regionprops = regionprops
         self.segment_image = None
+        self.segment_history = []
+        self.status = None
 
 
 class Frame:

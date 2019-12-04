@@ -80,15 +80,12 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
         queue.segment_queue()
 
         while not queue.is_empty():
-            popped_frame = queue.pop_frame()
-            tracker.set_current_frame(popped_frame)
-
-            # tracker.extract_segment_properties()
-            # tracker.formulate_cost_matrix()
-            # tracker.apply_hungarian_algorithm()
-            # tracker.store_matches()
-            # tracker.check_for_events()
-
+            tracker.set_current_frame(queue.pop_frame())
+            cost_matrix = tracker.formulate_cost_matrix()
+            assignments = tracker.apply_hungarian_algorithm(cost_matrix)
+            tracker.interpret_assignments(assignments)
+            tracker.link_matching_segments()
+            tracker.check_for_events()
             tracker.cache_current_frame()
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
