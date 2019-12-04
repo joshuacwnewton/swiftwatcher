@@ -58,7 +58,7 @@ def get_corners_from_file(parent_directory):
 
 
 def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
-                             start, end):
+                             fps, start, end):
     """A modified version of the swift_counting_algorithm() found in
     image_processing/primary_algorithm.py that allows the following
     additional functionality:
@@ -69,13 +69,13 @@ def swift_counting_algorithm(frame_path, crop_region, resize_dim, roi_mask,
 
     ui.start_status(frame_path.parent.name)
 
-    reader = vio.FrameReader(frame_path, start, end)
+    reader = vio.FrameReader(frame_path, fps, start, end)
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
 
     while queue.frames_processed < reader.total_frames:
-        frames, frame_numbers = reader.get_n_frames(n=queue.maxlen)
-        queue.fill_queue(frames, frame_numbers)
+        frames, frame_numbers, timestamps = reader.get_n_frames(n=queue.maxlen)
+        queue.fill_queue(frames, frame_numbers, timestamps)
         queue.preprocess_queue(crop_region, resize_dim)
         queue.segment_queue()
 

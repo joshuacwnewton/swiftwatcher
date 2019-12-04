@@ -13,6 +13,7 @@ import research.experimentation as exp
 # Generate necessary input parameters for swift counting algorithm
 filepath, start, end = ui.parse_filepath_and_framerange()
 vio.validate_video_filepath(filepath)
+properties = vio.get_video_properties(filepath)
 
 frame_dir = filepath.parent/filepath.stem/"frames"
 vio.validate_frame_range(frame_dir, start, end)
@@ -23,7 +24,7 @@ crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 # Apply algorithm to detect events, then classify detected events
 events = exp.swift_counting_algorithm(frame_dir,
                                       crop_region, resize_dim, roi_mask,
-                                      start, end)
+                                      properties["fps"], start, end)
 label_dataframes = ec.classify_events(events)
 
 # Save results to unique test directory

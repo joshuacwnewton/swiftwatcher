@@ -15,8 +15,9 @@ class Segment:
     various attributes of the segment, as well as its visual
     representation. This information is used to analyze the segments."""
 
-    def __init__(self, regionprops, frame_number):
+    def __init__(self, regionprops, frame_number, timestamp):
         self.parent_frame_number = frame_number
+        self.parent_timestamp = timestamp
         self.regionprops = regionprops
         self.segment_image = None
         self.segment_history = []
@@ -27,9 +28,9 @@ class Frame:
     """Class for storing a frame from a video, as well as processed
     versions of that frame and its various properties."""
 
-    def __init__(self, frame=None, frame_number=0):
+    def __init__(self, frame=None, frame_number=0, timestamp="00:00:00.000"):
         self.frame_number = frame_number
-        self.timestamp = None
+        self.timestamp = timestamp
 
         self.frame = frame
         self.processed_frames = OrderedDict()
@@ -45,7 +46,7 @@ class Frame:
         return len(self.segments)
 
     def set_segments(self, regionprops_list):
-        self.segments = [Segment(rp, self.frame_number)
+        self.segments = [Segment(rp, self.frame_number, self.timestamp)
                          for rp in regionprops_list]
 
 
@@ -66,8 +67,8 @@ class FrameQueue(deque):
         else:
             return False
 
-    def push_frame(self, input_frame, frame_number):
-        new_frame = Frame(input_frame, frame_number)
+    def push_frame(self, input_frame, frame_number, timestamp):
+        new_frame = Frame(input_frame, frame_number, timestamp)
         super(FrameQueue, self).appendleft(new_frame)
         self.frames_read += 1
 
@@ -75,9 +76,10 @@ class FrameQueue(deque):
         self.frames_processed += 1
         return super(FrameQueue, self).pop()
 
-    def fill_queue(self, frame_list, frame_number_list):
-        for frame, frame_number in zip(frame_list, frame_number_list):
-            self.push_frame(frame, frame_number)
+    def fill_queue(self, frame_list, frame_number_list, timestamp_list):
+        for frame, frame_number, timestamp \
+                in zip(frame_list, frame_number_list, timestamp_list):
+            self.push_frame(frame, frame_number, timestamp)
 
     def process_queue(self, processed_frame_list, process_name):
         for pos, frame in enumerate(processed_frame_list):

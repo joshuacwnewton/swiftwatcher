@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from glob import glob
 
+import pandas as pd
 import numpy as np
 import cv2
 
@@ -153,8 +154,18 @@ def validate_frame_range(frame_dir, start, end):
 
 
 ###############################################################################
-#                     VIDEO READING FUNCTIONS BEGIN HERE                      #
+#                  VIDEO/FRAME READING FUNCTIONS BEGIN HERE                   #
 ###############################################################################
+
+
+def get_video_properties(filepath):
+    vidcap = cv2.VideoCapture(str(filepath))
+
+    properties = {
+        "fps": vidcap.get(cv2.CAP_PROP_FPS)
+    }
+
+    return properties
 
 
 def get_first_video_frame(filepath):
@@ -182,8 +193,9 @@ class FrameReader:
     to be run on specific sequences of frames if they're extracted
     ahead of time, which is useful for hours-long video files."""
 
-    def __init__(self, frame_dir, start, end):
+    def __init__(self, frame_dir, fps, start, end):
         self.frame_dir = frame_dir
+        self.fps = fps
 
         self.start_frame = start
         self.end_frame = end
@@ -200,25 +212,35 @@ class FrameReader:
         if self.next_frame_number > self.end_frame:
             frame = np.zeros(self.frame_shape).astype(np.uint8)
             frame_number = -1
+            timestamp = "00:00:00.000"
 
         else:
             frame_list = glob(str(self.frame_dir/"*"/
                                   ("*_"+str(self.next_frame_number)+"_*.png")))
             frame = cv2.imread(frame_list[0])
             frame_number = self.next_frame_number
+            timestamp = self.frame_number_to_timestamp(frame_number)
 
             if frame.data:
                 self.frame_shape = frame.shape
                 self.frames_read += 1
                 self.next_frame_number += 1
 
-        return frame, frame_number
+        return frame, frame_number, timestamp
 
     def get_n_frames(self, n):
-        frames, frame_numbers = [], []
+        frames, frame_numbers, timestamps = [], [], []
         for _ in range(n):
-            frame, frame_number = self.get_frame()
+            frame, frame_number, timestamp = self.get_frame()
+
             frames.append(frame)
             frame_numbers.append(frame_number)
+            timestamps.append(timestamp)
 
-        return frames, frame_numbers
+        return frames, frame_numbers, timestamps
+
+    def frame_number_to_timestamp(self, frame_number):
+        total_s = frame_number / self.fps
+        timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(total_s, 's')
+
+        return timestamp
