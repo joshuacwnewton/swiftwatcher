@@ -15,7 +15,8 @@ class Segment:
     various attributes of the segment, as well as its visual
     representation. This information is used to analyze the segments."""
 
-    def __init__(self, regionprops):
+    def __init__(self, regionprops, frame_number):
+        self.parent_frame_number = frame_number
         self.regionprops = regionprops
         self.segment_image = None
 
