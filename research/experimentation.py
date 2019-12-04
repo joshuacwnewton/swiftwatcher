@@ -13,6 +13,7 @@ from datetime import date
 import swiftwatcher_refactor.image_processing.data_structures as ds
 import swiftwatcher_refactor.io.video_io as vio
 import swiftwatcher_refactor.data_analysis.segment_tracking as st
+import swiftwatcher_refactor.io.ui as ui
 
 
 
