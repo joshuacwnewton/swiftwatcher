@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from glob import glob
 
+import numpy as np
 import cv2
 
 
@@ -190,13 +191,14 @@ class FrameReader:
 
         self.frames_read = 0
         self.next_frame_number = self.start_frame
+        self.frame_shape = None
 
     def get_frame(self):
         # This is for the case when frames are requested in batches of N, but
         # total_frames is not a multiple of N. In that case, self.end_frame
         # will be exceeded, so return null values.
         if self.next_frame_number > self.end_frame:
-            frame = None  # TODO: Should be np.empty
+            frame = np.zeros(self.frame_shape).astype(np.uint8)
             frame_number = -1
 
         else:
@@ -206,6 +208,7 @@ class FrameReader:
             frame_number = self.next_frame_number
 
             if frame.data:
+                self.frame_shape = frame.shape
                 self.frames_read += 1
                 self.next_frame_number += 1
 
