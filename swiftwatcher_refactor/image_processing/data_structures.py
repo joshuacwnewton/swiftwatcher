@@ -18,10 +18,13 @@ class Segment:
     def __init__(self, regionprops, frame_number, timestamp):
         self.parent_frame_number = frame_number
         self.parent_timestamp = timestamp
-        self.regionprops = regionprops
         self.segment_image = None
         self.segment_history = []
         self.status = None
+
+        for a in dir(regionprops):
+            if not a.startswith('_'):
+                setattr(self, a, getattr(regionprops, a, None))
 
 
 class Frame:

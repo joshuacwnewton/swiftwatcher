@@ -109,7 +109,7 @@ class SegmentTracker:
         for segment in self.cached_frame.segments:
             if segment.status == "D":
                 if len(segment.segment_history) >= 2:
-                    pos = segment.regionprops.centroid
+                    pos = segment.centroid
                     if self.roi_mask[int(pos[0]), int(pos[1])] == 255:
                         event_motion_path = segment.segment_history
                         event_motion_path.append(segment)
@@ -123,8 +123,8 @@ def intialize_cost_matrix(n_curr, n_prev):
 
 
 def calculate_distance_cost(segment_curr, segment_prev):
-    dist = distance.euclidean(segment_prev.regionprops.centroid,
-                              segment_curr.regionprops.centroid)
+    dist = distance.euclidean(segment_prev.centroid,
+                              segment_curr.centroid)
     dist_cost = 2 ** (dist - 25)
 
     return dist_cost
@@ -150,9 +150,9 @@ def calculate_angle_cost(segment_curr, segment_prev):
         #     -the current-frame segment
         #     -the previous-frame segment it's being compared to
         #     -the initial segment in the chain of matched segments
-        curr_pos = segment_curr.regionprops.centroid
-        prev_pos = segment_prev.regionprops.centroid
-        initial_pos = segment_prev.segment_history[-1].regionprops.centroid
+        curr_pos = segment_curr.centroid
+        prev_pos = segment_prev.centroid
+        initial_pos = segment_prev.segment_history[-1].centroid
 
         # Calculate the angle of the vector of the existing motion path
         del_y = prev_pos[0] - initial_pos[0]
