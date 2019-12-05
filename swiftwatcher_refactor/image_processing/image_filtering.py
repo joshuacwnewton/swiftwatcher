@@ -332,4 +332,6 @@ def cc_labeling(frame, connectivity):
 
 def get_segment_properties(frame):
 
-    return measure.regionprops(frame)
+    # "coordinates='xy'" suppresses a warning found in skimage 0.15, See:
+    # https://scikit-image.org/docs/0.15.x/release_notes_and_installation.html
+    return measure.regionprops(frame, coordinates='xy')
