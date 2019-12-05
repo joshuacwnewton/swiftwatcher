@@ -25,12 +25,15 @@ crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 events = exp.swift_counting_algorithm(frame_dir,
                                       crop_region, resize_dim, roi_mask,
                                       properties["fps"], start, end)
-label_dataframes = ec.classify_events(events)
+df_events = ec.convert_events_to_dataframe(events, ["parent_frame_number",
+                                                    "parent_timestamp",
+                                                    "centroid"])
+label_dataframes = ec.classify_events(df_events)
 
 # Save results to unique test directory
-test_dir = exp.generate_test_dir(filepath.parent/filepath.stem/"tests")
-dio.dataframe_to_csv(test_dir, events)
-for label_dataframe in label_dataframes:
-    dio.dataframe_to_csv(test_dir, label_dataframe)
+# test_dir = exp.generate_test_dir(filepath.parent/filepath.stem/"tests")
+# dio.dataframe_to_csv(test_dir, events)
+# for label_dataframe in label_dataframes:
+#     dio.dataframe_to_csv(test_dir, label_dataframe)
 
 exit(0)
