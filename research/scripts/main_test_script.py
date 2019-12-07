@@ -24,7 +24,8 @@ crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 # Apply algorithm to detect events, then classify detected events
 events = alg.swift_counting_algorithm(frame_dir,
                                       crop_region, resize_dim, roi_mask,
-                                      properties["fps"], start, end)
+                                      properties["fps"], start, end,
+                                      testing=True)
 df_events = ec.convert_events_to_dataframe(events, ["parent_frame_number",
                                                     "parent_timestamp",
                                                     "centroid"])
