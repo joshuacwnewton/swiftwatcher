@@ -203,7 +203,7 @@ def status_update(frames_processed, total_frames):
 
 
 def start_status(video_name):
-    sys.stdout.write("[*] Now processing {}.".format(video_name))
+    sys.stdout.write("[*] Now processing {}.\n".format(video_name))
 
 
 def frames_processed_status(frames_processed, total_frames):
