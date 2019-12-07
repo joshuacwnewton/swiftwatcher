@@ -5,6 +5,7 @@
 import sys
 from pathlib import Path
 from glob import glob
+import re
 
 import json
 from datetime import date
@@ -198,6 +199,11 @@ class FrameReader:
 
     def __init__(self, frame_dir, fps, start, end):
         self.frame_dir = frame_dir
+        self.frame_path_list = glob(str(self.frame_dir/"**"/"*.png"),
+                                    recursive=True)
+        p = re.compile(r'.*_(\d+)_.*')
+        self.frame_path_dict = {m.group(1): m.group(0) for m in
+                                [p.match(s) for s in self.frame_path_list]}
         self.fps = fps
 
         self.start_frame = start
@@ -208,14 +214,16 @@ class FrameReader:
         self.next_frame_number = self.start_frame
         self.frame_shape = None
 
+    def get_filepath(self, frame_number):
+        return self.frame_path_dict[str(frame_number)]
+
     def get_frame(self):
         if self.next_frame_number <= self.end_frame:
             frame_number = self.next_frame_number
             timestamp = self.frame_number_to_timestamp(frame_number)
 
-            frame_list = glob(str(self.frame_dir/"*"/
-                                  ("*_"+str(self.next_frame_number)+"_*.png")))
-            frame = cv2.imread(frame_list[0])
+            filepath = self.get_filepath(frame_number)
+            frame = cv2.imread(filepath)
 
             if frame.data:
                 self.frame_shape = frame.shape
