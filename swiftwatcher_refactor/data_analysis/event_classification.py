@@ -4,7 +4,13 @@
     determine whether the swift disappeared into the in-frame chimney.
 """
 
+import math
+
+import numpy as np
 import pandas as pd
+
+import sys
+EPSILON = sys.float_info.epsilon
 
 
 def convert_events_to_dataframe(event_list, attributes_to_keep):
@@ -38,5 +44,84 @@ def convert_events_to_dataframe(event_list, attributes_to_keep):
     return df_events
 
 
-def classify_events(events):
-    return None
+def classify_events(df_events):
+    df_features = generate_angle_features(df_events)
+    df_features_filtered = filter_false_angles(df_features)
+    df_labels = generate_classifications(df_features_filtered)
+
+    # Add event count (used for when multiple events occur in a single
+    # timestamp -- when rows are merged, "events" can display as > 1)
+    df_labels["events"] = 1
+
+    return df_labels
+
+
+def generate_angle_features(df_events):
+    """Use segment information to generate feature vectors for each event."""
+
+    df_features = pd.DataFrame(index=df_events.index)
+    df_features["angle"] = df_events.apply(
+        lambda row: compute_angle(row["centroid"]),
+        axis=1
+    )
+
+    return df_features
+
+
+def compute_angle(centroid_list):
+    del_y = centroid_list[0][0] - centroid_list[-1][0]
+    del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
+    angle = math.degrees(math.atan2(del_y, del_x))
+
+    return angle
+
+
+def filter_false_angles(df_features):
+    # Correct false positive errors from small (3x3 opened) non-bird segments
+    index_to_drop = df_features[(df_features["angle"] % 15 == 0)].index
+    if not index_to_drop.empty:
+        df_features = df_features.drop(
+            df_features[(df_features["angle"] % 15 == 0)].index)
+
+    return df_features
+
+
+def generate_classifications(df_features):
+    """Classify "segment disappeared" events based on corresponding feature
+    vectors."""
+
+    mode = compute_mode(df_features)
+
+    df_labels = df_features.copy()
+    df_labels["label"] = np.array([0, 1, 0])[pd.cut(df_features["angle"],
+                                             bins=[-180 - EPSILON,
+                                                   mode - 30,
+                                                   mode + 30,
+                                                   180 + EPSILON],
+                                             labels=False)]
+
+    return df_labels
+
+
+def compute_mode(df_features):
+    """Mode for continuous variables. For more information, see:
+    https://www.mathstips.com/mode/ """
+
+    hist, bin_edges = np.histogram(df_features["angle"], bins=36,
+                                   range=[-180 - EPSILON, 180 + EPSILON])
+
+    # mode for continuous variables: https://www.mathstips.com/mode/
+    i_max = np.argmax(hist)
+    xl = bin_edges[i_max]
+
+    if -135 < xl < -45:  # Bugfix to ensure mode is not calculated for
+                         # impossible angles
+        f0 = hist[i_max]
+        f_1 = hist[i_max - 1]
+        f1 = hist[i_max + 1]
+        w = abs(bin_edges[1] - bin_edges[0])
+        estimated_mode = xl + ((f0 - f_1)/(2*f0 - f1 - f_1))*w
+    else:
+        estimated_mode = -90
+
+    return estimated_mode
