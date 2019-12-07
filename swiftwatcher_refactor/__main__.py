@@ -12,8 +12,9 @@ for video_filepath in video_filepaths:
     crop_region, roi_mask, resize_dim = img.generate_regions(video_filepath,
                                                              corners)
     events = alg.swift_counting_algorithm(video_filepath,
-                                          crop_region, roi_mask, resize_dim)
-    label_dataframes = ec.classify_events(events)
-    for label_dataframe in label_dataframes:
-        dio.dataframe_to_csv(label_dataframe)
+                                          crop_region, resize_dim, roi_mask)
+    df_labels = ec.classify_events(events)
+
+    # for label_dataframe in label_dataframes:
+    #     dio.dataframe_to_csv(label_dataframe, video_filepath)
 
