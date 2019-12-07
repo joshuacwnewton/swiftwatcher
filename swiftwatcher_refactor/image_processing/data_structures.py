@@ -31,13 +31,18 @@ class Frame:
     """Class for storing a frame from a video, as well as processed
     versions of that frame and its various properties."""
 
-    def __init__(self, frame=None, frame_number=0, timestamp="00:00:00.000"):
+    def __init__(self, frame=None, frame_number=-1, timestamp="00:00:00.000"):
         self.frame_number = frame_number
         self.timestamp = timestamp
 
         self.frame = frame
         self.processed_frames = OrderedDict()
         self.segments = []
+
+        if frame_number < 0:
+            self.null = True
+        else:
+            self.null = False
         
     def get_frame(self):
         return self.frame
@@ -76,8 +81,12 @@ class FrameQueue(deque):
         self.frames_read += 1
 
     def pop_frame(self):
-        self.frames_processed += 1
-        return super(FrameQueue, self).pop()
+        popped_frame = super(FrameQueue, self).pop()
+
+        if popped_frame.null is False:
+            self.frames_processed += 1
+
+        return popped_frame
 
     def fill_queue(self, frame_list, frame_number_list, timestamp_list):
         for frame, frame_number, timestamp \
