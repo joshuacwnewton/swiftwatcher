@@ -4,22 +4,23 @@ import swiftwatcher_refactor.data_analysis.segment_tracking as st
 import swiftwatcher_refactor.io.ui as ui
 
 
-def swift_counting_algorithm(filepath, crop_region, resize_dim, roi_mask):
+def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
+                             fps=None, start=0, end=-1, testing=False):
     """"""
 
-    print("[*] Now processing {}.".format(filepath.name))
+    ui.start_status(path.name)
 
-    # TODO: Replace FrameReader with VideoCapture object (possibly subclass?)
+    if testing:
+        reader = vio.FrameReader(path, fps, start, end)
+    else:
+        reader = vio.VideoReader(path)
 
-    ui.start_status(filepath.name)
-
-    # reader = vio.FrameReader(frame_path, start, end)
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
 
-    while queue.frames_processed:  # < reader.total_frames:
-        # frames, frame_numbers = reader.get_n_frames(n=queue.maxlen)
-        queue.fill_queue()  # (frames, frame_numbers)
+    while queue.frames_processed < reader.total_frames:
+        frames, frame_numbers, timestamps = reader.get_n_frames(n=queue.maxlen)
+        queue.fill_queue(frames, frame_numbers, timestamps)
         queue.preprocess_queue(crop_region, resize_dim)
         queue.segment_queue()
 
@@ -32,6 +33,6 @@ def swift_counting_algorithm(filepath, crop_region, resize_dim, roi_mask):
             tracker.check_for_events()
             tracker.cache_current_frame()
 
-        ui.frames_processed_status(queue.frames_processed)  # reader.total_frames)
+        ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 
     return tracker.detected_events
