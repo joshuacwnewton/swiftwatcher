@@ -206,25 +206,26 @@ class FrameReader:
         self.frame_shape = None
 
     def get_frame(self):
-        # This is for the case when frames are requested in batches of N, but
-        # total_frames is not a multiple of N. In that case, self.end_frame
-        # will be exceeded, so return null values.
-        if self.next_frame_number > self.end_frame:
-            frame = np.zeros(self.frame_shape).astype(np.uint8)
-            frame_number = -1
-            timestamp = "00:00:00.000"
+        if self.next_frame_number <= self.end_frame:
+            frame_number = self.next_frame_number
+            timestamp = self.frame_number_to_timestamp(frame_number)
 
-        else:
             frame_list = glob(str(self.frame_dir/"*"/
                                   ("*_"+str(self.next_frame_number)+"_*.png")))
             frame = cv2.imread(frame_list[0])
-            frame_number = self.next_frame_number
-            timestamp = self.frame_number_to_timestamp(frame_number)
 
             if frame.data:
                 self.frame_shape = frame.shape
                 self.frames_read += 1
                 self.next_frame_number += 1
+
+        # This is for the case when frames are requested in batches of N, but
+        # total_frames is not a multiple of N. In that case, self.end_frame
+        # will eventually be exceeded, so return empty values.
+        else:
+            frame = np.zeros(self.frame_shape).astype(np.uint8)
+            frame_number = -1
+            timestamp = "00:00:00.000"
 
         return frame, frame_number, timestamp
 
