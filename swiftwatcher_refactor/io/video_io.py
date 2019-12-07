@@ -245,3 +245,46 @@ class FrameReader:
         timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(total_s, 's')
 
         return timestamp
+
+
+class VideoReader(cv2.VideoCapture):
+    def __init__(self, video_filepath):
+        super(VideoReader, self).__init__(str(video_filepath))
+
+        self.total_frames = int(self.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.frames_read = 0
+        self.frame_shape = None
+
+    def get_frame(self):
+        if self.get(cv2.CAP_PROP_POS_FRAMES) <= self.total_frames:
+            frame_number = int(self.get(cv2.CAP_PROP_POS_FRAMES))
+            timestamp = self.ms_to_ts(self.get(cv2.CAP_PROP_POS_MSEC))
+            success, frame = self.read()
+
+            if success:
+                self.frame_shape = frame.shape
+                self.frames_read += 1
+
+        # This is for the case when frames are requested in batches of N, but
+        # total_frames is not a multiple of N. In that case, self.end_frame
+        # will eventually be exceeded, so return empty values.
+        else:
+            frame = np.zeros(self.frame_shape).astype(np.uint8)
+            frame_number = -1
+            timestamp = "00:00:00.000"
+
+        return frame, frame_number, timestamp
+
+    def get_n_frames(self, n):
+        frames, frame_numbers, timestamps = [], [], []
+        for _ in range(n):
+            frame, frame_number, timestamp = self.get_frame()
+
+            frames.append(frame)
+            frame_numbers.append(frame_number)
+            timestamps.append(timestamp)
+
+        return frames, frame_numbers, timestamps
+
+    def ms_to_ts(self, ms):
+        return pd.Timestamp("00:00:00.000") + pd.Timedelta(ms, 'ms')
