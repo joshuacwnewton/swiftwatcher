@@ -266,6 +266,9 @@ class VideoReader(cv2.VideoCapture):
         self.frames_read = 0
         self.frame_shape = None
 
+        self.last_frame_cache = None
+        self.read_errors = 0
+
     def get_frame(self):
         if self.get(cv2.CAP_PROP_POS_FRAMES) <= self.total_frames:
             frame_number = int(self.get(cv2.CAP_PROP_POS_FRAMES))
@@ -275,6 +278,12 @@ class VideoReader(cv2.VideoCapture):
             if success:
                 self.frame_shape = frame.shape
                 self.frames_read += 1
+                self.last_frame_cache = frame
+            else:
+                # Use last frame, to prevent linked segments paths from
+                # breaking if read errors occur in the middle of a video file
+                frame = self.last_frame_cache
+                self.read_errors += 1
 
         # This is for the case when frames are requested in batches of N, but
         # total_frames is not a multiple of N. In that case, self.end_frame
