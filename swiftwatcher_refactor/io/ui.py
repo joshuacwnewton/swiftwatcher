@@ -171,7 +171,7 @@ def parse_filepaths():
     parser.add_argument("filepaths", nargs="*")
     args = parser.parse_args()
 
-    args.filepaths = [Path(filepath) for filepath in args.filepaths]
+    args.filepaths = [Path(filepath).resolve() for filepath in args.filepaths]
 
     return args.filepaths
 
@@ -186,7 +186,7 @@ def parse_filepath_and_framerange():
     parser.add_argument("--end")
     args = parser.parse_args()
 
-    return Path(args.filepath), int(args.start), int(args.end)
+    return Path(args.filepath).resolve(), int(args.start), int(args.end)
 
 
 def status_update(frames_processed, total_frames):
