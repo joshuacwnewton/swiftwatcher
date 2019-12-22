@@ -163,11 +163,20 @@ def validate_frame_range(frame_dir, start, end):
 
 
 def get_video_properties(filepath):
+    """Store video properties in dictionary so video file/VidCap object
+    aren't needed to access properties."""
+
     vidcap = cv2.VideoCapture(str(filepath))
 
     properties = {
-        "fps": vidcap.get(cv2.CAP_PROP_FPS)
+        "fps": int(vidcap.get(cv2.CAP_PROP_FPS)),
+
+        # Include full-video frame start/end dates
+        "start": 0,
+        "end": int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
     }
+
+    vidcap.release()
 
     return properties
 
