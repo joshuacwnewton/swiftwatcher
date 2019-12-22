@@ -67,7 +67,7 @@ class SegmentTracker:
         n_prev = self.get_cached_frame().get_num_segments()
 
         # Interpreting assignments is a bit hard to grasp, because
-        # "assignments" is a mapping of row indexes to column indexes,
+        # "assignments" are a mapping of row indexes to column indexes,
         # but those values aren't the same at the label of each segment.
         # (v - n_prev) accounts for the offset.
         prev_assignments = [(v - n_prev) for v in assignments[:n_prev]]
@@ -138,18 +138,18 @@ def calculate_angle_cost(segment_curr, segment_prev):
                             *      \
                               *    |  Motion path vector
                              *     \
-            Vector       |    o    V
-       between segments  V    .
+            Vector       |    o    V        . = current-frame segment
+       between segments  V    .             o = previous-frame segment
+                                            * = prior matched segments
 
-    Where * is a previously matched segment, o is the previous segment,
-    and . is the current segment. There is a low cost if the (o, .)
-    vector is similar to the (*, o) vector. (< 90 degrees)"""
+    There is a low cost if the (o, .) vector is similar to the (*, o)
+    vector. (i.e. <90 degrees)"""
 
     if len(segment_prev.segment_history) > 0:
         # Get the (x, y) coordinates of:
         #     -the current-frame segment
         #     -the previous-frame segment it's being compared to
-        #     -the initial segment in the chain of matched segments
+        #     -the first segment in the chain of prior matched segments
         curr_pos = segment_curr.centroid
         prev_pos = segment_prev.centroid
         initial_pos = segment_prev.segment_history[-1].centroid
@@ -174,7 +174,7 @@ def calculate_angle_cost(segment_curr, segment_prev):
         angle_cost = 2 ** (angle_difference - 90)
 
     else:
-        # Motion path vector doesn't exist, so use a default value
+        # No prior matched segments, so use a default value
         angle_cost = 1
 
     return angle_cost
