@@ -19,11 +19,15 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
     tracker = st.SegmentTracker(roi_mask)
 
     while queue.frames_processed < reader.total_frames:
+        # Fill queue with frames
         frames, frame_numbers, timestamps = reader.get_n_frames(n=queue.maxlen)
         queue.fill_queue(frames, frame_numbers, timestamps)
-        queue.preprocess_queue(crop_region, resize_dim)
-        queue.segment_queue()
 
+        # Process an entire queue at once
+        queue.preprocess_queue(crop_region, resize_dim)
+        queue.segment_queue()  # CPU processing bottleneck
+
+        # Pop frames off queue one-by-one and process them separately
         while not queue.is_empty():
             tracker.set_current_frame(queue.pop_frame())
             cost_matrix = tracker.formulate_cost_matrix()
