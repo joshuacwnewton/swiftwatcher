@@ -12,7 +12,7 @@ import swiftwatcher_refactor.image_processing.primary_algorithm as alg
 
 # Generate necessary input parameters for swift counting algorithm
 filepath, start, end = ui.parse_filepath_and_framerange()
-vio.validate_video_filepath(filepath)
+vio.validate_video_filepaths(filepath)
 properties = vio.get_video_properties(filepath)
 
 frame_dir = filepath.parent/filepath.stem/"frames"

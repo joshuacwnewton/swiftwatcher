@@ -7,7 +7,8 @@ import swiftwatcher_refactor.data_analysis.event_classification as ec
 
 
 def main():
-    video_filepaths = ui.select_video_files()
+    video_filepaths = ui.select_filepaths()
+    vio.validate_video_filepaths(video_filepaths)
 
     for video_filepath in video_filepaths:
         corners = ui.select_chimney_corners(video_filepath)
@@ -24,4 +25,6 @@ def main():
         parent_dir = video_filepath.parent / video_filepath.stem
         dio.dataframe_to_csv(df_events, parent_dir / "df_events.csv")
         dio.dataframe_to_csv(df_labels, parent_dir / "df_labels.csv")
+        dio.export_results(parent_dir, df_labels, properties["fps"],
+                           properties["start"], properties["end"])
 

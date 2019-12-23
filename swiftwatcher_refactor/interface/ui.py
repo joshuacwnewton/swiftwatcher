@@ -13,30 +13,25 @@ from tkinter import filedialog
 
 import cv2
 
-import swiftwatcher_refactor.io.video_io as vio
-
 
 ###############################################################################
 #                    FILE SELECTION FUNCTIONS BEGIN HERE                      #
 ###############################################################################
 
 
-def select_video_files():
+def select_filepaths():
     """Select files using tk gui and return their paths if valid."""
 
     filepaths, keep_selecting = [], True
 
     while keep_selecting:
-        filepaths = select_files_and_append(filepaths)
+        filepaths = gui_append_files(filepaths)
         keep_selecting = prompt_additional_selection(filepaths)
-
-    for filepath in filepaths:
-        vio.validate_video_filepath(filepath)
 
     return filepaths
 
 
-def select_files_and_append(existing_file_list):
+def gui_append_files(existing_file_list):
     """Select files using tk gui and append new files to passed list."""
 
     # See: https://stackoverflow.com/questions/1406145/
@@ -196,6 +191,7 @@ def status_update(frames_processed, total_frames):
         sys.stdout.write("\r[-]     {0}/{1} frames processed."
                          .format(frames_processed, total_frames))
         sys.stdout.flush()
+
 
 ###############################################################################
 #                    STATUS UPDATE FUNCTIONS BEGIN HERE                       #
