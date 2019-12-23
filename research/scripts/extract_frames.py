@@ -1,5 +1,5 @@
-import swiftwatcher_refactor.io.video_io as vio
-import swiftwatcher_refactor.io.ui as ui
+import swiftwatcher_refactor.interface.video_io as vio
+import swiftwatcher_refactor.interface.ui as ui
 import sys
 
 import argparse

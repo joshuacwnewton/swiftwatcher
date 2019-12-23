@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 from numpy.linalg import norm, svd
 
-import swiftwatcher_refactor.io.video_io as vio
+import swiftwatcher_refactor.interface.video_io as vio
 from scipy import ndimage
 from skimage import measure
 
