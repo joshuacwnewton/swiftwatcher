@@ -43,6 +43,7 @@ def create_empty_dataframe(fps, start, end):
 
     timestamps = pd.date_range(start=start_timestamp, end=end_timestamp,
                                periods=num_timestamps)
+    timestamps = timestamps.round(freq='us')
 
     # Create a Series of frame numbers which correspond to the timestamps
     framenumbers = np.array(range(start, end + 1))

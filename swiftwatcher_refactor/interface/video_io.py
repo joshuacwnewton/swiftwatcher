@@ -205,6 +205,7 @@ class FrameReader:
     def frame_number_to_timestamp(self, frame_number):
         total_s = frame_number / self.fps
         timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(total_s, 's')
+        timestamp = timestamp.round(freq='us')
 
         return timestamp
 
@@ -258,7 +259,11 @@ class VideoReader(cv2.VideoCapture):
         return frames, frame_numbers, timestamps
 
     def ms_to_ts(self, ms):
-        return pd.Timestamp("00:00:00.000") + pd.Timedelta(ms, 'ms')
+        timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(ms, 'ms')
+
+        timestamp = timestamp.round(freq='us')
+
+        return timestamp
 
 
 ###############################################################################
