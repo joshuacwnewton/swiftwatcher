@@ -152,16 +152,16 @@ def calculate_angle_cost(segment_curr, segment_prev):
         #     -the first segment in the chain of prior matched segments
         curr_pos = segment_curr.centroid
         prev_pos = segment_prev.centroid
-        initial_pos = segment_prev.segment_history[-1].centroid
+        initial_pos = segment_prev.segment_history[0].centroid
 
         # Calculate the angle of the vector of the existing motion path
-        del_y = prev_pos[0] - initial_pos[0]
-        del_x = prev_pos[1] - initial_pos[1]
+        del_y = initial_pos[0] - prev_pos[0]
+        del_x = initial_pos[1] - prev_pos[1]
         old_angle = math.degrees(math.atan2(del_y, -1*del_x))
 
         # Calculate the angle of the vector connecting the compared segments
-        del_y = curr_pos[0] - prev_pos[0]
-        del_x = curr_pos[1] - prev_pos[1]
+        del_y = prev_pos[0] - curr_pos[0]
+        del_x = prev_pos[1] - curr_pos[1]
         new_angle = math.degrees(math.atan2(del_y, -1*del_x))
 
         angle_difference = abs(new_angle - old_angle)
