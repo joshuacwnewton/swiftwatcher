@@ -11,20 +11,23 @@ def main():
     vio.validate_video_filepaths(video_filepaths)
 
     for video_filepath in video_filepaths:
+        # Initialize variables needed to execute the algorithm
         corners = ui.select_chimney_corners(video_filepath)
         crop_region, roi_mask, resize_dim = img.generate_regions(video_filepath,
                                                                  corners)
-        events = alg.swift_counting_algorithm(video_filepath,
-                                              crop_region, resize_dim, roi_mask)
-        df_events = ec.convert_events_to_dataframe(events, ["parent_frame_number",
-                                                            "parent_timestamp",
-                                                            "centroid"])
+        properties = vio.get_video_properties(video_filepath)
+
+        # Detect "swift entering chimney" events
+        events = alg.swift_counting_algorithm(video_filepath, crop_region,
+                                              resize_dim, roi_mask)
+        df_events = ec.convert_events_to_dataframe(events,
+                                                   ["parent_frame_number",
+                                                    "parent_timestamp",
+                                                    "centroid"])
         df_labels = ec.classify_events(df_events)
 
-        # Save results to unique test directory
+        # Save results to output directory
         parent_dir = video_filepath.parent / video_filepath.stem
-        dio.dataframe_to_csv(df_events, parent_dir / "df_events.csv")
-        dio.dataframe_to_csv(df_labels, parent_dir / "df_labels.csv")
         dio.export_results(parent_dir, df_labels, properties["fps"],
                            properties["start"], properties["end"])
 
