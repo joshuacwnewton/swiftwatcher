@@ -9,6 +9,33 @@ import numpy as np
 import pandas as pd
 
 
+def dataframe_from_csv(filepath):
+    dataframe = pd.read_csv(filepath)
+    dataframe["timestamp"] = pd.to_datetime(dataframe["timestamp"]).dt.round(freq='us')
+    dataframe.set_index(["timestamp", "framenumber"], inplace=True)
+
+    if "centroid" in dataframe:
+        dataframe = list_to_float(dataframe, "centroid")
+
+    return dataframe
+
+
+def list_to_float(dataframe, column):
+    def string_to_float(string_list):
+        test_result = string_list.replace(" ", "").replace("[", "").replace("]", "").split("),")
+        test_2 = [val.strip("()").split(",") for val in test_result]
+        test_3 = [[float(val) for val in tup] for tup in test_2]
+
+        return test_3
+
+    dataframe[column] = dataframe.apply(
+        lambda row: string_to_float(row[column]),
+        axis=1
+    )
+
+    return dataframe
+
+
 def dataframe_to_csv(dataframe, output_filepath):
     if not output_filepath.parent.exists():
         Path.mkdir(output_filepath.parent, parents=True)
@@ -21,9 +48,9 @@ def export_results(save_directory, df_labels, fps, start, end):
     for output, then save results to csv files."""
 
     print("[-]     Saving results to csv files...")
-    empty = create_empty_dataframe(fps, start, end)
+    df_empty = create_empty_dataframe(fps, start, end)
     predicted, rejected = split_labeled_events(df_labels)
-    total, minutes, seconds, exact = fill_and_group(empty, predicted, rejected)
+    total, minutes, seconds, exact = fill_and_group(df_empty, predicted, rejected)
     save_to_csv(save_directory, total, minutes, seconds, exact)
 
     return total
