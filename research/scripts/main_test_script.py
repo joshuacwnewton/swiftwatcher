@@ -36,7 +36,6 @@ test_dir = vio.generate_test_dir(filepath.parent/filepath.stem/"tests")
 dio.dataframe_to_csv(df_events, test_dir/"df_events.csv")
 dio.dataframe_to_csv(df_labels, test_dir/"df_labels.csv")
 
-# for label_dataframe in label_dataframes:
-#     dio.dataframe_to_csv(test_dir, label_dataframe)
+dio.export_results(test_dir, df_labels, properties["fps"], start, end)
 
 exit(0)
