@@ -172,6 +172,20 @@ def get_corners_from_file(filepath):
     return video_attributes["corners"]
 
 
+def save_corners_to_file(filepath):
+    """Serialize the corners associated with """
+    base_dir = filepath.parent / filepath.stem
+    if not base_dir.exists():
+        Path.mkdir(base_dir, parents=True)
+
+    config_dict = {
+        "corners": select_chimney_corners(filepath)
+    }
+
+    with open(fspath(base_dir / "attributes.json"), 'w') as fp:
+        json.dump(config_dict, fp)
+
+
 ###############################################################################
 #                 CLI ARGUMENT PARSING FUNCTIONS BEGIN HERE                   #
 ###############################################################################

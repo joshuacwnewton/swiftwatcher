@@ -1,5 +1,5 @@
-from utils.video_io import gui_select_files, create_config_file
+import swiftwatcher_refactor.interface.ui as ui
 
-filepaths = gui_select_files()
+filepaths = ui.select_filepaths()
 for filepath in filepaths:
-    create_config_file(filepath)
+    ui.save_corners_to_file(filepath)
