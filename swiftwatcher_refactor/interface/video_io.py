@@ -277,5 +277,3 @@ class VideoReader(cv2.VideoCapture):
         timestamp = timestamp.round(freq='us')
 
         return timestamp
-
-

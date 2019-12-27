@@ -12,9 +12,14 @@ import swiftwatcher_refactor.image_processing.primary_algorithm as alg
 
 
 def main():
-    # Generate necessary input parameters for swift counting algorithm
+    # Parse and validate input arguments
     filepath, start, end = ui.parse_filepath_and_framerange()
+    output_dir = filepath.parent/filepath.stem
+    frame_dir = output_dir/"frames"
     vio.validate_video_filepaths(filepath)
+    vio.validate_frame_range(frame_dir, start, end)
+
+    # Use input arguments to get video attributes necessary for algorithm
     properties = vio.get_video_properties(filepath)
     corners = ui.get_corners_from_file(output_dir/"attributes.json")
     crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
