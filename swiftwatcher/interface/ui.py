@@ -239,3 +239,6 @@ def frames_processed_status(frames_processed, total_frames):
         frames_processed, total_frames))
     sys.stdout.flush()
 
+    if frames_processed >= total_frames:
+        sys.stdout.write("\n")
+
