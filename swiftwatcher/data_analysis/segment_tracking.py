@@ -18,7 +18,10 @@ class SegmentTracker:
     """A class which stores two segmented frames, and provides methods
     for matching the segments between two frames. When a new frame is
     added as "frame 1", the previous frame 1 becomes frame 2, allowing
-    for tracking through longer sequences of frames."""
+    for tracking through longer sequences of frames.
+
+    Functions that explicitly use frame segments are treated as class
+    methods, while more generic functions are stored separately."""
 
     def __init__(self, roi_mask):
         self.current_frame = None
@@ -62,7 +65,7 @@ class SegmentTracker:
             (Disappeared and appeared respectively.)
         -[ ]: Impossible spaces. (These are filled with values such that
             it is impossible for them to be chosen by the matching
-            algorithm.
+            algorithm.)
 
         By using the Hungarian algorithm, this matrix is solved to give
         an ideal outcome (match, appear, disappear) for each segment in
@@ -98,17 +101,10 @@ class SegmentTracker:
 
         return cost_matrix
 
-    def apply_hungarian_algorithm(self, cost_matrix):
-        """Apply the Hungarian algorithm to find an optimal set of
-        matches, as outlined in formulate_cost_matrix."""
-
-        _, assignments = linear_sum_assignment(cost_matrix)
-
-        return assignments
-
-    def interpret_assignments(self, assignments):
+    def store_assignments(self, assignments):
         """Take the output of "linear_sum_assignment" and convert it
-        into human-readable labels (match, disappear, appear)."""
+        into human-readable labels (match, disappear, appear), then
+        store those assignments in the segment objects themselves."""
 
         n_prev = self.get_cached_frame().get_num_segments()
 
@@ -164,18 +160,27 @@ class SegmentTracker:
 
         for segment in self.cached_frame.segments:
             if segment.status == "D":
-                if len(segment.segment_history) >= 2:
-                    pos = segment.centroid
-                    if self.roi_mask[int(pos[0]), int(pos[1])] == 255:
-                        event_motion_path = segment.segment_history
-                        event_motion_path.append(segment)
-                        self.detected_events.append(event_motion_path)
+                # Condition 1
+                pos = segment.centroid
+                if self.roi_mask[int(pos[0]), int(pos[1])] != 255:
+                    continue
+
+                # Condition 2
+                if len(segment.segment_history) < 1:
+                    continue
+
+                # Both conditions met, so append segment to its own history and
+                # store the motion path within the list of detected events
+                event_motion_path = segment.segment_history
+                event_motion_path.append(segment)
+                self.detected_events.append(event_motion_path)
 
 
 def intialize_cost_matrix(n_curr, n_prev):
-    """Initialize a cost matrix with the size of the total segments
-    across both frames. Values set to slightly larger than the default
-    "no match" value."""
+    """Initialize a square cost matrix with size equal to the total
+    segments across both frames. Values set to slightly larger than the
+    default "no match" value."""
+
     n_total = n_curr + n_prev
 
     return np.ones((n_total, n_total)) + sys.float_info.epsilon
@@ -247,3 +252,12 @@ def calculate_nonmatch_cost():
     default value of 1."""
 
     return 1
+
+
+def apply_hungarian_algorithm(cost_matrix):
+    """Apply the Hungarian algorithm to find an optimal set of
+    matches, as outlined in formulate_cost_matrix."""
+
+    _, assignments = linear_sum_assignment(cost_matrix)
+
+    return assignments

@@ -36,8 +36,7 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
         while not queue.is_empty():
             tracker.set_current_frame(queue.pop_frame())
             cost_matrix = tracker.formulate_cost_matrix()
-            assignments = tracker.apply_hungarian_algorithm(cost_matrix)
-            tracker.interpret_assignments(assignments)
+            tracker.store_assignments(st.apply_hungarian_algorithm(cost_matrix))
             tracker.link_matching_segments()
             tracker.check_for_events()
             tracker.cache_current_frame()
