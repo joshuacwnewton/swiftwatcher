@@ -1,7 +1,7 @@
-import swiftwatcher_refactor.image_processing.data_structures as ds
-import swiftwatcher_refactor.interface.video_io as vio
-import swiftwatcher_refactor.data_analysis.segment_tracking as st
-import swiftwatcher_refactor.interface.ui as ui
+import swiftwatcher.image_processing.data_structures as ds
+import swiftwatcher.interface.video_io as vio
+import swiftwatcher.data_analysis.segment_tracking as st
+import swiftwatcher.interface.ui as ui
 import copy
 
 

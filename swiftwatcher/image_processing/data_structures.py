@@ -7,7 +7,7 @@
 
 from collections import OrderedDict, deque
 
-import swiftwatcher_refactor.image_processing.image_filtering as img
+import swiftwatcher.image_processing.image_filtering as img
 
 
 class Segment:

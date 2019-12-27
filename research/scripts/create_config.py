@@ -1,4 +1,4 @@
-import swiftwatcher_refactor.interface.ui as ui
+import swiftwatcher.interface.ui as ui
 
 filepaths = ui.select_filepaths()
 for filepath in filepaths:

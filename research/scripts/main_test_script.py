@@ -3,12 +3,12 @@
     experimentation functionality not found in base project.
 """
 
-import swiftwatcher_refactor.interface.ui as ui
-import swiftwatcher_refactor.interface.video_io as vio
-import swiftwatcher_refactor.interface.data_io as dio
-import swiftwatcher_refactor.image_processing.image_filtering as img
-import swiftwatcher_refactor.data_analysis.event_classification as ec
-import swiftwatcher_refactor.image_processing.primary_algorithm as alg
+import swiftwatcher.interface.ui as ui
+import swiftwatcher.interface.video_io as vio
+import swiftwatcher.interface.data_io as dio
+import swiftwatcher.image_processing.image_filtering as img
+import swiftwatcher.data_analysis.event_classification as ec
+import swiftwatcher.image_processing.primary_algorithm as alg
 
 
 def main():

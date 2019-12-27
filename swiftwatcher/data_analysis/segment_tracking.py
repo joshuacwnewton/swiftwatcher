@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 
-import swiftwatcher_refactor.image_processing.data_structures as ds
+import swiftwatcher.image_processing.data_structures as ds
 
 
 class SegmentTracker:
