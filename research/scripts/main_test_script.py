@@ -16,11 +16,7 @@ def main():
     filepath, start, end = ui.parse_filepath_and_framerange()
     vio.validate_video_filepaths(filepath)
     properties = vio.get_video_properties(filepath)
-
-    frame_dir = filepath.parent/filepath.stem/"frames"
-    vio.validate_frame_range(frame_dir, start, end)
-
-    corners = ui.get_corners_from_file(frame_dir)
+    corners = ui.get_corners_from_file(output_dir/"attributes.json")
     crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 
     # Apply algorithm to detect events, then classify detected events

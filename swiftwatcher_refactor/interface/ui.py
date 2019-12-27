@@ -155,11 +155,11 @@ def select_chimney_corners(filepath):
     return corners
 
 
-def get_corners_from_file(parent_directory):
+def get_corners_from_file(filepath):
     """Non-GUI alternative to select_video_corners to save time when
     running experiments."""
 
-    with open(str(parent_directory / "attributes.json")) as json_file:
+    with open(str(filepath)) as json_file:
         video_attributes = json.load(json_file)
 
         # Convert from string to individual integer values
