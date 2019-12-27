@@ -6,10 +6,14 @@ import swiftwatcher_refactor.interface.ui as ui
 
 def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
                              fps=None, start=0, end=-1, testing=False):
-    """"""
+    """Apply individual stages of the multi-stage swift counting
+    algorithm to detect potential occurrences of swifts entering
+    chimneys."""
 
     ui.start_status(path.name)
 
+    # Experiments will use subsections of the video (denoted by start/end)
+    # read from image files, rather than using the entire video file.
     if testing:
         reader = vio.FrameReader(path, fps, start, end)
     else:
@@ -19,15 +23,15 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
     tracker = st.SegmentTracker(roi_mask)
 
     while queue.frames_processed < reader.total_frames:
-        # Fill queue with frames
+        # Push frames into queue until full
         frames, frame_numbers, timestamps = reader.get_n_frames(n=queue.maxlen)
-        queue.fill_queue(frames, frame_numbers, timestamps)
+        queue.push_list_of_frames(frames, frame_numbers, timestamps)
 
         # Process an entire queue at once
         queue.preprocess_queue(crop_region, resize_dim)
         queue.segment_queue()  # CPU processing bottleneck
 
-        # Pop frames off queue one-by-one and process them separately
+        # Pop frames off queue one-by-one and analyse each separately
         while not queue.is_empty():
             tracker.set_current_frame(queue.pop_frame())
             cost_matrix = tracker.formulate_cost_matrix()

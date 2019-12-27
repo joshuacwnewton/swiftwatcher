@@ -45,6 +45,10 @@ def convert_events_to_dataframe(event_list, attributes_to_keep):
 
 
 def classify_events(df_events):
+    """Take detected events and use their features to classify
+    whether those events should truly be counted as a swift entering
+    the chimney."""
+
     df_features = generate_angle_features(df_events)
     df_features_filtered = filter_false_angles(df_features)
     df_labels = generate_classifications(df_features_filtered)
@@ -69,6 +73,9 @@ def generate_angle_features(df_events):
 
 
 def compute_angle(centroid_list):
+    """Compute the angle between the first and last coordinate within
+    the list."""
+
     del_y = centroid_list[0][0] - centroid_list[-1][0]
     del_x = -1 * (centroid_list[0][1] - centroid_list[-1][1])
     angle = math.degrees(math.atan2(del_y, del_x))
@@ -77,6 +84,13 @@ def compute_angle(centroid_list):
 
 
 def filter_false_angles(df_features):
+    """Remove angles that are exact multiples of 15 degrees. These
+    angles almost never occur naturally due to the size and complexity
+    of bird segments.
+
+    This is a cheap solution that could be improved by filtering out
+    unnatural segments themselves."""
+
     # Correct false positive errors from small (3x3 opened) non-bird segments
     index_to_drop = df_features[(df_features["angle"] % 15 == 0)].index
     if not index_to_drop.empty:

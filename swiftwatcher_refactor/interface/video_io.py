@@ -7,9 +7,6 @@ from pathlib import Path
 from glob import glob
 import re
 
-import json
-from datetime import date
-
 import pandas as pd
 import numpy as np
 import cv2
@@ -83,6 +80,9 @@ def validate_frame_order(start, end):
 
 
 def validate_frame_file(frame_dir, frame_number):
+    """Checks if a png file with 'frame_number' in the filename exists
+    in a subfolder of 'frame_dir'."""
+
     if not glob(str(frame_dir/"*"/("*_"+str(frame_number)+"_*"+".png"))):
         sys.stderr.write("Error: Frame {} does not point to valid file."
                          .format(frame_number))
@@ -124,6 +124,9 @@ def get_video_properties(filepath):
 
 
 def get_first_video_frame(filepath):
+    """Fetch the first video frame from a video file (for use with e.g.
+    determining an ROI for a static video feed.)"""
+
     vidcap = cv2.VideoCapture(str(filepath))
     retval, frame = vidcap.read()
     vidcap.release()
@@ -131,32 +134,24 @@ def get_first_video_frame(filepath):
     return frame
 
 
-def get_frame_from_file(path, frame_number):
-    """Generic function for reading a numbered frame from a file.
-    Assumes that frames are stored within a subfolder. Ideally, should
-    be rewritten w/ regular expressions to make subfolders optional."""
-
-    frame_list = glob(str(path/"*"/("*_" + str(frame_number) + "_*.png")))
-    frame = cv2.imread(frame_list[0])
-
-    return frame
-
-
 class FrameReader:
-    """An alternative to OpenCV's VideoCapture class. Fetches frames
-    from image files rather than a video file. This allows tests
-    to be run on specific sequences of frames if they're extracted
-    ahead of time, which is useful for hours-long video files."""
+    """Fetches frames from image files, rather than directly from a
+    video file like OpenCV's VideoCapture class would. This avoids the
+    limitation of having to process entire videos from the beginning.
+    However, this requires the frames to have been extracted beforehand.
+    Uses custom Frame objects defined in data_structures.py."""
 
     def __init__(self, frame_dir, fps, start, end):
+        # Prefetch a mapping from frame numbers to frame filepaths
         self.frame_dir = frame_dir
         self.frame_path_list = glob(str(self.frame_dir/"**"/"*.png"),
                                     recursive=True)
         p = re.compile(r'.*_(\d+)_.*')
         self.frame_path_dict = {m.group(1): m.group(0) for m in
                                 [p.match(s) for s in self.frame_path_list]}
-        self.fps = fps
 
+        # Store video properties
+        self.fps = fps
         self.start_frame = start
         self.end_frame = end
         self.total_frames = end - start + 1
@@ -169,6 +164,9 @@ class FrameReader:
         return self.frame_path_dict[str(frame_number)]
 
     def get_frame(self):
+        """Fetch frame from file if there are frames left, or a dummy
+        file if there are no frames left."""
+
         if self.next_frame_number <= self.end_frame:
             frame_number = self.next_frame_number
             timestamp = self.frame_number_to_timestamp(frame_number)
@@ -192,6 +190,9 @@ class FrameReader:
         return frame, frame_number, timestamp
 
     def get_n_frames(self, n):
+        """Fetch frames from files in batches of N, with return values
+        put into individual lists."""
+
         frames, frame_numbers, timestamps = [], [], []
         for _ in range(n):
             frame, frame_number, timestamp = self.get_frame()
@@ -203,6 +204,9 @@ class FrameReader:
         return frames, frame_numbers, timestamps
 
     def frame_number_to_timestamp(self, frame_number):
+        """Simple conversion to get timestamp from frame number.
+        Dependent on constant FPS assumption for source video file."""
+
         total_s = frame_number / self.fps
         timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(total_s, 's')
         timestamp = timestamp.round(freq='us')
@@ -211,6 +215,10 @@ class FrameReader:
 
 
 class VideoReader(cv2.VideoCapture):
+    """Extends OpenCV's built-in VideoCapture class with additional
+    methods for batch processing, error handling, etc. Uses custom Frame
+    objects defined in data_structures.py."""
+
     def __init__(self, video_filepath):
         super(VideoReader, self).__init__(str(video_filepath))
 
@@ -222,6 +230,8 @@ class VideoReader(cv2.VideoCapture):
         self.read_errors = 0
 
     def get_frame(self):
+        """Fetch frame from video if there are frames left, or a dummy
+        file if there are no frames left."""
         if self.get(cv2.CAP_PROP_POS_FRAMES) <= self.total_frames:
             frame_number = int(self.get(cv2.CAP_PROP_POS_FRAMES))
             timestamp = self.ms_to_ts(self.get(cv2.CAP_PROP_POS_MSEC))
@@ -248,6 +258,9 @@ class VideoReader(cv2.VideoCapture):
         return frame, frame_number, timestamp
 
     def get_n_frames(self, n):
+        """Fetch frames from video in batches of N, with return values
+        put into individual lists."""
+
         frames, frame_numbers, timestamps = [], [], []
         for _ in range(n):
             frame, frame_number, timestamp = self.get_frame()
@@ -266,46 +279,3 @@ class VideoReader(cv2.VideoCapture):
         return timestamp
 
 
-###############################################################################
-#               RESEARCH EXPERIMENTATION FUNCTIONS BEGIN HERE                 #
-###############################################################################
-
-
-def get_corners_from_file(parent_directory):
-    """Non-GUI alternative to get_video_attributes for time saving."""
-
-    with open(str(parent_directory / "attributes.json")) as json_file:
-        video_attributes = json.load(json_file)
-
-        # Convert from string to individual integer values
-        video_attributes["corners"] \
-            = [(int(video_attributes["corners"][0][0]),
-                int(video_attributes["corners"][0][1])),
-               (int(video_attributes["corners"][1][0]),
-                int(video_attributes["corners"][1][1]))]
-
-    return video_attributes["corners"]
-
-
-def generate_test_dir(parent_dir):
-    """Generate test directory based on the following scheme:
-        parent_dir/<today's date>/<ID of last test + 1>
-
-    If no test has been run today, set ID to 1."""
-
-    # Set base testing directory to today's date
-    date_dir = parent_dir / str(date.today())
-
-    if not date_dir.exists():
-        # Date directory doesnt exist, so must be first test run today
-        test_dir = date_dir / "1"
-
-    else:
-        # Fetch names of all subdirectories in date_dir, then get the max
-        last_test_id = max([int(path.stem) for path in
-            [Path(path_str) for path_str in glob(str(date_dir / "*/"))]])
-
-        # Set test directory to last test incremented by one
-        test_dir = date_dir / str(last_test_id + 1)
-
-    return test_dir

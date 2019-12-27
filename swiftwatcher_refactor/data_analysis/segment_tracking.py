@@ -15,6 +15,11 @@ import swiftwatcher_refactor.image_processing.data_structures as ds
 
 
 class SegmentTracker:
+    """A class which stores two segmented frames, and provides methods
+    for matching the segments between two frames. When a new frame is
+    added as "frame 1", the previous frame 1 becomes frame 2, allowing
+    for tracking through longer sequences of frames."""
+
     def __init__(self, roi_mask):
         self.current_frame = None
         self.cached_frame = ds.Frame()  # Empty frame object
@@ -36,6 +41,41 @@ class SegmentTracker:
         self.cached_frame = self.current_frame
 
     def formulate_cost_matrix(self):
+        """Formulate a matrix containing costs for every combination
+        of segments within two frames. Example: Matching 4 segments in
+        the current frame to 3 segments in the previous frame.
+
+                                  current
+                             frame's segments
+                                1  2  3  4    _
+        previous   1  [D][ ][ ][!][!][!][!]    |
+         frame's   2  [ ][D][ ][!][!][!][!]    |
+        segments   3  [ ][ ][D][!][!][!][!]    |
+                      [ ][ ][ ][A][ ][ ][ ]    |-- Cost Matrix
+                      [ ][ ][ ][ ][A][ ][ ]    |
+                      [ ][ ][ ][ ][ ][A][ ]    |
+                      [ ][ ][ ][ ][ ][ ][A]   _|
+
+        -[!]: Costs associated with two segments matching. (More likely
+            matches have lower associated costs.)
+        -[D]/[A]: Costs associated with two segments having no match.
+            (Disappeared and appeared respectively.)
+        -[ ]: Impossible spaces. (These are filled with values such that
+            it is impossible for them to be chosen by the matching
+            algorithm.
+
+        By using the Hungarian algorithm, this matrix is solved to give
+        an ideal outcome (match, appear, disappear) for each segment in
+        both frames. The total sum of selected costs will be the minimum
+        across all possible combinations of matches, as per the
+        Assignment Problem. An example set of matches could be:
+
+            -Seg #1 (prev) -> Seg #1 (curr)         (! value selected),
+                              Seg #2 (curr) appears (A value selected)
+            -Seg #2 (prev) -> Seg #3 (curr)         (! value selected),
+            -Seg #3 (prev) -> Seg #4 (curr)         (! value selected),
+        """
+
         current_frame = self.get_current_frame()
         previous_frame = self.get_cached_frame()
         n_curr = current_frame.get_num_segments()
@@ -59,11 +99,17 @@ class SegmentTracker:
         return cost_matrix
 
     def apply_hungarian_algorithm(self, cost_matrix):
+        """Apply the Hungarian algorithm to find an optimal set of
+        matches, as outlined in formulate_cost_matrix."""
+
         _, assignments = linear_sum_assignment(cost_matrix)
 
         return assignments
 
     def interpret_assignments(self, assignments):
+        """Take the output of "linear_sum_assignment" and convert it
+        into human-readable labels (match, disappear, appear)."""
+
         n_prev = self.get_cached_frame().get_num_segments()
 
         # Interpreting assignments is a bit hard to grasp, because
@@ -89,7 +135,11 @@ class SegmentTracker:
                 self.current_frame.segments[curr_label].status = "A"
 
     def link_matching_segments(self):
+        """Transfer the segment history from a previous segment to a
+        matched segment in a subsequent frame."""
+
         for (i, segment) in enumerate(self.current_frame.segments):
+            # If it hasn't "A"ppeared, then it has a match
             if segment.status != "A":
                 matched_segment = self.cached_frame.segments[segment.status]
 
@@ -106,6 +156,12 @@ class SegmentTracker:
                 self.current_frame.segments[i].segment_history = new_history
 
     def check_for_events(self):
+        """See if any segments that have no match (have disappeared
+        from frame) meet the conditions to be considered an event:
+            1. Segment must have disappeared within chimney ROI
+            2. Segment must have been previously matched with another
+            segment."""
+
         for segment in self.cached_frame.segments:
             if segment.status == "D":
                 if len(segment.segment_history) >= 2:
@@ -117,12 +173,18 @@ class SegmentTracker:
 
 
 def intialize_cost_matrix(n_curr, n_prev):
+    """Initialize a cost matrix with the size of the total segments
+    across both frames. Values set to slightly larger than the default
+    "no match" value."""
     n_total = n_curr + n_prev
 
     return np.ones((n_total, n_total)) + sys.float_info.epsilon
 
 
 def calculate_distance_cost(segment_curr, segment_prev):
+    """Map the distance between segments into a cost for the cost
+    matrix. Higher distances mean larger costs."""
+
     dist = distance.euclidean(segment_prev.centroid,
                               segment_curr.centroid)
     dist_cost = 2 ** (dist - 25)
@@ -181,4 +243,7 @@ def calculate_angle_cost(segment_curr, segment_prev):
 
 
 def calculate_nonmatch_cost():
+    """Current costs for segment pairs not matching is set to a
+    default value of 1."""
+
     return 1

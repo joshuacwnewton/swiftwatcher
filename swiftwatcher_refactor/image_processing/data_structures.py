@@ -59,9 +59,8 @@ class Frame:
 
 
 class FrameQueue(deque):
-    """Class which extends Python's stdlib queue class, adding methods
-    specifically for handling Frame objects. (Getters, setters, and
-    image processing methods)."""
+    """Class which extends Python's collections' deque class, adding
+    methods specifically for handling Frame objects."""
 
     def __init__(self, queue_size=21):
         deque.__init__(self, maxlen=queue_size)
@@ -80,6 +79,12 @@ class FrameQueue(deque):
         super(FrameQueue, self).appendleft(new_frame)
         self.frames_read += 1
 
+    def push_list_of_frames(self, frame_list, frame_number_list,
+                            timestamp_list):
+        for frame, frame_number, timestamp \
+                in zip(frame_list, frame_number_list, timestamp_list):
+            self.push_frame(frame, frame_number, timestamp)
+
     def pop_frame(self):
         popped_frame = super(FrameQueue, self).pop()
 
@@ -88,16 +93,11 @@ class FrameQueue(deque):
 
         return popped_frame
 
-    def fill_queue(self, frame_list, frame_number_list, timestamp_list):
-        for frame, frame_number, timestamp \
-                in zip(frame_list, frame_number_list, timestamp_list):
-            self.push_frame(frame, frame_number, timestamp)
-
-    def process_queue(self, processed_frame_list, process_name):
+    def store_processed_queue(self, processed_frame_list, process_name):
         for pos, frame in enumerate(processed_frame_list):
             self[pos].processed_frames[process_name] = frame
 
-    def store_segments_queue(self, regionprops_lists):
+    def store_segmented_queue(self, regionprops_lists):
         for pos, regionprops_list in enumerate(regionprops_lists):
             self[pos].set_segments(regionprops_list)
 
@@ -113,38 +113,44 @@ class FrameQueue(deque):
                 for frame_obj in self]
 
     def preprocess_queue(self, crop_region, resize_dim):
+        """Apply image filtering methods to preprocess every frame in
+        queue, storing every stage individually."""
+
         grayscale_frames = [img.convert_grayscale(frame)
                             for frame in self.get_queue()]
-        self.process_queue(grayscale_frames, "grayscale")
+        self.store_processed_queue(grayscale_frames, "grayscale")
 
         cropped_frames = [img.crop_frame(frame, crop_region)
                           for frame in self.get_last_processed_queue()]
-        self.process_queue(cropped_frames, "crop")
+        self.store_processed_queue(cropped_frames, "crop")
 
         preprocessed_frames = [img.resize_frame(frame, resize_dim)
                                for frame in self.get_last_processed_queue()]
-        self.process_queue(preprocessed_frames, "resize")
+        self.store_processed_queue(preprocessed_frames, "resize")
 
     def segment_queue(self):
+        """Apply image filtering methods to segment every frame in
+        queue, storing every stage individually."""
+
         rpca_frames = img.rpca(self.get_last_processed_queue())
-        self.process_queue(rpca_frames, "RPCA")
+        self.store_processed_queue(rpca_frames, "RPCA")
 
         bilateral_frames = [img.bilateral_blur(frame, 7, 15, 1)
                             for frame in self.get_last_processed_queue()]
-        self.process_queue(bilateral_frames, "bilateral")
+        self.store_processed_queue(bilateral_frames, "bilateral")
 
         thresh_frames = [img.thresh_to_zero(frame, 15)
                          for frame in self.get_last_processed_queue()]
-        self.process_queue(thresh_frames, "thresh_15")
+        self.store_processed_queue(thresh_frames, "thresh_15")
 
         opened_frames = [img.grayscale_opening(frame, (3, 3))
                          for frame in self.get_last_processed_queue()]
-        self.process_queue(opened_frames, "opened")
+        self.store_processed_queue(opened_frames, "opened")
 
         labeled_frames = [img.cc_labeling(frame, 4)
                           for frame in self.get_last_processed_queue()]
-        self.process_queue(labeled_frames, "cc_labeling")
+        self.store_processed_queue(labeled_frames, "cc_labeling")
 
         regionprops_lists = [img.get_segment_properties(frame)
                              for frame in self.get_last_processed_queue()]
-        self.store_segments_queue(regionprops_lists)
+        self.store_segmented_queue(regionprops_lists)

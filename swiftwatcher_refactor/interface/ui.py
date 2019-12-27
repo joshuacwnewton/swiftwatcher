@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import filedialog
 
 import cv2
+import json
 
 
 ###############################################################################
@@ -152,6 +153,23 @@ def select_chimney_corners(filepath):
     cv2.destroyAllWindows()
 
     return corners
+
+
+def get_corners_from_file(parent_directory):
+    """Non-GUI alternative to select_video_corners to save time when
+    running experiments."""
+
+    with open(str(parent_directory / "attributes.json")) as json_file:
+        video_attributes = json.load(json_file)
+
+        # Convert from string to individual integer values
+        video_attributes["corners"] \
+            = [(int(video_attributes["corners"][0][0]),
+                int(video_attributes["corners"][0][1])),
+               (int(video_attributes["corners"][1][0]),
+                int(video_attributes["corners"][1][1]))]
+
+    return video_attributes["corners"]
 
 
 ###############################################################################

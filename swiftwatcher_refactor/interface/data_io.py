@@ -4,43 +4,16 @@
 """
 
 from pathlib import Path
+from glob import glob
+from datetime import date
 
 import numpy as np
 import pandas as pd
 
 
-def dataframe_from_csv(filepath):
-    dataframe = pd.read_csv(filepath)
-    dataframe["timestamp"] = pd.to_datetime(dataframe["timestamp"]).dt.round(freq='us')
-    dataframe.set_index(["timestamp", "framenumber"], inplace=True)
-
-    if "centroid" in dataframe:
-        dataframe = list_to_float(dataframe, "centroid")
-
-    return dataframe
-
-
-def list_to_float(dataframe, column):
-    def string_to_float(string_list):
-        test_result = string_list.replace(" ", "").replace("[", "").replace("]", "").split("),")
-        test_2 = [val.strip("()").split(",") for val in test_result]
-        test_3 = [[float(val) for val in tup] for tup in test_2]
-
-        return test_3
-
-    dataframe[column] = dataframe.apply(
-        lambda row: string_to_float(row[column]),
-        axis=1
-    )
-
-    return dataframe
-
-
-def dataframe_to_csv(dataframe, output_filepath):
-    if not output_filepath.parent.exists():
-        Path.mkdir(output_filepath.parent, parents=True)
-
-    dataframe.to_csv(str(output_filepath))
+###############################################################################
+#                        RESULTS EXPORTING BEGINS HERE                        #
+###############################################################################
 
 
 def export_results(save_directory, df_labels, fps, start, end):
@@ -50,7 +23,8 @@ def export_results(save_directory, df_labels, fps, start, end):
     print("[-]     Saving results to csv files...")
     df_empty = create_empty_dataframe(fps, start, end)
     predicted, rejected = split_labeled_events(df_labels)
-    total, minutes, seconds, exact = fill_and_group(df_empty, predicted, rejected)
+    total, minutes, seconds, exact = fill_and_group(df_empty,
+                                                    predicted, rejected)
     save_to_csv(save_directory, total, minutes, seconds, exact)
 
     return total
@@ -159,3 +133,82 @@ def save_to_csv(save_directory, count, df_minutes, df_seconds, df_exact):
     for df_name, df in dfs.items():
         df.to_csv(str(save_directory/"{0}-swifts_{1}.csv"
                                      .format(count, df_name)))
+
+
+###############################################################################
+#               RESEARCH EXPERIMENTATION FUNCTIONS BEGIN HERE                 #
+###############################################################################
+
+
+def dataframe_to_csv(dataframe, output_filepath):
+    """Export pandas dataframe directly as csv file."""
+
+    if not output_filepath.parent.exists():
+        Path.mkdir(output_filepath.parent, parents=True)
+
+    dataframe.to_csv(str(output_filepath))
+
+
+def dataframe_from_csv(filepath):
+    """Load pandas datafrmae directly from csv file. Calls method to
+    restore proper datatype of certain fields (e.g. a list of coordinate
+    tuples)"""
+
+    dataframe = pd.read_csv(filepath)
+    dataframe["timestamp"] = pd.to_datetime(dataframe["timestamp"]).dt.round(freq='us')
+    dataframe.set_index(["timestamp", "framenumber"], inplace=True)
+
+    if "centroid" in dataframe:
+        dataframe = list_to_float(dataframe, "centroid")
+
+    return dataframe
+
+
+def list_to_float(dataframe, column):
+    """Applies a conversion function to a specific column in dataframe
+    for converting a string to a list of float tuples."""
+
+    def string_to_float(full_string):
+        # Full string "[(_,_), (_,_)]" --> Condensed string "(_,_),(_,_)"
+        condensed_string = \
+            full_string.replace(" ", "").replace("[", "").replace("]", "")
+
+        # --> List of strings ["_,_", "_,_"]
+        list_of_strings = condensed_string.strip("()").split("),(")
+
+        # --> List of lists of strings [["_", "_"], ["_"," _"]]
+        list_of_str_lists = [val.split(",") for val in list_of_strings]
+
+        # --> List of lists of floats [[_, _], [_, _]
+        return [[float(val) for val in l] for l in list_of_str_lists]
+
+    dataframe[column] = dataframe.apply(
+        lambda row: string_to_float(row[column]),
+        axis=1
+    )
+
+    return dataframe
+
+
+def generate_test_dir(parent_dir):
+    """Generate test directory based on the following scheme:
+        parent_dir/<today's date>/<ID of last test + 1>
+
+    If no test has been run today, set ID to 1."""
+
+    # Set base testing directory to today's date
+    date_dir = parent_dir / str(date.today())
+
+    if not date_dir.exists():
+        # Date directory doesnt exist, so must be first test run today
+        test_dir = date_dir / "1"
+
+    else:
+        # Fetch names of all subdirectories in date_dir, then get the max
+        last_test_id = max([int(path.stem) for path in
+            [Path(path_str) for path_str in glob(str(date_dir / "*/"))]])
+
+        # Set test directory to last test incremented by one
+        test_dir = date_dir / str(last_test_id + 1)
+
+    return test_dir

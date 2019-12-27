@@ -12,12 +12,13 @@ def main():
 
     for video_filepath in video_filepaths:
         # Initialize variables needed to execute the algorithm
-        corners = ui.select_chimney_corners(video_filepath)
-        crop_region, roi_mask, resize_dim = img.generate_regions(video_filepath,
-                                                                 corners)
+        parent_dir = video_filepath.parent / video_filepath.stem
         properties = vio.get_video_properties(video_filepath)
+        corners = ui.select_chimney_corners(video_filepath)
+        crop_region, roi_mask, resize_dim \
+            = img.generate_regions(video_filepath, corners)
 
-        # Detect "swift entering chimney" events
+        # Detect frames which contain "swifts entering chimney"
         events = alg.swift_counting_algorithm(video_filepath, crop_region,
                                               resize_dim, roi_mask)
         df_events = ec.convert_events_to_dataframe(events,
@@ -27,7 +28,9 @@ def main():
         df_labels = ec.classify_events(df_events)
 
         # Save results to output directory
-        parent_dir = video_filepath.parent / video_filepath.stem
         dio.export_results(parent_dir, df_labels, properties["fps"],
                            properties["start"], properties["end"])
 
+
+if __name__ == "__main__":
+    main()
