@@ -71,9 +71,8 @@ counts are included for transparency.
 
 ## Links
 
-An in-progress research paper will linked shortly. For more information
-about the theoretical ideas behind this approach, be sure to check back
-soon.
+A research paper which describes the theoretical ideas behind the 
+approach can be found [at this link](data/SwiftWatcher_Final-Report_Newton-Joshua-pages-deleted.pdf)
 
 ## License
 
