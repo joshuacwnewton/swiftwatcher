@@ -11,8 +11,8 @@ import cv2
 
 def main(filepaths):
     for filepath in filepaths:
-            vio.validate_filepath(filepath)
-            vio.validate_video_extension(filepath)
+            vio.validate_filepaths(filepath)
+            vio.validate_video_extensions(filepath)
             extract_video_frames(filepath,
                                  filepath.parent/filepath.stem/"frames",
                                  ["%hour%", "h", "%minute%", "m"],
@@ -124,6 +124,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         paths = parse_filepaths()
     else:
-        paths = ui.select_video_files()
+        paths = ui.select_filepaths()
+        vio.validate_filepaths(paths)
 
     main(paths)
