@@ -2,6 +2,7 @@ import swiftwatcher_refactor.image_processing.data_structures as ds
 import swiftwatcher_refactor.interface.video_io as vio
 import swiftwatcher_refactor.data_analysis.segment_tracking as st
 import swiftwatcher_refactor.interface.ui as ui
+import copy
 
 
 def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
@@ -43,4 +44,7 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 
-    return tracker.detected_events
+    if hasattr(reader, "release"):
+        reader.release()
+
+    return copy.deepcopy(tracker.detected_events)
