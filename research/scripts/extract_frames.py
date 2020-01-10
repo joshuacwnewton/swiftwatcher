@@ -105,7 +105,9 @@ def extract_video_frames(video_filepath,
             Path.mkdir(output_dir, parents=True)
 
         # Write frame to output_directory
-        cv2.imwrite(str(output_dir / (file_name + ".png")), frame)
+        filepath = output_dir / (file_name + ".png")
+        if not filepath.exists():
+            cv2.imwrite(str(filepath), frame)
 
 
 def parse_filepaths():
