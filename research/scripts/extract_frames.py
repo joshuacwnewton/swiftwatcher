@@ -12,7 +12,7 @@ import cv2
 def main(filepaths):
     for filepath in filepaths:
             vio.validate_filepaths(filepath)
-            vio.validate_video_extensions(filepath)
+            vio.validate_video_files(filepath)
             extract_video_frames(filepath,
                                  filepath.parent/filepath.stem/"frames",
                                  ["%hour%", "h", "%minute%", "m"],
