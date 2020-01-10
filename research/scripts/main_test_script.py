@@ -16,6 +16,7 @@ def main():
     filepath, start, end = ui.parse_filepath_and_framerange()
     output_dir = filepath.parent/filepath.stem
     frame_dir = output_dir/"frames"
+    test_dir = dio.generate_test_dir(filepath.parent/filepath.stem/"tests")
     vio.validate_video_filepaths(filepath)
     vio.validate_frame_range(frame_dir, start, end)
 
@@ -28,14 +29,13 @@ def main():
     events = alg.swift_counting_algorithm(frame_dir,
                                           crop_region, resize_dim, roi_mask,
                                           properties["fps"], start, end,
-                                          testing=True)
+                                          test_dir=test_dir)
     df_events = ec.convert_events_to_dataframe(events, ["parent_frame_number",
                                                         "parent_timestamp",
                                                         "centroid"])
     df_labels = ec.classify_events(df_events)
 
     # Save results to unique test directory
-    test_dir = dio.generate_test_dir(filepath.parent/filepath.stem/"tests")
     dio.dataframe_to_csv(df_events, test_dir/"df_events.csv")
     dio.dataframe_to_csv(df_labels, test_dir/"df_labels.csv")
     dio.export_results(test_dir, df_labels, properties["fps"], start, end)

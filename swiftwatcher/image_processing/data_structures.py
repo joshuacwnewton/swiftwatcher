@@ -7,7 +7,9 @@
 
 from collections import OrderedDict, deque
 
+from pathlib import Path
 import swiftwatcher.image_processing.image_filtering as img
+import cv2
 
 
 class Segment:
@@ -56,6 +58,32 @@ class Frame:
     def set_segments(self, regionprops_list):
         self.segments = [Segment(rp, self.frame_number, self.timestamp)
                          for rp in regionprops_list]
+
+    def export_segments(self, export_dir):
+        if not export_dir.exists():
+            Path.mkdir(export_dir, parents=True)
+
+        for segment in self.segments:
+            bbox = segment.bbox
+            color_img = self.processed_frames["resize"]
+            color_seg = color_img[bbox[0]:bbox[2], bbox[1]:bbox[3]]
+
+            overlay = color_img.copy()
+            output = color_img.copy()
+
+            alpha = 0.8
+            cv2.rectangle(overlay, (bbox[1], bbox[0]), (bbox[3], bbox[2]),
+                          (0, 0, 255), -1)
+            cv2.addWeighted(overlay, alpha, output, 1 - alpha,
+                            0, output)
+
+            name_str = "{}_{}.png".format(self.frame_number, segment.label)
+            cv2.imwrite(str(export_dir / ("overlay_"+name_str)), output)
+            cv2.imwrite(str(export_dir / name_str), color_seg)
+            cv2.imwrite(str(export_dir / ("32_"+name_str)),
+                            img.resize_frame(color_seg, (32, 32)))
+
+        return None
 
 
 class FrameQueue(deque):

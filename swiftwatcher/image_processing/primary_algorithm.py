@@ -6,7 +6,7 @@ import copy
 
 
 def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
-                             fps=None, start=0, end=-1, testing=False):
+                             fps=None, start=0, end=-1, test_dir=False):
     """Apply individual stages of the multi-stage swift counting
     algorithm to detect potential occurrences of swifts entering
     chimneys."""
@@ -15,7 +15,7 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
 
     # Experiments will use subsections of the video (denoted by start/end)
     # read from image files, rather than using the entire video file.
-    if testing:
+    if test_dir:
         reader = vio.FrameReader(path, fps, start, end)
     else:
         reader = vio.VideoReader(path)
@@ -34,12 +34,17 @@ def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
 
         # Pop frames off queue one-by-one and analyse each separately
         while not queue.is_empty():
-            tracker.set_current_frame(queue.pop_frame())
+            popped_frame = queue.pop_frame()
+
+            tracker.set_current_frame(popped_frame)
             cost_matrix = tracker.formulate_cost_matrix()
             tracker.store_assignments(st.apply_hungarian_algorithm(cost_matrix))
             tracker.link_matching_segments()
             tracker.check_for_events()
             tracker.cache_current_frame()
+
+            if test_dir:
+                popped_frame.export_segments(test_dir/"segments")
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 
