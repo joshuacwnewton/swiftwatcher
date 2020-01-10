@@ -116,17 +116,17 @@ class FrameQueue(deque):
         """Apply image filtering methods to preprocess every frame in
         queue, storing every stage individually."""
 
-        grayscale_frames = [img.convert_grayscale(frame)
-                            for frame in self.get_queue()]
-        self.store_processed_queue(grayscale_frames, "grayscale")
-
         cropped_frames = [img.crop_frame(frame, crop_region)
-                          for frame in self.get_last_processed_queue()]
+                          for frame in self.get_queue()]
         self.store_processed_queue(cropped_frames, "crop")
 
-        preprocessed_frames = [img.resize_frame(frame, resize_dim)
+        resized_frames = [img.resize_frame(frame, resize_dim)
                                for frame in self.get_last_processed_queue()]
-        self.store_processed_queue(preprocessed_frames, "resize")
+        self.store_processed_queue(resized_frames, "resize")
+
+        grayscale_frames = [img.convert_grayscale(frame)
+                            for frame in self.get_last_processed_queue()]
+        self.store_processed_queue(grayscale_frames, "grayscale")
 
     def segment_queue(self):
         """Apply image filtering methods to segment every frame in
