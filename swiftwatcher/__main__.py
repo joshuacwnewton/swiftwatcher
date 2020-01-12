@@ -21,16 +21,19 @@ def main():
         # Detect frames which contain "swifts entering chimney"
         events = alg.swift_counting_algorithm(video_filepath, crop_region,
                                               resize_dim, roi_mask)
-        df_events = ec.convert_events_to_dataframe(events,
-                                                   ["parent_frame_number",
-                                                    "parent_timestamp",
-                                                    "centroid"])
-        df_labels = ec.classify_events(df_events)
+        if events:
+            df_events = ec.convert_events_to_dataframe(events,
+                                                       ["parent_frame_number",
+                                                        "parent_timestamp",
+                                                        "centroid"])
+            df_labels = ec.classify_events(df_events)
 
-        # Save results to output directory
-        dio.export_results(parent_dir, df_labels, properties["fps"],
-                           properties["start"], properties["end"])
-
+            # Save results to output directory
+            dio.export_results(parent_dir, df_labels, properties["fps"],
+                               properties["start"], properties["end"])
+        else:
+            print("[!] No events detected in video '{}'."
+                  .format(video_filepath.stem))
 
 if __name__ == "__main__":
     main()

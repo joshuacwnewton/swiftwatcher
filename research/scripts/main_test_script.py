@@ -36,15 +36,20 @@ def main():
                                           crop_region, resize_dim, roi_mask,
                                           properties["fps"], start, end,
                                           test_dir=test_dir)
-    df_events = ec.convert_events_to_dataframe(events, ["parent_frame_number",
-                                                        "parent_timestamp",
-                                                        "centroid"])
-    df_labels = ec.classify_events(df_events)
 
-    # Save results to unique test directory
-    dio.dataframe_to_csv(df_events, test_dir/"df_events.csv")
-    dio.dataframe_to_csv(df_labels, test_dir/"df_labels.csv")
-    dio.export_results(test_dir, df_labels, properties["fps"], start, end)
+    if events:
+        df_events = ec.convert_events_to_dataframe(events,
+                                                   ["parent_frame_number",
+                                                    "parent_timestamp",
+                                                    "centroid"])
+        df_labels = ec.classify_events(df_events)
+
+        # Save results to unique test directory
+        dio.dataframe_to_csv(df_events, test_dir/"df_events.csv")
+        dio.dataframe_to_csv(df_labels, test_dir/"df_labels.csv")
+        dio.export_results(test_dir, df_labels, properties["fps"], start, end)
+    else:
+        print("[!] No events detected in video '{}'.".format(filepath.stem))
 
 
 if __name__ == "__main__":
