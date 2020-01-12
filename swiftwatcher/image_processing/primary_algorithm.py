@@ -5,20 +5,20 @@ import swiftwatcher.interface.ui as ui
 import copy
 
 
-def swift_counting_algorithm(path, crop_region, resize_dim, roi_mask,
+def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
                              fps=None, start=0, end=-1, test_dir=False):
     """Apply individual stages of the multi-stage swift counting
     algorithm to detect potential occurrences of swifts entering
     chimneys."""
 
-    ui.start_status(path.name)
+    ui.start_status(src_path.name)
 
     # Experiments will use subsections of the video (denoted by start/end)
     # read from image files, rather than using the entire video file.
-    if test_dir:
-        reader = vio.FrameReader(path, fps, start, end)
+    if src_path.suffix in ['.h5', '.hdf5']:
+        reader = vio.HDF5Reader(src_path, fps, start, end)
     else:
-        reader = vio.VideoReader(path)
+        reader = vio.VideoReader(src_path)
 
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)

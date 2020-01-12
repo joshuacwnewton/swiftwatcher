@@ -10,6 +10,7 @@ import re
 import pandas as pd
 import numpy as np
 import cv2
+import h5py
 
 
 ###############################################################################
@@ -89,6 +90,17 @@ def validate_frame_file(frame_dir, frame_number):
         sys.exit()
 
 
+def validate_frame_h5(hdf5_path, frame_number):
+    with h5py.File(str(hdf5_path), "r") as hdf5_file:
+        dset = hdf5_file["VideoFrames"]
+
+        frame = dset[frame_number]
+        if frame.nbytes == 0:
+            sys.stderr.write("Error: No data stored in index {}"
+                             .format(frame_number))
+            sys.exit()
+
+
 def validate_frame_range(frame_dir, start, end):
     """Validate if start and end frame numbers point to valid frame
     files."""
@@ -119,6 +131,24 @@ def get_video_properties(filepath):
     }
 
     vidcap.release()
+
+    return properties
+
+
+def get_video_properties_h5(hdf5_path):
+    """Store video properties in dictionary so video file/VidCap object
+    aren't needed to access properties."""
+
+    with h5py.File(str(hdf5_path), "r") as hdf5_file:
+        dset = hdf5_file["VideoFrames"]
+
+        properties = {
+            "fps": int(dset.attrs["CAP_PROP_FPS"]),
+
+            # Include full-video frame start/end dates
+            "start": 0,
+            "end": int(dset.attrs["CAP_PROP_FRAME_COUNT"])
+        }
 
     return properties
 
@@ -173,6 +203,79 @@ class FrameReader:
 
             filepath = self.get_filepath(frame_number)
             frame = cv2.imread(filepath)
+
+            if frame.data:
+                self.frame_shape = frame.shape
+                self.frames_read += 1
+                self.next_frame_number += 1
+
+        # This is for the case when frames are requested in batches of N, but
+        # total_frames is not a multiple of N. In that case, self.end_frame
+        # will eventually be exceeded, so return empty values.
+        else:
+            frame = np.zeros(self.frame_shape).astype(np.uint8)
+            frame_number = -1
+            timestamp = "00:00:00.000"
+
+        return frame, frame_number, timestamp
+
+    def get_n_frames(self, n):
+        """Fetch frames from files in batches of N, with return values
+        put into individual lists."""
+
+        frames, frame_numbers, timestamps = [], [], []
+        for _ in range(n):
+            frame, frame_number, timestamp = self.get_frame()
+
+            frames.append(frame)
+            frame_numbers.append(frame_number)
+            timestamps.append(timestamp)
+
+        return frames, frame_numbers, timestamps
+
+    def frame_number_to_timestamp(self, frame_number):
+        """Simple conversion to get timestamp from frame number.
+        Dependent on constant FPS assumption for source video file."""
+
+        total_s = frame_number / self.fps
+        timestamp = pd.Timestamp("00:00:00.000") + pd.Timedelta(total_s, 's')
+        timestamp = timestamp.round(freq='us')
+
+        return timestamp
+
+
+class HDF5Reader:
+    """Fetches frames from an HDF5 container, rather than directly from
+    a video file like OpenCV's VideoCapture class would. This avoids the
+    limitation of having to process entire videos from the beginning.
+    However, this requires the frames to have been extracted beforehand.
+    Uses custom Frame objects defined in data_structures.py."""
+
+    def __init__(self, hdf5_path, fps, start, end):
+        # Prefetch a mapping from frame numbers to frame filepaths
+
+        self.hdf5_file = h5py.File(hdf5_path, "r")
+        self.dset = self.hdf5_file["VideoFrames"]
+
+        # Store video properties
+        self.fps = fps
+        self.start_frame = start
+        self.end_frame = end
+        self.total_frames = end - start + 1
+
+        self.frames_read = 0
+        self.next_frame_number = self.start_frame
+        self.frame_shape = None
+
+    def get_frame(self):
+        """Fetch frame from file if there are frames left, or a dummy
+        file if there are no frames left."""
+
+        if self.next_frame_number <= self.end_frame:
+            frame_number = self.next_frame_number
+            timestamp = self.frame_number_to_timestamp(frame_number)
+
+            frame = cv2.imdecode(self.dset[frame_number], cv2.IMREAD_COLOR)
 
             if frame.data:
                 self.frame_shape = frame.shape

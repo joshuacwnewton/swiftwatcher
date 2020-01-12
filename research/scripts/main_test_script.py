@@ -15,18 +15,24 @@ def main():
     # Parse and validate input arguments
     filepath, start, end = ui.parse_filepath_and_framerange()
     output_dir = filepath.parent/filepath.stem
-    frame_dir = output_dir/"frames"
+    # frame_dir = output_dir/"frames"
+    h5_path = filepath.parent/f"{filepath.stem}.h5"
+
     test_dir = dio.generate_test_dir(filepath.parent/filepath.stem/"tests")
+
     vio.validate_video_filepaths(filepath)
-    vio.validate_frame_range(frame_dir, start, end)
+    vio.validate_frame_order(start, end)
+    vio.validate_frame_h5(h5_path, start)
+    vio.validate_frame_h5(h5_path, end)
+    # vio.validate_frame_range(frame_dir, start, end)
 
     # Use input arguments to get video attributes necessary for algorithm
-    properties = vio.get_video_properties(filepath)
+    properties = vio.get_video_properties_h5(h5_path)
     corners = ui.get_corners_from_file(output_dir/"attributes.json")
     crop_region, roi_mask, resize_dim = img.generate_regions(filepath, corners)
 
     # Apply algorithm to detect events, then classify detected events
-    events = alg.swift_counting_algorithm(frame_dir,
+    events = alg.swift_counting_algorithm(h5_path,
                                           crop_region, resize_dim, roi_mask,
                                           properties["fps"], start, end,
                                           test_dir=test_dir)
