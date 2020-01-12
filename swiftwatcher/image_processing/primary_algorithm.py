@@ -44,7 +44,7 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
             tracker.cache_current_frame()
 
             if test_dir:
-                popped_frame.export_segments(test_dir/"segments")
+                popped_frame.export_segments((24, 24), test_dir/"segments")
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 
