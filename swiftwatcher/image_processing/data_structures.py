@@ -93,7 +93,6 @@ class Frame:
                 sum4 = math.ceil(diff2 / 2)
                 bbox[1] -= sum3
                 bbox[3] += sum4
-            new_dimensions = (bbox[2] - bbox[0], bbox[3] - bbox[1])
 
             # Shift bounding box if outside dimensions
             if bbox[0] < 0:
@@ -111,10 +110,6 @@ class Frame:
 
             # Write segment to file
             color_seg = color_img[bbox[0]:bbox[2], bbox[1]:bbox[3]]
-            if (new_dimensions[0] > min_seg_size[0] or
-                new_dimensions[1] > min_seg_size[1]):
-                color_seg = img.resize_frame(color_seg, min_seg_size)
-
             cv2.imwrite(str(export_dir / name_str), color_seg)
 
 
