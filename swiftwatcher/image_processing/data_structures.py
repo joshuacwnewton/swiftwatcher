@@ -95,7 +95,21 @@ class Frame:
                 bbox[3] += sum4
             new_dimensions = (bbox[2] - bbox[0], bbox[3] - bbox[1])
 
-            # Shrink segment to specified size
+            # Shift bounding box if outside dimensions
+            if bbox[0] < 0:
+                bbox[2] -= bbox[0]
+                bbox[0] = 0
+            if bbox[1] < 0:
+                bbox[3] -= bbox[1]
+                bbox[1] = 0
+            if bbox[2] > (color_img.shape[0]-1):
+                bbox[0] -= (bbox[2] - (color_img.shape[0]-1))
+                bbox[2] = (color_img.shape[0]-1)
+            if bbox[3] > (color_img.shape[1] - 1):
+                bbox[1] -= (bbox[3] - (color_img.shape[1]-1))
+                bbox[3] = (color_img.shape[1]-1)
+
+            # Write segment to file
             color_seg = color_img[bbox[0]:bbox[2], bbox[1]:bbox[3]]
             if (new_dimensions[0] > min_seg_size[0] or
                 new_dimensions[1] > min_seg_size[1]):
