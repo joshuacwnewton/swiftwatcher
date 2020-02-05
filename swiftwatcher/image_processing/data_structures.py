@@ -34,6 +34,8 @@ class Frame:
     """Class for storing a frame from a video, as well as processed
     versions of that frame and its various properties."""
 
+    src_video = None
+
     def __init__(self, frame=None, frame_number=-1, timestamp="00:00:00.000"):
         self.frame_number = frame_number
         self.timestamp = timestamp
@@ -66,7 +68,10 @@ class Frame:
 
         color_img = self.processed_frames["resize"]
         for segment in self.segments:
-            name_str = "{}_{}.png".format(self.frame_number, segment.label)
+            name_str = '"{}"_{}_{}_{}.png'.format(self.src_video,
+                                                self.frame_number,
+                                                segment.label,
+                                                len(self.segments))
             bbox = list(segment.bbox)
 
             # Export image highlighting area of segment
@@ -75,8 +80,7 @@ class Frame:
             alpha = 0.6
             cv2.rectangle(overlay, (bbox[1], bbox[0]), (bbox[3], bbox[2]),
                           (0, 0, 255), -1)
-            cv2.addWeighted(overlay, alpha, output, 1 - alpha,
-                            0, output)
+            cv2.addWeighted(overlay, alpha, output, 1 - alpha, 0, output)
             cv2.imwrite(str(export_dir / "overlay" / name_str), output)
 
             # Expand segment bbox to min seg size (keeping centered)

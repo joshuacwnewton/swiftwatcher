@@ -20,6 +20,7 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
     else:
         reader = vio.VideoReader(src_path)
 
+    ds.Frame.src_video = src_path.stem
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
 
