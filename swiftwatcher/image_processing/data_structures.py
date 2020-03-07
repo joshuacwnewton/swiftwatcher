@@ -18,10 +18,10 @@ class Segment:
     various attributes of the segment, as well as its visual
     representation. This information is used to analyze the segments."""
 
-    def __init__(self, regionprops, frame_number, timestamp):
+    def __init__(self, regionprops, frame_number, timestamp, segment_image):
         self.parent_frame_number = frame_number
         self.parent_timestamp = timestamp
-        self.segment_image = None
+        self.segment_image = segment_image
         self.segment_history = []
         self.status = None
 
@@ -58,21 +58,27 @@ class Frame:
     def get_num_segments(self):
         return len(self.segments)
 
-    def set_segments(self, regionprops_list):
-        self.segments = [Segment(rp, self.frame_number, self.timestamp)
-                         for rp in regionprops_list]
+    def set_segments(self, regionprops_list, segment_images):
+        self.segments = [Segment(rp, self.frame_number, self.timestamp, seg)
+                         for rp, seg in zip(regionprops_list, segment_images)]
 
-    def export_segments(self, min_seg_size, export_dir):
+    def export_segments(self, min_seg_size, crop_region, export_dir):
         if not export_dir.exists():
             Path.mkdir(export_dir, parents=True)
 
-        color_img = self.processed_frames["resize"]
+        color_img = self.processed_frames["crop"]
         for segment in self.segments:
             name_str = '"{}"_{}_{}_{}.png'.format(self.src_video,
-                                                self.frame_number,
-                                                segment.label,
-                                                len(self.segments))
+                                                  self.frame_number,
+                                                  segment.label,
+                                                  len(self.segments))
             bbox = list(segment.bbox)
+
+            # Bounding box provided by RegionProps: [H1, W1,   H2, W2]
+            # My convention:                       [(W1, H1), (W2, H2)]
+            # TODO: Fix all usages of my old convention in swiftwatcher
+            crop = [crop_region[0][1], crop_region[0][0],
+                    crop_region[1][1], crop_region[1][0]]
 
             # Export image highlighting area of segment
             overlay = color_img.copy()
@@ -81,39 +87,29 @@ class Frame:
             cv2.rectangle(overlay, (bbox[1], bbox[0]), (bbox[3], bbox[2]),
                           (0, 0, 255), -1)
             cv2.addWeighted(overlay, alpha, output, 1 - alpha, 0, output)
+            if not Path.exists(export_dir / "overlay"):
+                Path.mkdir(export_dir / "overlay")
             cv2.imwrite(str(export_dir / "overlay" / name_str), output)
 
             # Expand segment bbox to min seg size (keeping centered)
             dimensions = (bbox[2]-bbox[0], bbox[3]-bbox[1])
             if dimensions[0] < min_seg_size[0]:
                 diff = min_seg_size[0] - dimensions[0]
-                sum1 = math.floor(diff/2)
-                sum2 = math.ceil(diff/2)
-                bbox[0] -= sum1
-                bbox[2] += sum2
+                bbox[0] -= math.floor(diff/2)
+                bbox[2] += math.ceil(diff/2)
             if dimensions[1] < min_seg_size[1]:
                 diff2 = min_seg_size[1] - dimensions[1]
-                sum3 = math.floor(diff2 / 2)
-                sum4 = math.ceil(diff2 / 2)
-                bbox[1] -= sum3
-                bbox[3] += sum4
+                bbox[1] -= math.floor(diff2 / 2)
+                bbox[3] += math.ceil(diff2 / 2)
 
-            # Shift bounding box if outside dimensions
-            if bbox[0] < 0:
-                bbox[2] -= bbox[0]
-                bbox[0] = 0
-            if bbox[1] < 0:
-                bbox[3] -= bbox[1]
-                bbox[1] = 0
-            if bbox[2] > (color_img.shape[0]-1):
-                bbox[0] -= (bbox[2] - (color_img.shape[0]-1))
-                bbox[2] = (color_img.shape[0]-1)
-            if bbox[3] > (color_img.shape[1] - 1):
-                bbox[1] -= (bbox[3] - (color_img.shape[1]-1))
-                bbox[3] = (color_img.shape[1]-1)
+            # Extract segment image from full frame (not cropped image)
+            bbox_f = [bbox[0]+crop[0], bbox[1]+crop[1],
+                      bbox[2]+crop[0], bbox[3]+crop[1]]
+            color_img_full = self.frame
+            color_seg = color_img_full[bbox_f[0]:bbox_f[2],
+                                       bbox_f[1]:bbox_f[3]]
 
             # Write segment to file
-            color_seg = color_img[bbox[0]:bbox[2], bbox[1]:bbox[3]]
             cv2.imwrite(str(export_dir / name_str), color_seg)
 
 
@@ -156,9 +152,10 @@ class FrameQueue(deque):
         for pos, frame in enumerate(processed_frame_list):
             self[pos].processed_frames[process_name] = frame
 
-    def store_segmented_queue(self, regionprops_lists):
-        for pos, regionprops_list in enumerate(regionprops_lists):
-            self[pos].set_segments(regionprops_list)
+    def store_segmented_queue(self, regionprops_lists, segment_image_list):
+        for pos, (regionprops_list, segment_images) \
+                in enumerate(zip(regionprops_lists, segment_image_list)):
+            self[pos].set_segments(regionprops_list, segment_images)
 
     def get_queue(self):
         return [frame_obj.frame for frame_obj in self]
@@ -179,15 +176,15 @@ class FrameQueue(deque):
                           for frame in self.get_queue()]
         self.store_processed_queue(cropped_frames, "crop")
 
-        resized_frames = [img.resize_frame(frame, resize_dim)
-                               for frame in self.get_last_processed_queue()]
-        self.store_processed_queue(resized_frames, "resize")
+        # resized_frames = [img.resize_frame(frame, resize_dim)
+        #                        for frame in self.get_last_processed_queue()]
+        # self.store_processed_queue(resized_frames, "resize")
 
         grayscale_frames = [img.convert_grayscale(frame)
                             for frame in self.get_last_processed_queue()]
         self.store_processed_queue(grayscale_frames, "grayscale")
 
-    def segment_queue(self):
+    def segment_queue(self, min_seg_size, crop_region):
         """Apply image filtering methods to segment every frame in
         queue, storing every stage individually."""
 
@@ -212,4 +209,9 @@ class FrameQueue(deque):
 
         regionprops_lists = [img.get_segment_properties(frame)
                              for frame in self.get_last_processed_queue()]
-        self.store_segmented_queue(regionprops_lists)
+        segment_images = [img.extract_segment_images(regionprops_list,
+                                                     frame, min_seg_size,
+                                                     crop_region)
+                          for frame, regionprops_list
+                          in zip(self.get_queue(), regionprops_lists)]
+        self.store_segmented_queue(regionprops_lists, segment_images)

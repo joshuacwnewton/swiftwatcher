@@ -1,0 +1,8 @@
+Video name	Source	frames.h5	Segment Ground Truth	df_labels_without.csv	df_labels_with.csv	df_groundtruth.csv
+ch02_20160513200533.mp4	SSM_02	Yes	No	No	No	No
+ch04_20170531210856.mp4	SSM_04	Yes	No	No	No	No
+ch04_20180519194457.mp4	SSM_04	Yes	No	No	No	No
+NPD_572_CHSW_2019_July_21.mp4	CR	Yes	Yes	No	No	No
+ch04_20170518205849.mp4	SSM_04	No	No	No	No	Yes
+NPD 460 CHSW 2019 June 13.mp4	CR	No	No	No	No	Yes
+NPD 541 CHSW 2019 June 14.mp4	CR	No	No	No	No	Yes

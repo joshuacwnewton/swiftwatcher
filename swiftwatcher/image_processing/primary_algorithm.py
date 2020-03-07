@@ -1,12 +1,14 @@
 import swiftwatcher.image_processing.data_structures as ds
 import swiftwatcher.interface.video_io as vio
 import swiftwatcher.data_analysis.segment_tracking as st
+import swiftwatcher.data_analysis.segment_classification as sc
 import swiftwatcher.interface.ui as ui
 import copy
 
 
 def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
-                             fps=None, start=0, end=-1, test_dir=False):
+                             fps=None, start=0, end=-1, classify=False,
+                             test_dir=False):
     """Apply individual stages of the multi-stage swift counting
     algorithm to detect potential occurrences of swifts entering
     chimneys."""
@@ -23,6 +25,7 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
     ds.Frame.src_video = src_path.stem
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
+    classifier = sc.SegmentClassifier("../../swiftwatcher/best_model.pt")
 
     while queue.frames_processed < reader.total_frames:
         # Push frames into queue until full
@@ -31,11 +34,14 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
 
         # Process an entire queue at once
         queue.preprocess_queue(crop_region, resize_dim)
-        queue.segment_queue()  # CPU processing bottleneck
+        queue.segment_queue((24, 24), crop_region)  # CPU processing bottleneck
 
         # Pop frames off queue one-by-one and analyse each separately
         while not queue.is_empty():
             popped_frame = queue.pop_frame()
+
+            if classify:
+                popped_frame.segments = classifier(popped_frame.segments)
 
             tracker.set_current_frame(popped_frame)
             cost_matrix = tracker.formulate_cost_matrix()
@@ -45,7 +51,8 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
             tracker.cache_current_frame()
 
             if test_dir:
-                popped_frame.export_segments((24, 24), test_dir/"segments")
+                popped_frame.export_segments((24, 24), crop_region,
+                                             test_dir/"segments")
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
 

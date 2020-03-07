@@ -6,6 +6,7 @@
 import cv2
 import numpy as np
 from numpy.linalg import norm, svd
+import math
 
 import swiftwatcher.interface.video_io as vio
 from scipy import ndimage
@@ -116,9 +117,10 @@ def generate_roi_mask(filepath, corners, crop_region, resize_dim):
 
     # Apply same preprocessing as the frames themselves, then threshold again
     grayscale_mask = convert_grayscale(unprocessed_mask)
+    # resized_mask = resize_frame(cropped_mask, resize_dim)
+    # roi_mask = threshold_channel(resized_mask)
     cropped_mask = crop_frame(grayscale_mask, crop_region)
-    resized_mask = resize_frame(cropped_mask, resize_dim)
-    roi_mask = threshold_channel(resized_mask)
+    roi_mask = threshold_channel(cropped_mask)
 
     return roi_mask
 
@@ -334,3 +336,37 @@ def get_segment_properties(frame):
     # "coordinates='xy'" suppresses a warning found in skimage 0.15, See:
     # https://scikit-image.org/docs/0.15.x/release_notes_and_installation.html
     return measure.regionprops(frame, coordinates='xy')
+
+
+def extract_segment_images(segments, frame, min_seg_size, crop_region):
+    segment_images = []
+    for segment in segments:
+        bbox = list(segment.bbox)
+
+        # Bounding box provided by RegionProps: [H1, W1,   H2, W2]
+        # My convention:                       [(W1, H1), (W2, H2)]
+        # TODO: Fix all usages of my old convention in swiftwatcher
+        crop = [crop_region[0][1], crop_region[0][0],
+                crop_region[1][1], crop_region[1][0]]
+
+        # Expand segment bbox to min seg size (keeping centered)
+        dimensions = (bbox[2] - bbox[0], bbox[3] - bbox[1])
+        if dimensions[0] < min_seg_size[0]:
+            diff = min_seg_size[0] - dimensions[0]
+            bbox[0] -= math.floor(diff / 2)
+            bbox[2] += math.ceil(diff / 2)
+        if dimensions[1] < min_seg_size[1]:
+            diff2 = min_seg_size[1] - dimensions[1]
+            bbox[1] -= math.floor(diff2 / 2)
+            bbox[3] += math.ceil(diff2 / 2)
+
+        # Extract segment image from full frame (not cropped image)
+        bbox_f = [bbox[0] + crop[0], bbox[1] + crop[1],
+                  bbox[2] + crop[0], bbox[3] + crop[1]]
+        color_img_full = frame
+        color_seg = color_img_full[bbox_f[0]:bbox_f[2],
+                    bbox_f[1]:bbox_f[3]]
+
+        segment_images.append(color_seg)
+
+    return segment_images

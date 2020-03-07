@@ -209,11 +209,12 @@ def parse_filepath_and_framerange():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--filepath")
-    parser.add_argument("--start")
-    parser.add_argument("--end")
+    parser.add_argument("--start", default=0)
+    parser.add_argument("--end", default=1)
+    parser.add_argument("--classifier", action="store_true")
     args = parser.parse_args()
 
-    return Path(args.filepath).resolve(), int(args.start), int(args.end)
+    return Path(args.filepath).resolve(), int(args.start), int(args.end), args.classifier
 
 
 def status_update(frames_processed, total_frames):
