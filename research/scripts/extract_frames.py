@@ -1,5 +1,5 @@
-import swiftwatcher.interface.video_io as vio
-import swiftwatcher.interface.ui as ui
+import swiftwatcher.io_video as vio
+import swiftwatcher.ui as ui
 import sys
 
 import argparse

@@ -1,4 +1,4 @@
-import swiftwatcher.interface.ui as ui
+import swiftwatcher.ui as ui
 
 filepaths = ui.select_filepaths()
 for filepath in filepaths:

@@ -8,7 +8,7 @@
 from collections import OrderedDict, deque
 
 from pathlib import Path
-import swiftwatcher.image_processing.image_filtering as img
+import swiftwatcher.image_filtering as img
 import cv2
 import math
 

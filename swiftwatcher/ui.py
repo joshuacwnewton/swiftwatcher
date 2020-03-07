@@ -168,7 +168,7 @@ def select_chimney_corners(filepath):
         # Indicates window has been closed prematurely
         if cv2.getWindowProperty('image', cv2.WND_PROP_VISIBLE) == 0:
             sys.stderr.write("[!] Error: Window closed without selecting"
-                             "any chimney corners.\n")
+                             " any chimney corners.\n")
             sys.exit()
 
     # Corners have been selected and approved, so close window

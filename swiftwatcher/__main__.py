@@ -1,11 +1,11 @@
-import swiftwatcher.interface.ui as ui
-import swiftwatcher.interface.video_io as vio
-import swiftwatcher.interface.data_io as dio
-import swiftwatcher.image_processing.data_structures as ds
-import swiftwatcher.image_processing.image_filtering as img
-import swiftwatcher.data_analysis.segment_tracking as st
-import swiftwatcher.data_analysis.segment_classification as sc
-import swiftwatcher.data_analysis.event_classification as ec
+import swiftwatcher.ui as ui
+import swiftwatcher.io_video as vio
+import swiftwatcher.io_data as dio
+import swiftwatcher.data_structures as ds
+import swiftwatcher.image_filtering as img
+import swiftwatcher.segment_tracking as st
+import swiftwatcher.segment_classification as sc
+import swiftwatcher.event_classification as ec
 
 import copy
 
@@ -66,7 +66,7 @@ def swift_counting_algorithm(reader, corners, args):
     ds.Frame.src_video = reader.filepath.stem
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
-    classifier = sc.SegmentClassifier("swiftwatcher/data_analysis/model.pt")
+    classifier = sc.SegmentClassifier("swiftwatcher/model.pt")
 
     while queue.frames_processed < reader.total_frames:
         # Push frames into queue until full
