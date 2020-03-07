@@ -1,4 +1,4 @@
-<img src="data/logo.png" align="right" width="200" height="200"/>
+<img src="assets/logo.png" align="right" width="200" height="200"/>
 
 # swiftwatcher
 > A collaboration between the University of Victoria's Computer Vision 
@@ -50,7 +50,7 @@ the application will begin to process them to look for swifts.
 
 This process can be viewed in the demonstration below.
 
-<p align="center"><img src="data/screenshots/demo.gif"></p>
+<p align="center"><img src="assets/screenshots/demo.gif"></p>
 
 Results will be outputted to a folder of the same name as the video 
 file. Within this folder, you will find `.csv` files in a number of 
@@ -67,13 +67,12 @@ Counts are only determined from **PREDICTED** swifts, but **REJECTED**
 counts are included for transparency.
 
 
-<p align="center"><img src="data/screenshots/results.png"></p>
+<p align="center"><img src="assets/screenshots/results.png"></p>
 
 ## Links
 
-An in-progress research paper will linked shortly. For more information
-about the theoretical ideas behind this approach, be sure to check back
-soon.
+A research paper which describes the theoretical ideas behind the 
+approach can be found [at this link](assets/SwiftWatcher_Final-Report_Newton-Joshua.pdf)
 
 ## License
 
