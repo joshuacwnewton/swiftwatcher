@@ -1,31 +1,24 @@
 import swiftwatcher.image_processing.data_structures as ds
-import swiftwatcher.interface.video_io as vio
+import swiftwatcher.image_processing.image_filtering as img
 import swiftwatcher.data_analysis.segment_tracking as st
 import swiftwatcher.data_analysis.segment_classification as sc
 import swiftwatcher.interface.ui as ui
 import copy
 
 
-def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
-                             fps=None, start=0, end=-1, classify=False,
-                             test_dir=False):
+def swift_counting_algorithm(reader, corners, args):
     """Apply individual stages of the multi-stage swift counting
     algorithm to detect potential occurrences of swifts entering
     chimneys."""
 
-    ui.start_status(src_path.name)
+    # Use first frame and coordinates to get regions of interest
+    ff = reader.read_frame(0, increment=False)
+    crop_region, roi_mask, resize_dim = img.generate_regions(ff, corners)
 
-    # Experiments will use subsections of the video (denoted by start/end)
-    # read from image files, rather than using the entire video file.
-    if src_path.suffix in ['.h5', '.hdf5']:
-        reader = vio.HDF5Reader(src_path, fps, start, end)
-    else:
-        reader = vio.VideoReader(src_path)
-
-    ds.Frame.src_video = src_path.stem
+    ds.Frame.src_video = reader.filepath.stem
     queue = ds.FrameQueue()
     tracker = st.SegmentTracker(roi_mask)
-    classifier = sc.SegmentClassifier("../../swiftwatcher/best_model.pt")
+    classifier = sc.SegmentClassifier("swiftwatcher/data_analysis/model.pt")
 
     while queue.frames_processed < reader.total_frames:
         # Push frames into queue until full
@@ -40,7 +33,7 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
         while not queue.is_empty():
             popped_frame = queue.pop_frame()
 
-            if classify:
+            if args.classify:
                 popped_frame.segments = classifier(popped_frame.segments)
 
             tracker.set_current_frame(popped_frame)
@@ -50,13 +43,10 @@ def swift_counting_algorithm(src_path, crop_region, resize_dim, roi_mask,
             tracker.check_for_events()
             tracker.cache_current_frame()
 
-            if test_dir:
+            if args.export:
                 popped_frame.export_segments((24, 24), crop_region,
-                                             test_dir/"segments")
+                                             reader.filepath/"segments")
 
         ui.frames_processed_status(queue.frames_processed, reader.total_frames)
-
-    if hasattr(reader, "release"):
-        reader.release()
 
     return copy.deepcopy(tracker.detected_events)

@@ -8,7 +8,6 @@ import numpy as np
 from numpy.linalg import norm, svd
 import math
 
-import swiftwatcher.interface.video_io as vio
 from scipy import ndimage
 from skimage import measure
 
@@ -18,13 +17,13 @@ from skimage import measure
 ###############################################################################
 
 
-def generate_regions(filepath, corners):
+def generate_regions(first_frame, corners):
     """Generate various regions of interest used by the swift counting
     algorithm to crop, resize, and detect events."""
 
     resize_dim = (300, 150)
     crop_region = generate_crop_region(corners)
-    roi_mask = generate_roi_mask(filepath, corners, crop_region, resize_dim)
+    roi_mask = generate_roi_mask(first_frame, corners, crop_region, resize_dim)
 
     return crop_region, roi_mask, resize_dim
 
@@ -97,10 +96,8 @@ def determine_chimney_extents(corners):
 ###############################################################################
 
 
-def generate_roi_mask(filepath, corners, crop_region, resize_dim):
+def generate_roi_mask(frame, corners, crop_region, resize_dim):
     """Generate a mask that contains the chimney's region of interest."""
-
-    frame = vio.get_first_video_frame(filepath)
 
     # Create ROI mask using a subregion of the frame
     roi_region = generate_roi_crop_region(corners)

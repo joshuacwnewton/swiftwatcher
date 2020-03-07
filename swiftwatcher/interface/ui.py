@@ -16,6 +16,28 @@ import json
 
 
 ###############################################################################
+#                 CLI ARGUMENT PARSING FUNCTIONS BEGIN HERE                   #
+###############################################################################
+
+
+def parse_args():
+    """Parse arguments related to algorithm experimentation."""
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--filepaths", nargs="*", default=[])
+    parser.add_argument("--start", type=int, default=0)
+    parser.add_argument("--end", type=int, default=-1)
+    parser.add_argument("--classify", action="store_true")
+    parser.add_argument("--export", action="store_true")
+    args = parser.parse_args()
+
+    args.filepaths = [Path(filepath).resolve() for filepath in args.filepaths]
+
+    return args
+
+
+###############################################################################
 #                    FILE SELECTION FUNCTIONS BEGIN HERE                      #
 ###############################################################################
 
@@ -184,46 +206,6 @@ def save_corners_to_file(filepath):
 
     with open(fspath(base_dir / "attributes.json"), 'w') as fp:
         json.dump(config_dict, fp)
-
-
-###############################################################################
-#                 CLI ARGUMENT PARSING FUNCTIONS BEGIN HERE                   #
-###############################################################################
-
-
-def parse_filepaths():
-    """Parse all command line arguments as filepaths."""
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("filepaths", nargs="*")
-    args = parser.parse_args()
-
-    args.filepaths = [Path(filepath).resolve() for filepath in args.filepaths]
-
-    return args.filepaths
-
-
-def parse_filepath_and_framerange():
-    """Parse named arguments for filepath, starting frame, and ending
-    frame.."""
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--filepath")
-    parser.add_argument("--start", default=0)
-    parser.add_argument("--end", default=1)
-    parser.add_argument("--classifier", action="store_true")
-    args = parser.parse_args()
-
-    return Path(args.filepath).resolve(), int(args.start), int(args.end), args.classifier
-
-
-def status_update(frames_processed, total_frames):
-    """Provide frequent status updates on how many frames have been
-    processed"""
-    if frames_processed % 25 is 0 and frames_processed is not 0:
-        sys.stdout.write("\r[-]     {0}/{1} frames processed."
-                         .format(frames_processed, total_frames))
-        sys.stdout.flush()
 
 
 ###############################################################################
