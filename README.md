@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 <img src="assets/logo.png" align="right" width="200" height="200"/>
+=======
+<img src="data/swiftwatcher-logo.png" align="right" width="200" height="200"/>
+>>>>>>> origin/master
 
 # swiftwatcher
 > A collaboration between the University of Victoria's Computer Vision 
@@ -72,7 +76,11 @@ counts are included for transparency.
 ## Links
 
 A research paper which describes the theoretical ideas behind the 
+<<<<<<< HEAD
 approach can be found [at this link](assets/SwiftWatcher_Final-Report_Newton-Joshua.pdf)
+=======
+approach can be found [at this link](data/SwiftWatcher_Final-Report_Newton-Joshua-pages-deleted.pdf)
+>>>>>>> origin/master
 
 ## License
 
