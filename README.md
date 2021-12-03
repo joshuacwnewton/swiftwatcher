@@ -1,3 +1,7 @@
+> **Note:** This project was created as part of a student internship 
+> during my undergraduate degree. This project is not actively 
+> maintained. All assets are provided as-is.
+
 <img src="assets/logo.png" align="right" width="200" height="200"/>
 
 # swiftwatcher
